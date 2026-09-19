@@ -117,7 +117,7 @@ try{
     redirect($returnUrl);
 }catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();flash('error',$e->getMessage());redirect($returnUrl);}
 
-function normalize_stock_identifier(mixed $value):string{return preg_replace('/\s+/','',trim((string)$value))??'';}
+function normalize_stock_identifier(mixed $value):string{$value=preg_replace('/\s+/','',trim((string)$value))??'';return function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);}
 function ensure_stock_in_schema_p1004():void{
     $unitCost=Database::query("SHOW COLUMNS FROM inventory_units LIKE 'acquisition_cost'")->fetch();
     $condition=Database::query("SHOW COLUMNS FROM inventory_units LIKE 'condition_type'")->fetch();
@@ -156,8 +156,8 @@ function create_receive_variant(array $input):array{
     $isApple=strcasecmp(trim((string)$model['brand_name']),'Apple')===0;
     $storage=normalize_receive_capacity($input['storage']??'');
     $ram=$isApple?null:normalize_receive_capacity($input['ram']??'');
-    $color=($type==='phone'&&$isApple)?clean_receive_text($input['color']??'',80):null;
-    $connectivity=$type==='tablet'?clean_receive_text($input['connectivity']??'',40):null;
+    $color=($type==='phone'&&$isApple)?clean_receive_text($input['color']??'',80,true):null;
+    $connectivity=$type==='tablet'?clean_receive_text($input['connectivity']??'',40,false):null;
     $selling=max(0,(float)($input['selling_price']??0));
     $requestedBranch=filter_var($input['branch_id']??null,FILTER_VALIDATE_INT)?:0;
     $priceBranchId=Auth::isOwner()?$requestedBranch:(Auth::branchId()?:0);
@@ -212,7 +212,9 @@ function normalize_receive_capacity(mixed $value):string{
     if(preg_match('/^(\d+(?:\.\d+)?)T(?:B)?$/',$value,$m))return$m[1].'TB';
     return$value;
 }
-function clean_receive_text(mixed $value,int $max):string{
-    $value=trim((string)$value);$value=preg_replace('/\s+/',' ',$value)??$value;return mb_substr($value,0,$max);
+function clean_receive_text(mixed $value,int $max,bool $uppercase=true):string{
+    $value=trim((string)$value);$value=preg_replace('/\s+/',' ',$value)??$value;
+    if($uppercase)$value=function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);
+    return mb_substr($value,0,$max);
 }
 

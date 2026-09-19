@@ -84,6 +84,39 @@ function icon(string $name, string $class = ''): string
 }
 
 
+
+function brand_logo_asset(?string $brand): ?string
+{
+    $key = strtolower(trim((string)$brand));
+    $key = preg_replace('/[^a-z0-9]+/', '', $key);
+    $map = [
+        'apple' => 'apple.svg',
+        'samsung' => 'samsung.svg',
+        'xiaomi' => 'xiaomi.svg',
+        'oppo' => 'oppo.svg',
+        'vivo' => 'vivo.svg',
+        'realme' => 'realme.svg',
+        'tecno' => 'tecno.svg',
+        'itel' => 'itel.svg',
+        'infinix' => 'infinix.svg',
+        'honor' => 'honor.svg',
+        'poco' => 'poco.svg',
+        'nubia' => 'nubia.svg',
+    ];
+    return isset($map[$key]) ? 'assets/brand-logos/' . $map[$key] : null;
+}
+
+function brand_logo_html(?string $brand, string $class = ''): string
+{
+    $asset = brand_logo_asset($brand);
+    $brand = trim((string)$brand);
+    if ($asset) {
+        return '<span class="brand-logo ' . e($class) . '"><img src="' . e($asset) . '" alt="' . e($brand) . ' logo" loading="lazy"></span>';
+    }
+    $initials = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $brand ?: 'DV'), 0, 2));
+    return '<span class="brand-logo brand-logo-fallback ' . e($class) . '" aria-label="' . e($brand ?: 'Device') . '">' . e($initials ?: 'DV') . '</span>';
+}
+
 function malbcoff_product_name(array $row): string
 {
     if (($row['product_type'] ?? '') === 'accessory') {

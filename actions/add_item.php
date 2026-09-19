@@ -21,8 +21,8 @@ try {
 
     if ($type==='accessory') {
         $categoryId=filter_var($_POST['category_id']??null,FILTER_VALIDATE_INT)?:0;
-        $name=clean_config_text($_POST['product_name']??'',180);
-        $barcode=clean_config_text($_POST['barcode']??'',120) ?: null;
+        $name=clean_config_text($_POST['product_name']??'',180,true);
+        $barcode=clean_config_text($_POST['barcode']??'',120,false) ?: null;
         if(!$categoryId||$name==='') throw new RuntimeException('Category and product name are required.');
         if(!Database::query('SELECT 1 FROM categories WHERE id=? AND is_active=1 LIMIT 1',[$categoryId])->fetchColumn()) throw new RuntimeException('Please select an active accessory category.');
         $existing=Database::query("SELECT id,is_active FROM products WHERE product_type='accessory' AND category_id=? AND LOWER(product_name)=LOWER(?) LIMIT 1",[$categoryId,$name])->fetch();
@@ -47,8 +47,8 @@ try {
 
     $isApple=strcasecmp(trim((string)$model['brand_name']),'Apple')===0;
     $ram=$isApple?null:normalize_capacity_config($_POST['ram']??'');
-    $color=($type==='phone'&&$isApple)?clean_config_text($_POST['color']??'',80):null;
-    $connectivity=$type==='tablet'?clean_config_text($_POST['connectivity']??'',40):null;
+    $color=($type==='phone'&&$isApple)?clean_config_text($_POST['color']??'',80,true):null;
+    $connectivity=$type==='tablet'?clean_config_text($_POST['connectivity']??'',40,false):null;
     if(!$isApple&&$ram==='') throw new RuntimeException('RAM is required for Android devices.');
     if($type==='phone'&&$isApple&&$color==='') throw new RuntimeException('Color is required for Apple phones.');
     if($type==='tablet'&&!in_array($connectivity,['Wi-Fi','Wi-Fi + Cellular'],true)) throw new RuntimeException('Please select tablet connectivity.');
@@ -88,5 +88,5 @@ function ensure_configuration_schema():void{
     if(!Database::query("SHOW COLUMNS FROM products LIKE 'connectivity'")->fetch()||!Database::query("SHOW COLUMNS FROM product_models LIKE 'device_type'")->fetch()) throw new RuntimeException('The device setup is required before creating variants.');
     if(!branch_pricing_ready()) throw new RuntimeException('Run database/P2_004_pricing_variant_serial_ux.sql before creating variants.');
 }
-function clean_config_text(mixed $value,int $max):string{$value=trim((string)$value);$value=preg_replace('/\s+/',' ',$value)??$value;return mb_substr($value,0,$max);}
+function clean_config_text(mixed $value,int $max,bool $uppercase=true):string{$value=trim((string)$value);$value=preg_replace('/\s+/',' ',$value)??$value;if($uppercase)$value=function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);return mb_substr($value,0,$max);}
 function normalize_capacity_config(mixed $value):string{$value=strtoupper(preg_replace('/\s+/','',trim((string)$value))??'');if($value==='')return'';if(preg_match('/^\d+(?:\.\d+)?$/',$value))return$value.'GB';if(preg_match('/^(\d+(?:\.\d+)?)G(?:B)?$/',$value,$m))return$m[1].'GB';if(preg_match('/^(\d+(?:\.\d+)?)T(?:B)?$/',$value,$m))return$m[1].'TB';return$value;}

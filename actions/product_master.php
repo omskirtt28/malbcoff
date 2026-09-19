@@ -16,7 +16,10 @@ $action = (string)($_POST['action'] ?? '');
 $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT) ?: null;
 $returnView = (($_POST['return_view'] ?? '') === 'accessories') ? 'accessories' : 'devices';
 $returnModel = filter_var($_POST['return_model'] ?? null, FILTER_VALIDATE_INT) ?: 0;
-$returnUrl = '../index.php?page=products&view=' . $returnView . ($returnModel ? '&model='.$returnModel.'#variants' : '');
+$returnArchive = (($_POST['return_archive'] ?? '') === '1');
+$returnUrl = $returnArchive
+    ? '../index.php?page=products&status=archived'
+    : '../index.php?page=products&view=' . $returnView . ($returnModel ? '&model='.$returnModel.'#variants' : '');
 
 if (!in_array($entity, ['brand','model','category','configuration'], true) || !in_array($action, ['add','edit','archive','restore','delete'], true)) {
     flash('error', 'Invalid Product Master request.');
@@ -121,6 +124,14 @@ function handle_model(string $action, ?int $id): void {
         }
         Database::query('UPDATE product_models SET brand_id=?,name=?,device_type=? WHERE id=?', [$brandId,$name,$type,$model['id']]);
     } elseif ($action === 'archive') {
+        $available = (int)Database::query(
+            "SELECT COUNT(*) FROM inventory_units iu JOIN products p ON p.id=iu.product_id WHERE p.model_id=? AND iu.status='available'",
+            [$model['id']]
+        )->fetchColumn();
+        if ($available > 0) {
+            throw new RuntimeException('This model still has available stock. Remove, sell or transfer the remaining units before archiving it.');
+        }
+        // Keep child variants for history. Archiving the parent only removes the model and its variants from the active catalog.
         Database::query('UPDATE product_models SET is_active=0 WHERE id=?', [$model['id']]);
     } elseif ($action === 'restore') {
         $brandActive = Database::query('SELECT is_active FROM brands WHERE id=?', [$model['brand_id']])->fetchColumn();
@@ -204,13 +215,32 @@ function handle_configuration(string $action, ?int $id): void {
         if (!$ready) throw new RuntimeException('Restore the variant brand/model first.');
         Database::query('UPDATE products SET is_active=1 WHERE id=?', [$id]);
     } elseif ($action === 'delete') {
+        if ((int)$config['is_active'] === 1) {
+            throw new RuntimeException('Archive this variant first before deleting it.');
+        }
+
+        $available = (int)Database::query("SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status IN ('available','reserved')", [$id])->fetchColumn();
+        if ($available > 0) {
+            throw new RuntimeException('This archived variant still has available or reserved units. Remove, sell or transfer those units first.');
+        }
+
         $units = (int)Database::query('SELECT COUNT(*) FROM inventory_units WHERE product_id=?', [$id])->fetchColumn();
         $movements = (int)Database::query('SELECT COUNT(*) FROM stock_movements WHERE product_id=?', [$id])->fetchColumn();
         $sales = 0;
         try { $sales = (int)Database::query('SELECT COUNT(*) FROM sale_items WHERE product_id=?', [$id])->fetchColumn(); } catch (Throwable $e) {}
-        if ($units || $movements || $sales) throw new RuntimeException('This variant already has inventory or history. Archive it instead.');
-        if (branch_pricing_ready()) Database::query('DELETE FROM branch_product_prices WHERE product_id=?', [$id]);
-        Database::query('DELETE FROM products WHERE id=?', [$id]);
+
+        if (!$units && !$movements && !$sales) {
+            // Truly unused variants can be physically deleted.
+            if (branch_pricing_ready()) Database::query('DELETE FROM branch_product_prices WHERE product_id=?', [$id]);
+            Database::query('DELETE FROM products WHERE id=?', [$id]);
+        } else {
+            // Used variants must retain their database row so old stock movements and sales remain auditable.
+            $column = Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
+            if (!$column) {
+                throw new RuntimeException('Run the P2-009 archive cleanup database update first.');
+            }
+            Database::query('UPDATE products SET catalog_deleted_at=NOW(), catalog_deleted_by=? WHERE id=?', [(int)(Auth::user()['id'] ?? 0), $id]);
+        }
     } else {
         throw new RuntimeException('Invalid variant action.');
     }
@@ -231,6 +261,7 @@ function require_model(?int $id): array {
 function clean_master_name(mixed $value, int $max): string {
     $value = trim((string)$value);
     $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    $value = function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
     return mb_substr($value, 0, $max);
 }
 function valid_device_type(mixed $value): string {
@@ -249,7 +280,7 @@ function success_message(string $entity, string $action): string {
         'edit' => $label.' updated.',
         'archive' => $label.' archived. Existing inventory/history was preserved.',
         'restore' => $label.' restored.',
-        'delete' => $label.' permanently deleted.',
+        'delete' => $label.' deleted from Product Setup. Historical transactions were preserved when required.',
         default => 'Product Master updated.',
     };
 }

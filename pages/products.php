@@ -14,14 +14,18 @@ $pricingReady = false;
 $selectedBrandId = filter_input(INPUT_GET, 'brand', FILTER_VALIDATE_INT) ?: null;
 $selectedModelId = filter_input(INPUT_GET, 'model', FILTER_VALIDATE_INT) ?: null;
 $search = trim((string)($_GET['q'] ?? ''));
-$showArchived = $isOwner && (($_GET['status'] ?? '') === 'all');
+$archiveMode = $isOwner && in_array(($_GET['status'] ?? ''), ['archived','all'], true);
+$showArchived = $archiveMode;
 $activeView = (($_GET['view'] ?? 'devices') === 'accessories') ? 'accessories' : 'devices';
 $schemaReady = false;
+$catalogDeleteReady = false;
 $brands = $models = $categories = $configurations = [];
+$archivedBrands = $archivedModels = $archivedVariants = $archivedCategories = [];
 $selectedModel = null;
 
 try {
     $schemaReady = (bool)Database::query("SHOW COLUMNS FROM product_models LIKE 'device_type'")->fetch();
+    $catalogDeleteReady = (bool)Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
 
     $brandWhere = $isOwner ? ($showArchived ? '1=1' : 'b.is_active=1') : 'b.is_active=1';
     $brands = Database::query(
@@ -36,9 +40,12 @@ try {
          ORDER BY b.is_active DESC,b.name"
     )->fetchAll();
 
+    $catalogProductFilter = $catalogDeleteReady ? " AND p.catalog_deleted_at IS NULL" : "";
     $modelSql = "SELECT pm.id,pm.brand_id,pm.name,pm.is_active,b.name AS brand_name,b.is_active AS brand_active,
                         " . ($schemaReady ? "pm.device_type" : "'phone' AS device_type") . ",
-                        (SELECT COUNT(*) FROM products p WHERE p.model_id=pm.id) AS product_count
+                        (SELECT COUNT(*) FROM products p WHERE p.model_id=pm.id AND p.product_type IN ('phone','tablet'){$catalogProductFilter}) AS product_count,
+                        (SELECT COUNT(*) FROM products p WHERE p.model_id=pm.id AND p.product_type IN ('phone','tablet') AND p.is_active=1{$catalogProductFilter}) AS active_variant_count,
+                        (SELECT COUNT(*) FROM products p WHERE p.model_id=pm.id AND p.product_type IN ('phone','tablet') AND p.is_active=0{$catalogProductFilter}) AS archived_variant_count
                  FROM product_models pm
                  JOIN brands b ON b.id=pm.brand_id
                  WHERE 1=1";
@@ -50,13 +57,19 @@ try {
     $models = Database::query($modelSql, $params)->fetchAll();
 
     if ($selectedModelId) {
-        $selectedModel = Database::query(
-            "SELECT pm.id,pm.brand_id,pm.name,pm.is_active,COALESCE(pm.device_type,'phone') device_type,b.name brand_name,b.is_active brand_active
-             FROM product_models pm JOIN brands b ON b.id=pm.brand_id WHERE pm.id=? LIMIT 1", [$selectedModelId]
-        )->fetch();
+        $selectedModelSql = "SELECT pm.id,pm.brand_id,pm.name,pm.is_active,COALESCE(pm.device_type,'phone') device_type,b.name brand_name,b.is_active brand_active
+             FROM product_models pm JOIN brands b ON b.id=pm.brand_id WHERE pm.id=?";
+        if (!$showArchived) $selectedModelSql .= " AND pm.is_active=1 AND b.is_active=1";
+        $selectedModelSql .= " LIMIT 1";
+        $selectedModel = Database::query($selectedModelSql, [$selectedModelId])->fetch();
+        if (!$selectedModel && !$showArchived) {
+            // An archived model must not keep rendering a stale Variants panel in the active catalog.
+            $selectedModelId = null;
+        }
         if ($selectedModel) {
             $selectedBrandId = (int)$selectedModel['brand_id'];
-            $configWhere = ($isOwner && $showArchived) ? '1=1' : 'p.is_active=1';
+            $configWhere = ($isOwner && $showArchived) ? 'p.is_active=0' : 'p.is_active=1';
+            if ($catalogDeleteReady) $configWhere .= ' AND p.catalog_deleted_at IS NULL';
             $configurations = Database::query(
                 "SELECT p.id,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,p.is_active,
                         (SELECT COUNT(*) FROM inventory_units iu WHERE iu.product_id=p.id) unit_count,
@@ -83,6 +96,51 @@ try {
     }
 } catch (Throwable $e) {
     flash('error', 'Unable to load Product Master. Please apply the P1-006 database migration first.');
+}
+
+if ($archiveMode) {
+    try {
+        $archivedBrands = Database::query(
+            "SELECT b.id,b.name,
+                    (SELECT COUNT(*) FROM product_models pm WHERE pm.brand_id=b.id) model_count,
+                    (SELECT COUNT(*) FROM products p WHERE p.brand_id=b.id) product_count
+             FROM brands b
+             WHERE b.is_active=0
+             ORDER BY b.name"
+        )->fetchAll();
+
+        $archivedModels = Database::query(
+            "SELECT pm.id,pm.name,pm.device_type,b.name brand_name,b.is_active brand_active,
+                    (SELECT COUNT(*) FROM products p WHERE p.model_id=pm.id) product_count
+             FROM product_models pm
+             JOIN brands b ON b.id=pm.brand_id
+             WHERE pm.is_active=0
+             ORDER BY b.name,pm.name"
+        )->fetchAll();
+
+        $deletedFilter = $catalogDeleteReady ? ' AND p.catalog_deleted_at IS NULL' : '';
+        $archivedVariants = Database::query(
+            "SELECT p.id,p.product_type,p.ram,p.storage,p.connectivity,p.color,
+                    b.name brand_name,pm.name model_name,
+                    (SELECT COUNT(*) FROM inventory_units iu WHERE iu.product_id=p.id) tracked_units,
+                    (SELECT COUNT(*) FROM inventory_units iu WHERE iu.product_id=p.id AND iu.status IN ('available','reserved')) open_units,
+                    (SELECT COUNT(*) FROM stock_movements sm WHERE sm.product_id=p.id) movement_count
+             FROM products p
+             JOIN brands b ON b.id=p.brand_id
+             JOIN product_models pm ON pm.id=p.model_id
+             WHERE p.product_type IN ('phone','tablet') AND p.is_active=0{$deletedFilter}
+             ORDER BY b.name,pm.name,p.ram,p.storage,p.connectivity,p.color"
+        )->fetchAll();
+
+        $archivedCategories = Database::query(
+            "SELECT c.id,c.name,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id) product_count
+             FROM categories c
+             WHERE c.is_active=0
+             ORDER BY c.name"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        flash('error', 'Unable to load archived products.');
+    }
 }
 
 $selectedBrandName = 'All Brands';
@@ -120,8 +178,123 @@ function product_master_url(array $overrides = []): string
     </div>
 </section>
 
+<?php if ($isOwner): ?>
+<nav class="product-state-tabs" aria-label="Product status">
+    <a class="product-state-tab <?= !$archiveMode ? 'active' : '' ?>" href="index.php?page=products">
+        <span class="product-state-tab-icon"><?= icon('products') ?></span>
+        <span><strong>Active Products</strong><small>Current brands, models and variants</small></span>
+    </a>
+    <a class="product-state-tab <?= $archiveMode ? 'active archived' : '' ?>" href="index.php?page=products&status=archived">
+        <span class="product-state-tab-icon"><?= icon('archive') ?></span>
+        <span><strong>Archived</strong><small>Restore or delete old product records</small></span>
+    </a>
+</nav>
+<?php endif; ?>
+
+<?php if ($archiveMode): ?>
+<section class="archive-overview-card card">
+    <div class="archive-overview-copy">
+        <span class="section-kicker">ARCHIVE</span>
+        <h2>Archived Products</h2>
+        <p>Items here are hidden from normal product setup and inventory. Restore them anytime, or delete records that are safe to remove.</p>
+    </div>
+    <div class="archive-summary-grid">
+        <div><strong><?= count($archivedVariants) ?></strong><span>Variants</span></div>
+        <div><strong><?= count($archivedModels) ?></strong><span>Models</span></div>
+        <div><strong><?= count($archivedBrands) ?></strong><span>Brands</span></div>
+        <div><strong><?= count($archivedCategories) ?></strong><span>Accessory Categories</span></div>
+    </div>
+</section>
+
+<div class="archive-sections">
+    <section class="card archive-section-card">
+        <div class="card-header master-card-header">
+            <div><span class="section-kicker">VARIANTS</span><h2>Archived Variants</h2><p>Restore a variant or remove it from Product Setup. Historical stock and sales stay protected.</p></div>
+            <span class="count-badge"><?= count($archivedVariants) ?></span>
+        </div>
+        <div class="table-wrap master-table-wrap">
+            <table class="data-table compact-table modern-master-table archive-table">
+                <thead><tr><th>Product</th><th>Variant</th><th>History</th><th class="action-col">Actions</th></tr></thead>
+                <tbody>
+                <?php foreach ($archivedVariants as $item):
+                    $parts=[]; foreach(['ram','storage','connectivity','color'] as $key) if(!empty($item[$key])) $parts[]=$item[$key];
+                    $specs=$parts?implode(' • ',$parts):'Standard';
+                    $canDeleteVariant=(int)$item['open_units']===0;
+                ?>
+                <tr>
+                    <td><strong><?= e($item['brand_name'].' '.$item['model_name']) ?></strong><span class="table-subtext"><?= e(ucfirst($item['product_type'])) ?></span></td>
+                    <td><strong><?= e($specs) ?></strong></td>
+                    <td><strong><?= number_format((int)$item['tracked_units']) ?> tracked</strong><span class="table-subtext"><?= number_format((int)$item['movement_count']) ?> stock movement<?= (int)$item['movement_count']===1?'':'s' ?></span></td>
+                    <td><div class="master-table-actions archive-actions">
+                        <form method="post" action="actions/product_master.php">
+                            <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="configuration"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="restore"><input type="hidden" name="return_archive" value="1">
+                            <button class="table-action-btn success" type="submit"><?= icon('restore') ?><span>Restore</span></button>
+                        </form>
+                        <form method="post" action="actions/product_master.php" data-confirm="Delete this archived variant from Product Setup? Past stock and sales history will still be kept for audit.">
+                            <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="configuration"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="return_archive" value="1">
+                            <button class="table-action-btn danger" type="submit" <?= $canDeleteVariant?'':'disabled title="This variant still has available or reserved units"' ?>><?= icon('trash') ?><span>Delete</span></button>
+                        </form>
+                    </div></td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if (!$archivedVariants): ?><tr><td colspan="4"><div class="empty-state small"><strong>No archived variants</strong><span>Archived variants will appear here.</span></div></td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="archive-secondary-grid">
+        <section class="card archive-section-card">
+            <div class="card-header master-card-header"><div><span class="section-kicker">MODELS</span><h2>Archived Models</h2></div><span class="count-badge"><?= count($archivedModels) ?></span></div>
+            <div class="archive-list">
+                <?php foreach($archivedModels as $item): ?>
+                <div class="archive-list-row">
+                    <div><strong><?= e($item['brand_name'].' '.$item['name']) ?></strong><span><?= e(ucfirst($item['device_type'])) ?> • <?= (int)$item['product_count'] ?> variant<?= (int)$item['product_count']===1?'':'s' ?></span></div>
+                    <div class="master-table-actions">
+                        <form method="post" action="actions/product_master.php"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="model"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="restore"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn success" type="submit"><?= icon('restore') ?><span>Restore</span></button></form>
+                        <?php if ((int)$item['product_count']===0): ?><form method="post" action="actions/product_master.php" data-confirm="Delete this unused model permanently?"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="model"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn danger" type="submit"><?= icon('trash') ?><span>Delete</span></button></form><?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <?php if(!$archivedModels): ?><div class="empty-state small"><strong>No archived models</strong></div><?php endif; ?>
+            </div>
+        </section>
+
+        <section class="card archive-section-card">
+            <div class="card-header master-card-header"><div><span class="section-kicker">BRANDS</span><h2>Archived Brands</h2></div><span class="count-badge"><?= count($archivedBrands) ?></span></div>
+            <div class="archive-list">
+                <?php foreach($archivedBrands as $item): ?>
+                <div class="archive-list-row">
+                    <div><strong><?= e($item['name']) ?></strong><span><?= (int)$item['model_count'] ?> model<?= (int)$item['model_count']===1?'':'s' ?></span></div>
+                    <div class="master-table-actions">
+                        <form method="post" action="actions/product_master.php"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="brand"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="restore"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn success" type="submit"><?= icon('restore') ?><span>Restore</span></button></form>
+                        <?php if ((int)$item['model_count']===0 && (int)$item['product_count']===0): ?><form method="post" action="actions/product_master.php" data-confirm="Delete this unused brand permanently?"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="brand"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn danger" type="submit"><?= icon('trash') ?><span>Delete</span></button></form><?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <?php if(!$archivedBrands): ?><div class="empty-state small"><strong>No archived brands</strong></div><?php endif; ?>
+            </div>
+        </section>
+    </div>
+
+    <section class="card archive-section-card">
+        <div class="card-header master-card-header"><div><span class="section-kicker">ACCESSORIES</span><h2>Archived Accessory Categories</h2></div><span class="count-badge"><?= count($archivedCategories) ?></span></div>
+        <div class="archive-category-grid">
+            <?php foreach($archivedCategories as $item): ?>
+            <div class="archive-category-item"><div><strong><?= e($item['name']) ?></strong><span><?= (int)$item['product_count'] ?> product<?= (int)$item['product_count']===1?'':'s' ?></span></div><div class="master-table-actions"><form method="post" action="actions/product_master.php"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="category"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="restore"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn success" type="submit"><?= icon('restore') ?><span>Restore</span></button></form><?php if((int)$item['product_count']===0): ?><form method="post" action="actions/product_master.php" data-confirm="Delete this unused category permanently?"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="category"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="return_archive" value="1"><button class="table-action-btn danger" type="submit"><?= icon('trash') ?><span>Delete</span></button></form><?php endif; ?></div></div>
+            <?php endforeach; ?>
+            <?php if(!$archivedCategories): ?><div class="empty-state small"><strong>No archived accessory categories</strong></div><?php endif; ?>
+        </div>
+    </section>
+</div>
+
+<?php else: ?>
+
 <?php if (!$schemaReady): ?>
     <div class="alert alert-info"><strong>P1-006 migration required.</strong> Run <code>database/P1_006_product_master.sql</code> in phpMyAdmin before adding or editing models.</div>
+<?php endif; ?>
+<?php if ($isOwner && $showArchived && !$catalogDeleteReady): ?>
+    <div class="alert alert-info"><strong>Archive cleanup update required.</strong> Run <code>database/P2_009_archive_delete_cleanup.sql</code> before deleting archived variants that already have history.</div>
 <?php endif; ?>
 
 <nav class="catalog-switcher" aria-label="Product master sections">
@@ -161,7 +334,7 @@ function product_master_url(array $overrides = []): string
             <?php foreach ($brands as $brand): ?>
                 <div class="brand-master-card <?= $selectedBrandId === (int)$brand['id'] ? 'selected' : '' ?> <?= !(int)$brand['is_active'] ? 'archived' : '' ?>">
                     <a class="brand-master-main" href="<?= e(product_master_url(['brand' => (int)$brand['id'], 'model' => null, 'q' => null])) ?>">
-                        <span class="brand-master-avatar"><?= e(strtoupper(substr($brand['name'], 0, 2))) ?></span>
+                        <?= brand_logo_html($brand['name'], 'product-master-brand-logo') ?>
                         <span class="brand-master-copy">
                             <strong><?= e($brand['name']) ?></strong>
                             <small><?= (int)$brand['active_model_count'] ?> active model<?= (int)$brand['active_model_count'] === 1 ? '' : 's' ?><?= !(int)$brand['is_active'] ? ' • Archived' : '' ?></small>
@@ -194,7 +367,7 @@ function product_master_url(array $overrides = []): string
 
         <?php if ($isOwner): ?>
             <div class="master-card-footer">
-                <a href="<?= e(product_master_url(['status' => $showArchived ? null : 'all'])) ?>"><?= $showArchived ? 'Hide archived records' : 'Show archived records' ?></a>
+                <a href="<?= e(product_master_url(['status' => $showArchived ? null : 'archived'])) ?>"><?= $showArchived ? 'Back to Active' : 'View Archived' ?></a>
             </div>
         <?php endif; ?>
     </section>
@@ -230,13 +403,13 @@ function product_master_url(array $overrides = []): string
                 <tbody>
                 <?php foreach ($models as $model): ?>
                     <tr class="<?= !(int)$model['is_active'] ? 'archived-row' : '' ?>">
-                        <td><span class="table-brand-chip"><span><?= e(strtoupper(substr($model['brand_name'], 0, 2))) ?></span><?= e($model['brand_name']) ?></span></td>
-                        <td><strong><?= e($model['name']) ?></strong><span class="table-subtext"><?= (int)$model['product_count'] ?> variant<?= (int)$model['product_count'] === 1 ? '' : 's' ?></span></td>
+                        <td><span class="table-brand-chip product-model-brand-cell"><?= brand_logo_html($model['brand_name'], 'product-model-brand-logo') ?><span class="product-model-brand-name"><?= e($model['brand_name']) ?></span></span></td>
+                        <td><strong><?= e($model['name']) ?></strong><span class="table-subtext"><?php if ($showArchived && (int)$model['archived_variant_count'] > 0): ?><?= (int)$model['active_variant_count'] ?> active • <?= (int)$model['archived_variant_count'] ?> archived<?php else: ?><?= (int)$model['active_variant_count'] ?> active variant<?= (int)$model['active_variant_count'] === 1 ? '' : 's' ?><?php endif; ?></span></td>
                         <td><span class="device-type-chip <?= e($model['device_type']) ?>"><?= icon($model['device_type'] === 'tablet' ? 'tablet' : 'phone') ?> <?= e(ucfirst($model['device_type'])) ?></span></td>
                         <td><span class="status-pill <?= (int)$model['is_active'] ? 'available' : 'low' ?>"><?= (int)$model['is_active'] ? 'Active' : 'Archived' ?></span></td>
                         <td>
                             <div class="master-table-actions">
-                                <a class="table-action-btn primary-lite" href="<?= e(product_master_url(['brand'=>(int)$model['brand_id'],'model'=>(int)$model['id'],'q'=>null])) ?>#configurations"><?= icon('inventory') ?><span>Variants</span></a>
+                                <a class="table-action-btn primary-lite" href="<?= e(product_master_url(['brand'=>(int)$model['brand_id'],'model'=>(int)$model['id'],'q'=>null])) ?>#variants"><?= icon('inventory') ?><span>Variants</span></a>
                                 <?php if ($canEditModel): ?>
                                     <button class="table-action-btn" type="button" data-master-open="model" data-mode="edit" data-id="<?= (int)$model['id'] ?>" data-brand-id="<?= (int)$model['brand_id'] ?>" data-name="<?= e($model['name']) ?>" data-device-type="<?= e($model['device_type']) ?>" data-used="<?= (int)$model['product_count'] ?>"><?= icon('edit') ?><span>Edit</span></button>
                                 <?php endif; ?>
@@ -299,10 +472,10 @@ function product_master_url(array $overrides = []): string
                         if(count($unique)===1 && $allPrices) $shownPrice=(float)$allPrices[0]; else $priceNote='Varies by branch';
                     }
                 ?>
-                    <tr class="<?= !(int)$config['is_active'] ? 'archived-row' : '' ?>">
+                    <tr class="<?= !(int)$config['is_active'] ? 'archived-row' : '' ?>" data-variant-row="<?= (int)$config['id'] ?>">
                         <td><strong><?= e($specs) ?></strong></td>
                         <td><?php if($shownPrice!==null): ?><strong><?= peso($shownPrice) ?></strong><span class="table-subtext"><?= e($priceNote ?: 'All branches') ?></span><?php else: ?><strong>Varies by branch</strong><span class="table-subtext">Select a branch above to view its price</span><?php endif; ?></td>
-                        <td><strong><?= number_format((int)$config['available_count']) ?> available</strong><span class="table-subtext"><?= number_format((int)$config['unit_count']) ?> tracked</span></td>
+                        <td><strong><span data-variant-stock="<?= (int)$config['id'] ?>"><?= number_format((int)$config['available_count']) ?></span> available</strong><span class="table-subtext"><?= number_format((int)$config['unit_count']) ?> tracked</span></td>
                         <td><span class="status-pill <?= (int)$config['is_active']?'available':'low' ?>"><?= (int)$config['is_active']?'Active':'Archived' ?></span></td>
                         <td><div class="master-table-actions">
                             <?php if ($canEditVariantPrice): ?>
@@ -313,8 +486,8 @@ function product_master_url(array $overrides = []): string
                                     <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="configuration"><input type="hidden" name="return_view" value="devices"><input type="hidden" name="return_model" value="<?= (int)$selectedModel['id'] ?>"><input type="hidden" name="id" value="<?= (int)$config['id'] ?>"><input type="hidden" name="action" value="<?= (int)$config['is_active']?'archive':'restore' ?>">
                                     <button class="table-action-btn <?= (int)$config['is_active']?'warn':'success' ?>" type="submit"><?= icon((int)$config['is_active']?'archive':'restore') ?><span><?= (int)$config['is_active']?'Archive':'Restore' ?></span></button>
                                 </form>
-                                <?php if (!(int)$config['is_active'] && (int)$config['unit_count']===0 && (int)$config['movement_count']===0): ?>
-                                <form method="post" action="actions/product_master.php" data-confirm="Delete this unused variant permanently?">
+                                <?php if (!(int)$config['is_active'] && $showArchived): ?>
+                                <form method="post" action="actions/product_master.php" data-confirm="Delete this archived variant from Product Setup? Past stock and sales history will still be kept for audit.">
                                     <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="configuration"><input type="hidden" name="return_view" value="devices"><input type="hidden" name="return_model" value="<?= (int)$selectedModel['id'] ?>"><input type="hidden" name="id" value="<?= (int)$config['id'] ?>"><input type="hidden" name="action" value="delete">
                                     <button class="table-action-btn danger" type="submit"><?= icon('trash') ?><span>Delete</span></button>
                                 </form>
@@ -323,7 +496,16 @@ function product_master_url(array $overrides = []): string
                         </div></td>
                     </tr>
                 <?php endforeach; ?>
-                <?php if(!$configurations): ?><tr><td colspan="5"><div class="empty-state small"><strong>No variants yet</strong><span>Add the first storage/spec option for this model.</span><?php if($canAddMaster): ?><a class="btn btn-primary btn-sm" href="index.php?page=add-item&model_id=<?= (int)$selectedModel['id'] ?>">Add Variant</a><?php endif; ?></div></td></tr><?php endif; ?>
+                <?php if(!$configurations): ?>
+                    <tr><td colspan="5"><div class="empty-state small">
+                        <strong>No active variants</strong>
+                        <span><?= $isOwner ? 'Archived variants can be restored or deleted from Show Archived. Past transaction history remains protected.' : 'Add the first storage/spec option for this model.' ?></span>
+                        <div class="master-card-title-actions">
+                            <?php if($canAddMaster): ?><a class="btn btn-primary btn-sm" href="index.php?page=add-item&model_id=<?= (int)$selectedModel['id'] ?>">Add Variant</a><?php endif; ?>
+                            <?php if($isOwner && !$showArchived): ?><a class="btn btn-secondary btn-sm" href="<?= e(product_master_url(['status'=>'archived','model'=>(int)$selectedModel['id'],'brand'=>(int)$selectedModel['brand_id']])) ?>#variants">Show Archived</a><?php endif; ?>
+                        </div>
+                    </div></td></tr>
+                <?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -380,21 +562,23 @@ function product_master_url(array $overrides = []): string
     </div>
 
     <?php if ($isOwner): ?>
-        <div class="master-card-footer"><a href="<?= e(product_master_url(['status' => $showArchived ? null : 'all'])) ?>"><?= $showArchived ? 'Hide archived records' : 'Show archived records' ?></a></div>
+        <div class="master-card-footer"><a href="<?= e(product_master_url(['status' => $showArchived ? null : 'archived'])) ?>"><?= $showArchived ? 'Back to Active' : 'View Archived' ?></a></div>
     <?php endif; ?>
 </section>
 <?php endif; ?>
 
 <div class="info-strip product-master-info"><?= icon('shield') ?><div><strong>Products are shared; stock stays by branch.</strong><span>Branches reuse the same brands, models and variants without sharing physical stock.</span></div></div>
 
-<?php if ($canAddMaster): ?>
+<?php endif; // archiveMode ?>
+
+<?php if ($canAddMaster && !$archiveMode): ?>
 <div class="modal master-modal" id="masterBrandModal" hidden>
     <div class="modal-backdrop" data-master-close></div>
     <div class="modal-dialog master-modal-dialog">
         <div class="modal-header"><div><span class="eyebrow">PRODUCT MASTER</span><h2 data-master-title>Add Brand</h2><p class="modal-subtitle">Create a reusable device brand for all branches.</p></div><button type="button" class="icon-button" data-master-close aria-label="Close">×</button></div>
         <form method="post" action="actions/product_master.php" class="master-modal-form">
             <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="brand"><input type="hidden" name="return_view" value="devices"><input type="hidden" name="action" value="add" data-action-field><input type="hidden" name="id" value="" data-id-field>
-            <label class="field"><span>Brand Name <b>*</b></span><input name="name" data-name-field maxlength="100" placeholder="e.g. Apple" required><small>Brand names are shared across all branches.</small></label>
+            <label class="field"><span>Brand Name <b>*</b></span><input name="name" data-name-field data-uppercase maxlength="100" placeholder="E.G. APPLE" required><small>Brand names are shared across all branches.</small></label>
             <div class="master-modal-actions"><button type="button" class="btn btn-secondary" data-master-close>Cancel</button><button type="submit" class="btn btn-primary">Save Brand</button></div>
         </form>
     </div>
@@ -409,7 +593,7 @@ function product_master_url(array $overrides = []): string
             <div class="form-grid two">
                 <label class="field"><span>Brand <b>*</b></span><select name="brand_id" data-brand-field required><option value="">Select brand</option><?php foreach ($brands as $brand): if (!(int)$brand['is_active']) continue; ?><option value="<?= (int)$brand['id'] ?>"><?= e($brand['name']) ?></option><?php endforeach; ?></select></label>
                 <label class="field"><span>Device Type <b>*</b></span><select name="device_type" data-type-field required><option value="phone">Phone</option><option value="tablet">Tablet</option></select></label>
-                <label class="field span-2"><span>Model Name <b>*</b></span><input name="name" data-name-field maxlength="150" placeholder="e.g. iPhone 17 Pro" required><small data-model-edit-note>Choose whether the model is a Phone or Tablet.</small></label>
+                <label class="field span-2"><span>Model Name <b>*</b></span><input name="name" data-name-field data-uppercase maxlength="150" placeholder="E.G. IPHONE 17 PRO" required><small data-model-edit-note>Choose whether the model is a Phone or Tablet.</small></label>
             </div>
             <div class="master-modal-actions"><button type="button" class="btn btn-secondary" data-master-close>Cancel</button><button type="submit" class="btn btn-primary">Save Model</button></div>
         </form>
@@ -422,7 +606,7 @@ function product_master_url(array $overrides = []): string
         <div class="modal-header"><div><span class="eyebrow">ACCESSORIES</span><h2 data-master-title>Add Category</h2><p class="modal-subtitle">Create a clean reusable group for accessory items.</p></div><button type="button" class="icon-button" data-master-close aria-label="Close">×</button></div>
         <form method="post" action="actions/product_master.php" class="master-modal-form">
             <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="category"><input type="hidden" name="return_view" value="accessories"><input type="hidden" name="action" value="add" data-action-field><input type="hidden" name="id" value="" data-id-field>
-            <label class="field"><span>Category Name <b>*</b></span><input name="name" data-name-field maxlength="100" placeholder="e.g. Chargers" required><small>Keep category names short and reusable.</small></label>
+            <label class="field"><span>Category Name <b>*</b></span><input name="name" data-name-field data-uppercase maxlength="100" placeholder="E.G. CHARGERS" required><small>Keep category names short and reusable.</small></label>
             <div class="master-modal-actions"><button type="button" class="btn btn-secondary" data-master-close>Cancel</button><button type="submit" class="btn btn-primary">Save Category</button></div>
         </form>
     </div>
@@ -432,20 +616,66 @@ function product_master_url(array $overrides = []): string
 <?php if ($canEditVariantPrice): ?>
 <div class="modal master-modal" id="masterConfigurationModal" hidden>
     <div class="modal-backdrop" data-master-close></div>
-    <div class="modal-dialog master-modal-dialog variant-price-dialog">
-        <div class="modal-header"><div><span class="eyebrow">VARIANT</span><h2 data-master-title>Edit Variant</h2><p class="modal-subtitle" data-config-modal-label>Update pricing for this variant.</p></div><button type="button" class="icon-button" data-master-close aria-label="Close">×</button></div>
-        <form method="post" action="actions/product_master.php" class="master-modal-form">
-            <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="entity" value="configuration"><input type="hidden" name="return_view" value="devices"><input type="hidden" name="return_model" value="<?= (int)($selectedModel['id'] ?? 0) ?>"><input type="hidden" name="action" value="edit" data-action-field><input type="hidden" name="id" value="" data-id-field>
-            <?php if ($isOwner): ?>
-                <label class="field"><span>Cost Price / Unit <b>*</b></span><div class="money-input"><span>₱</span><input type="number" step="0.01" min="0" name="cost_price" data-cost-field required></div><small>This is protected from branch accounts and used for newly received units.</small></label>
-                <div class="variant-price-section"><div class="variant-price-heading"><strong>Selling Price by Branch</strong><span>Each branch can use its own POS price.</span></div><div class="variant-branch-price-list">
-                <?php foreach ($priceBranches as $pb): ?><label class="variant-branch-price-row"><span><?= e($pb['name']) ?></span><div class="money-input compact"><span>₱</span><input type="number" step="0.01" min="0.01" name="branch_prices[<?= (int)$pb['id'] ?>]" data-branch-price="<?= (int)$pb['id'] ?>" required></div></label><?php endforeach; ?>
-                </div></div>
-            <?php else: ?>
-                <label class="field"><span>Selling Price — <?= e(Auth::user()['branch_name'] ?? 'Your Branch') ?> <b>*</b></span><div class="money-input"><span>₱</span><input type="number" step="0.01" min="0.01" name="selling_price" data-selling-field required></div><small>This is the price your branch will use in POS.</small></label>
-            <?php endif; ?>
-            <div class="master-modal-actions"><button type="button" class="btn btn-secondary" data-master-close>Cancel</button><button type="submit" class="btn btn-primary">Save Changes</button></div>
-        </form>
+    <div class="modal-dialog master-modal-dialog variant-price-dialog <?= $isOwner ? 'variant-owner-dialog' : '' ?>">
+        <div class="modal-header">
+            <div>
+                <span class="eyebrow">VARIANT</span>
+                <h2 data-master-title>Edit Variant</h2>
+                <p class="modal-subtitle" data-config-modal-label>Update this variant.</p>
+            </div>
+            <button type="button" class="icon-button" data-master-close aria-label="Close">×</button>
+        </div>
+
+        <?php if ($isOwner): ?>
+            <div class="variant-edit-tabs" role="tablist" aria-label="Variant management">
+                <button type="button" class="variant-edit-tab active" data-variant-tab="pricing" role="tab" aria-selected="true">Pricing</button>
+                <button type="button" class="variant-edit-tab" data-variant-tab="inventory" role="tab" aria-selected="false">Inventory</button>
+            </div>
+        <?php endif; ?>
+
+        <div data-variant-panel="pricing">
+            <form method="post" action="actions/product_master.php" class="master-modal-form">
+                <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
+                <input type="hidden" name="entity" value="configuration">
+                <input type="hidden" name="return_view" value="devices">
+                <input type="hidden" name="return_model" value="<?= (int)($selectedModel['id'] ?? 0) ?>">
+                <input type="hidden" name="action" value="edit" data-action-field>
+                <input type="hidden" name="id" value="" data-id-field>
+                <?php if ($isOwner): ?>
+                    <label class="field">
+                        <span>Cost Price / Unit <b>*</b></span>
+                        <div class="money-input"><span>₱</span><input type="number" step="0.01" min="0" name="cost_price" data-cost-field required></div>
+                        <small>Owner-only cost used for newly received units.</small>
+                    </label>
+                    <div class="variant-price-section">
+                        <div class="variant-price-heading"><strong>Selling Price by Branch</strong><span>Each branch can use its own POS price.</span></div>
+                        <div class="variant-branch-price-list">
+                            <?php foreach ($priceBranches as $pb): ?>
+                                <label class="variant-branch-price-row">
+                                    <span><?= e($pb['name']) ?></span>
+                                    <div class="money-input compact"><span>₱</span><input type="number" step="0.01" min="0.01" name="branch_prices[<?= (int)$pb['id'] ?>]" data-branch-price="<?= (int)$pb['id'] ?>" required></div>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <label class="field">
+                        <span>Selling Price — <?= e(Auth::user()['branch_name'] ?? 'Your Branch') ?> <b>*</b></span>
+                        <div class="money-input"><span>₱</span><input type="number" step="0.01" min="0.01" name="selling_price" data-selling-field required></div>
+                        <small>This is the price your branch will use in POS.</small>
+                    </label>
+                <?php endif; ?>
+                <div class="master-modal-actions"><button type="button" class="btn btn-secondary" data-master-close>Cancel</button><button type="submit" class="btn btn-primary">Save Changes</button></div>
+            </form>
+        </div>
+
+        <?php if ($isOwner): ?>
+            <div class="variant-inventory-panel" data-variant-panel="inventory" hidden>
+                <div class="variant-inventory-loading" data-variant-inventory-body>
+                    <div class="loading-state">Loading inventory…</div>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>

@@ -68,7 +68,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
             <?php endif; ?>
             <label class="field"><span>Storage <b>*</b></span><select name="storage" required><option value="">Select storage</option><option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option></select></label>
             <?php if ($type === 'phone' && $isApple): ?>
-            <label class="field"><span>Color <b>*</b></span><input name="color" maxlength="80" placeholder="e.g. Black Titanium" required></label>
+            <label class="field"><span>Color <b>*</b></span><input name="color" data-uppercase maxlength="80" placeholder="E.G. BLACK TITANIUM" required></label>
             <?php endif; ?>
             <?php if ($type === 'tablet'): ?>
             <label class="field"><span>Connectivity <b>*</b></span><select name="connectivity" required><option value="">Select connectivity</option><option value="Wi-Fi">Wi-Fi</option><option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option></select></label>
@@ -101,7 +101,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
         <div class="section-title"><span>1</span><div><h2>Accessory Details</h2><p>Create the item once. Quantity is received later.</p></div></div>
         <div class="form-grid two">
             <label class="field"><span>Category <b>*</b></span><select name="category_id" required><option value="">Select category</option><?php foreach($categories as $category): ?><option value="<?= (int)$category['id'] ?>"><?= e($category['name']) ?></option><?php endforeach; ?></select></label>
-            <label class="field"><span>Product Name <b>*</b></span><input name="product_name" placeholder="e.g. 20W USB-C Charger" required></label>
+            <label class="field"><span>Product Name <b>*</b></span><input name="product_name" data-uppercase placeholder="E.G. 20W USB-C CHARGER" required></label>
             <label class="field span-2"><span>Barcode</span><input name="barcode" placeholder="Scan barcode or enter manually"><small>Optional if the accessory has no barcode yet.</small></label>
         </div>
     </section>
