@@ -47,10 +47,10 @@ try {
 
     $isApple=strcasecmp(trim((string)$model['brand_name']),'Apple')===0;
     $ram=$isApple?null:normalize_capacity_config($_POST['ram']??'');
-    $color=($type==='phone'&&$isApple)?clean_config_text($_POST['color']??'',80,true):null;
+    $color=clean_config_text($_POST['color']??'',80,true);
     $connectivity=$type==='tablet'?clean_config_text($_POST['connectivity']??'',40,false):null;
     if(!$isApple&&$ram==='') throw new RuntimeException('RAM is required for Android devices.');
-    if($type==='phone'&&$isApple&&$color==='') throw new RuntimeException('Color is required for Apple phones.');
+    if($color==='') throw new RuntimeException('Color is required for phone and tablet variants.');
     if($type==='tablet'&&!in_array($connectivity,['Wi-Fi','Wi-Fi + Cellular'],true)) throw new RuntimeException('Please select tablet connectivity.');
 
     $existing=Database::query("SELECT id,is_active FROM products WHERE product_type=? AND brand_id=? AND model_id=? AND COALESCE(ram,'')=COALESCE(?,'') AND storage=? AND COALESCE(color,'')=COALESCE(?,'') AND COALESCE(connectivity,'')=COALESCE(?,'') LIMIT 1",[$type,$brandId,$modelId,$ram,$storage,$color,$connectivity])->fetch();

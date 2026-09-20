@@ -67,9 +67,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
             <label class="field"><span>RAM <b>*</b></span><select name="ram" required><option value="">Select RAM</option><option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option></select></label>
             <?php endif; ?>
             <label class="field"><span>Storage <b>*</b></span><select name="storage" required><option value="">Select storage</option><option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option></select></label>
-            <?php if ($type === 'phone' && $isApple): ?>
-            <label class="field"><span>Color <b>*</b></span><input name="color" data-uppercase maxlength="80" placeholder="E.G. BLACK TITANIUM" required></label>
-            <?php endif; ?>
+            <label class="field"><span>Color <b>*</b></span><input name="color" data-uppercase maxlength="80" placeholder="E.G. DEEP BLUE" required></label>
             <?php if ($type === 'tablet'): ?>
             <label class="field"><span>Connectivity <b>*</b></span><select name="connectivity" required><option value="">Select connectivity</option><option value="Wi-Fi">Wi-Fi</option><option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option></select></label>
             <?php endif; ?>
