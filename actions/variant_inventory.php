@@ -49,7 +49,7 @@ try {
     )->fetchAll();
 
     $units = Database::query(
-        "SELECT iu.id,iu.branch_id,iu.serial_no,iu.imei,iu.created_at
+        "SELECT iu.id,iu.branch_id,iu.serial_no,iu.imei,iu.imei2,iu.created_at
          FROM inventory_units iu
          JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
          WHERE iu.product_id=? AND iu.status='available'
@@ -63,7 +63,8 @@ try {
         $unitsByBranch[(int)$unit['branch_id']][] = [
             'id' => (int)$unit['id'],
             'identifier' => $identifier ?: ('Unit #' . (int)$unit['id']),
-            'identifier_type' => !empty($unit['serial_no']) ? 'Serial Number' : 'IMEI',
+            'identifier_type' => !empty($unit['serial_no']) ? 'Serial Number' : 'IMEI 1',
+            'secondary_identifier' => trim((string)($unit['imei2'] ?? '')),
             'received_at' => (string)$unit['created_at'],
         ];
     }

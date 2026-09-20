@@ -125,6 +125,7 @@ foreach ($accessories as $accessory) {
     <div>
         <strong>Stock received successfully</strong>
         <span><?= e($successData['product'] ?? 'Item') ?> • <?= number_format((int)($successData['quantity'] ?? 0)) ?> unit<?= (int)($successData['quantity'] ?? 0) === 1 ? '' : 's' ?> • <?= e($successData['branch'] ?? '') ?></span>
+        <?php if (!empty($successData['restored'])): ?><small><?= (int)$successData['restored'] ?> previously removed unit<?= (int)$successData['restored'] === 1 ? '' : 's' ?> restored safely.</small><?php endif; ?>
         <small>Reference: <?= e($successData['reference'] ?? '—') ?></small>
     </div>
     <div class="stock-success-actions">
@@ -203,8 +204,14 @@ foreach ($accessories as $accessory) {
             <div class="identifier-panel receive-identifiers hidden" id="identifierPanel">
                 <div class="identifier-panel-head">
                     <div><h3 id="identifierPanelTitle">Serial Numbers</h3><p id="identifierPanelHint">Scan or enter one Serial Number for each device.</p></div>
-                    <div class="identifier-panel-actions"><span class="identifier-progress" id="identifierCountBadge">0 / 0</span><button class="btn btn-outline btn-sm" type="button" id="openPasteIdentifiers">Paste Multiple</button></div>
+                    <div class="identifier-panel-actions">
+                        <span class="scanner-ready-badge" id="scannerReadyBadge"><span></span>Scanner ready</span>
+                        <span class="identifier-progress" id="identifierCountBadge">0 / 0</span>
+                        <button class="btn btn-outline btn-sm" type="button" id="focusScannerBtn">Focus Scanner</button>
+                        <button class="btn btn-outline btn-sm" type="button" id="openPasteIdentifiers">Paste Multiple</button>
+                    </div>
                 </div>
+                <div class="scanner-help">Scan the highlighted field. Enter or Tab moves to the next field automatically.</div>
                 <div class="identifier-list" id="identifierRows"></div>
             </div>
         </div>
@@ -244,7 +251,7 @@ foreach ($accessories as $accessory) {
         <div class="modal-header"><div><span class="eyebrow">PASTE MULTIPLE</span><h2 id="pasteIdentifiersTitle">Paste Serial Numbers</h2><p class="modal-subtitle">One identifier per line.</p></div><button type="button" class="icon-button" data-paste-close>×</button></div>
         <div class="modal-body">
             <div class="paste-identifiers-editor">
-                <label class="field paste-identifiers-field"><span id="pasteIdentifiersLabel">Serial Numbers</span><textarea id="pasteIdentifiersInput" data-uppercase rows="9" placeholder="PASTE ONE SERIAL NUMBER PER LINE"></textarea><small>One identifier per line. Extra spaces are removed automatically.</small></label>
+                <label class="field paste-identifiers-field"><span id="pasteIdentifiersLabel">Serial Numbers</span><textarea id="pasteIdentifiersInput" data-uppercase rows="9" placeholder="PASTE ONE SERIAL NUMBER PER LINE"></textarea><small id="pasteIdentifiersHelp">One identifier per line. Extra spaces are removed automatically.</small></label>
                 <div class="paste-meta"><strong id="pasteIdentifiersMeta">0 detected</strong><span id="pasteIdentifiersWarning"></span></div>
             </div>
         </div>
@@ -252,11 +259,29 @@ foreach ($accessories as $accessory) {
     </div>
 </div>
 
+<div class="modal" id="restoreUnitModal" hidden>
+    <div class="modal-backdrop" data-restore-close></div>
+    <div class="modal-dialog restore-unit-dialog">
+        <div class="modal-header">
+            <div><span class="eyebrow">PREVIOUSLY REMOVED</span><h2>Restore This Unit?</h2><p class="modal-subtitle">This IMEI / Serial Number already exists in history. Review the previous removal reason before restoring it.</p></div>
+            <button type="button" class="icon-button" data-restore-close>×</button>
+        </div>
+        <div class="modal-body">
+            <div class="restore-unit-summary">
+                <div><span>IMEI / Serial Number</span><strong id="restoreUnitIdentifier">—</strong></div>
+                <div><span>Restore to</span><strong id="restoreUnitProduct">—</strong><small id="restoreUnitBranch">—</small></div><div><span>Previous removal</span><strong id="restoreUnitReason">—</strong><small>History will stay in Stock Movement.</small></div>
+            </div>
+            <div class="restore-unit-info"><strong>No duplicate will be created.</strong><span>The same inventory record will return to Available when you finish and confirm Receive Stock.</span></div>
+        </div>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-restore-close>Cancel</button><button class="btn btn-primary" type="button" id="confirmRestoreUnit">Restore This Unit</button></div>
+    </div>
+</div>
+
 <div class="modal" id="stockConfirmModal" hidden>
     <div class="modal-backdrop" data-confirm-close></div>
     <div class="modal-dialog stock-confirm-dialog">
         <div class="modal-header"><div><span class="eyebrow">REVIEW STOCK</span><h2>Check before saving</h2><p class="modal-subtitle">Confirm the item, branch, quantity and selling price.</p></div><button type="button" class="icon-button" data-confirm-close>×</button></div>
-        <div class="modal-body"><div class="confirm-summary-grid"><div><span>Item</span><strong id="confirmProduct">—</strong></div><div><span>Branch</span><strong id="confirmBranch">—</strong></div><div><span>Quantity</span><strong id="confirmQuantity">—</strong></div><?php if ($isOwner): ?><div><span>Cost / Unit</span><strong id="confirmCost">—</strong></div><?php endif; ?><div><span>Selling Price</span><strong id="confirmSelling">—</strong></div></div><div class="confirm-imeis hidden" id="confirmIdentifiers"></div></div>
+        <div class="modal-body"><div class="confirm-summary-grid"><div><span>Item</span><strong id="confirmProduct">—</strong></div><div><span>Branch</span><strong id="confirmBranch">—</strong></div><div><span>Quantity</span><strong id="confirmQuantity">—</strong></div><?php if ($isOwner): ?><div><span>Cost / Unit</span><strong id="confirmCost">—</strong></div><?php endif; ?><div><span>Selling Price</span><strong id="confirmSelling">—</strong></div></div><div class="restore-review-note hidden" id="confirmRestoreNotice"><strong>Restore existing unit</strong><span>Previously removed stock-correction units will be reactivated using the same Serial Number / IMEI. No duplicate record will be created.</span></div><div class="confirm-imeis hidden" id="confirmIdentifiers"></div></div>
         <div class="modal-actions"><button class="btn btn-secondary" type="button" data-confirm-close>Go Back</button><button class="btn btn-primary" type="button" id="confirmStockIn">Confirm & Save</button></div>
     </div>
 </div>
@@ -358,7 +383,7 @@ function selectVariant(v,isAccessory=false){
   configureIdentifiers();
 }
 
-if(isOwner && $('branchSelect')) $('branchSelect').addEventListener('change',()=>{ if(selectedVariant){ syncPriceFields(); const summary=$('summarySellingPrice'); if(summary)summary.textContent=money(variantSelling(selectedVariant)); } });
+if(isOwner && $('branchSelect')) $('branchSelect').addEventListener('change',()=>{ if(selectedVariant){ syncPriceFields(); const summary=$('summarySellingPrice'); if(summary)summary.textContent=money(variantSelling(selectedVariant)); document.querySelectorAll('[data-identifier-input]').forEach(input=>{ if(input.value.trim()) checkIdentifier(input); }); } });
 
 function openVariant(){
   if(!selectedItem || selectedItem.kind!=='model')return;
@@ -393,38 +418,327 @@ function identifierKind(){
   if(selectedItem.type==='tablet' && selectedVariant && /Wi-Fi$/i.test(selectedVariant.specs) && !/Cellular/i.test(selectedVariant.specs))return 'serial';
   return 'imei';
 }
+function usesDualImei(){
+  return !!(selectedItem && selectedItem.kind==='model' && selectedItem.type==='phone' && !isApple(selectedItem));
+}
 function configureIdentifiers(){
   if(!selectedVariant || selectedVariant.type==='accessory'){identifierPanel.classList.add('hidden'); return;}
   identifierPanel.classList.remove('hidden');
-  const kind=identifierKind(); const label=kind==='serial'?'Serial Number':'IMEI';
-  $('identifierPanelHint').textContent=`Scan or enter one ${label} for each device.`; $('openPasteIdentifiers').textContent='Paste Multiple';
+  const kind=identifierKind();
+  if(usesDualImei()){
+    $('identifierPanelHint').textContent='IMEI 1 is required. IMEI 2 is optional for dual-SIM phones.';
+  }else{
+    const label=kind==='serial'?'Serial Number':'IMEI';
+    $('identifierPanelHint').textContent=`Scan or enter one ${label} for each device.`;
+  }
+  $('openPasteIdentifiers').textContent='Paste Multiple';
   renderIdentifierRows();
+}
+function identifierFieldHtml({name,value,placeholder,label,required=false,secondary=false,numeric=false}){
+  return `<div class="identifier-field-wrap">
+    ${label?`<span class="identifier-field-label">${esc(label)}${required?' <b>*</b>':''}</span>`:''}
+    <input name="${name}" value="${esc(value||'')}" autocomplete="off" placeholder="${esc(placeholder)}"
+      ${numeric?'inputmode="numeric" pattern="[0-9]*"':''}
+      data-identifier-input ${secondary?'data-identifier-secondary="1"':'data-identifier-primary="1"'} data-uppercase>
+    <div class="identifier-entry-feedback">
+      <span class="identifier-entry-status" data-identifier-status></span>
+      ${secondary?'':'<button class="identifier-restore-btn" type="button" data-restore-trigger hidden>Restore This Unit</button>'}
+    </div>
+  </div>`;
 }
 function renderIdentifierRows(){
   if(identifierPanel.classList.contains('hidden'))return;
   const count=Math.max(1,Math.min(100,Number(quantity.value)||1));
-  const kind=identifierKind(); const singular=kind==='serial'?'Serial Number':'IMEI'; const label=kind==='serial'?'serial number':'IMEI';
-  $('identifierPanelTitle').textContent = count===1 ? singular : singular+'s';
-  $('identifierPanelHint').textContent = count===1 ? `Enter the ${singular} for this device.` : `Enter one ${singular} for each of the ${count} devices.`;
-  const existing=[...identifierRows.querySelectorAll('input')].map(i=>i.value);
-  identifierRows.innerHTML=Array.from({length:count},(_,i)=>`<div class="identifier-entry"><span class="identifier-entry-number">${i+1}</span><div class="identifier-entry-control"><input name="identifiers[]" value="${esc(existing[i]||'')}" autocomplete="off" placeholder="SCAN OR ENTER ${label}" data-identifier-input data-uppercase><span class="identifier-entry-status" data-identifier-status></span></div></div>`).join('');
+  const kind=identifierKind();
+  const dual=usesDualImei();
+
+  const existingPrimary=[...identifierRows.querySelectorAll('[data-identifier-primary]')].map(i=>i.value);
+  const existingSecondary=[...identifierRows.querySelectorAll('[data-identifier-secondary]')].map(i=>i.value);
+
+  if(dual){
+    $('identifierPanelTitle').textContent='IMEI Numbers';
+    $('identifierPanelHint').textContent=count===1
+      ? 'Enter IMEI 1. IMEI 2 is optional if the phone has a second IMEI.'
+      : `Enter IMEI 1 for each of the ${count} phones. IMEI 2 is optional.`;
+    identifierRows.innerHTML=Array.from({length:count},(_,i)=>`
+      <div class="identifier-entry identifier-entry-dual">
+        <span class="identifier-entry-number">${i+1}</span>
+        <div class="identifier-dual-grid">
+          ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:'SCAN OR ENTER IMEI 1',label:'IMEI 1',required:true,numeric:true})}
+          ${identifierFieldHtml({name:'secondary_identifiers[]',value:existingSecondary[i]||'',placeholder:'SCAN OR ENTER IMEI 2 (OPTIONAL)',label:'IMEI 2',secondary:true,numeric:true})}
+        </div>
+      </div>`).join('');
+  }else{
+    const singular=kind==='serial'?'Serial Number':'IMEI';
+    const label=kind==='serial'?'serial number':'IMEI';
+    $('identifierPanelTitle').textContent = count===1 ? singular : singular+'s';
+    $('identifierPanelHint').textContent = count===1 ? `Enter the ${singular} for this device.` : `Enter one ${singular} for each of the ${count} devices.`;
+    identifierRows.innerHTML=Array.from({length:count},(_,i)=>`
+      <div class="identifier-entry">
+        <span class="identifier-entry-number">${i+1}</span>
+        ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:`SCAN OR ENTER ${label}`,required:true,numeric:kind==='imei'})}
+      </div>`).join('');
+  }
+
   $('openPasteIdentifiers').classList.toggle('hidden',count===1);
   countBadge.classList.toggle('hidden',count===1);
-  bindIdentifierInputs(); updateIdentifierCount();
+  bindIdentifierInputs();
+  updateIdentifierCount();
+  updateScannerBadge('ready');
+  if(document.activeElement!==quantity) scheduleScannerFocus();
 }
 quantity.addEventListener('input',()=>{if(Number(quantity.value)>100)quantity.value=100;if(Number(quantity.value)<1)quantity.value=1;renderIdentifierRows();});
-function setIdentifierState(input,state,message=''){ const row=input.closest('.identifier-entry'); const status=row?.querySelector('[data-identifier-status]'); row?.classList.remove('is-valid','is-error','is-checking'); input.classList.remove('input-error'); if(state)row?.classList.add('is-'+state); if(state==='error')input.classList.add('input-error'); if(status)status.textContent=message; }
-function bindIdentifierInputs(){ document.querySelectorAll('[data-identifier-input]').forEach((input,index,all)=>{ input.addEventListener('input',()=>{setIdentifierState(input,'','');updateIdentifierCount();clearTimeout(identifierTimer);identifierTimer=setTimeout(()=>checkIdentifier(input),300);}); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();all[index+1]?.focus();}}); }); }
-function updateIdentifierCount(){ const inputs=[...document.querySelectorAll('[data-identifier-input]')]; const done=inputs.filter(i=>i.value.trim()).length; countBadge.textContent=`${done} / ${inputs.length}`; }
-async function checkIdentifier(input){ const v=input.value.replace(/\s+/g,'').trim().toUpperCase(); input.value=v; if(!v){setIdentifierState(input,'','');return true;} setIdentifierState(input,'checking','Checking…'); try{const res=await fetch('actions/stock_in.php?check_identifier='+encodeURIComponent(v),{headers:{Accept:'application/json'}});const data=await res.json();if(data.exists){setIdentifierState(input,'error','Already used');return false;}setIdentifierState(input,'valid','Ready');return true;}catch{setIdentifierState(input,'','');return true;} }
-async function validateIdentifiers(){ const inputs=[...document.querySelectorAll('[data-identifier-input]')]; if(!inputs.length)return true; const vals=inputs.map(i=>i.value.replace(/\s+/g,'').trim().toUpperCase()); inputs.forEach((i,n)=>i.value=vals[n]); let ok=true; inputs.forEach((i,n)=>{let message='';let bad=false;if(!vals[n]){bad=true;message='Required';}else if(vals.indexOf(vals[n])!==n){bad=true;message='Duplicate in list';}if(bad){setIdentifierState(i,'error',message);ok=false;}}); if(!ok)return false; for(const input of inputs){if(!(await checkIdentifier(input)))ok=false;} return ok; }
+quantity.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusFirstEmptyIdentifier();}});
+quantity.addEventListener('change',()=>setTimeout(focusFirstEmptyIdentifier,60));
 
-$('openPasteIdentifiers').addEventListener('click',()=>{ const kind=identifierKind(),label=kind==='serial'?'Serial Numbers':'IMEIs',singular=kind==='serial'?'serial number':'IMEI'; $('pasteIdentifiersTitle').textContent='Paste '+label; $('pasteIdentifiersLabel').textContent=label; $('pasteIdentifiersInput').placeholder='Paste one '+singular+' per line'; $('pasteIdentifiersInput').value=''; updatePasteMeta(); pasteModal.hidden=false; document.body.classList.add('modal-open'); setTimeout(()=>$('pasteIdentifiersInput').focus(),40); });
+function setIdentifierState(input,state,message=''){
+  const wrap=input.closest('.identifier-field-wrap') || input.closest('.identifier-entry');
+  const row=input.closest('.identifier-entry');
+  const status=wrap?.querySelector('[data-identifier-status]');
+  const restoreBtn=wrap?.querySelector('[data-restore-trigger]');
+  wrap?.classList.remove('is-valid','is-error','is-checking','is-restore','is-restore-approved');
+  input.classList.remove('input-error');
+  if(state)wrap?.classList.add('is-'+state);
+  if(state==='error')input.classList.add('input-error');
+  if(status)status.textContent=message;
+  if(restoreBtn)restoreBtn.hidden=state!=='restore';
+  if(row && state==='restore-approved') row.classList.add('has-restore');
+}
+function clearRestoreState(input){
+  delete input.dataset.restoreUnitId;
+  delete input.dataset.restoreApproved;
+  delete input.dataset.restoreApprovedValue;
+  delete input.dataset.restoreBranch;
+  delete input.dataset.restoreReason;
+}
+function updateScannerBadge(state='ready',text=''){
+  const badge=$('scannerReadyBadge');
+  if(!badge)return;
+  badge.classList.remove('is-ready','is-checking','is-error');
+  badge.classList.add('is-'+state);
+  badge.lastChild.textContent=text || (state==='checking'?'Checking':state==='error'?'Check field':'Scanner ready');
+}
+function focusFirstEmptyIdentifier(){
+  const inputs=[...identifierRows.querySelectorAll('[data-identifier-input]')];
+  const target=inputs.find(i=>!i.value.trim() && !i.disabled) || inputs[0];
+  if(target){target.focus();target.select?.();updateScannerBadge('ready');}
+}
+function scheduleScannerFocus(){setTimeout(()=>{if(!identifierPanel.classList.contains('hidden'))focusFirstEmptyIdentifier();},90);}
+function focusNextIdentifier(input){
+  const rows=[...identifierRows.querySelectorAll('.identifier-entry')];
+  const row=input.closest('.identifier-entry');
+  const rowIndex=rows.indexOf(row);
+  let next=null;
+  if(usesDualImei()){
+    if(input.dataset.identifierPrimary==='1') next=row?.querySelector('[data-identifier-secondary]');
+    else next=rows[rowIndex+1]?.querySelector('[data-identifier-primary]');
+  }else{
+    next=rows[rowIndex+1]?.querySelector('[data-identifier-primary]');
+  }
+  if(next){next.focus();next.select?.();updateScannerBadge('ready');}
+  else{document.querySelector('#receiveFormActions button[type="submit"]')?.focus();updateScannerBadge('ready','Scan complete');}
+}
+function bindIdentifierInputs(){
+  const inputs=[...document.querySelectorAll('[data-identifier-input]')];
+  inputs.forEach(input=>{
+    input.addEventListener('focus',()=>updateScannerBadge('ready'));
+    input.addEventListener('input',()=>{
+      clearRestoreState(input);
+      setIdentifierState(input,'','');
+      updateIdentifierCount();
+      clearTimeout(identifierTimer);
+      const normalized=input.value.replace(/\s+/g,'').trim().toUpperCase();
+      const imeiField=identifierKind()==='imei';
+      if(imeiField && /^\d{15}$/.test(normalized)){
+        identifierTimer=setTimeout(async()=>{
+          if(document.activeElement!==input)return;
+          if(await checkIdentifier(input)) focusNextIdentifier(input);
+        },160);
+      }else{
+        identifierTimer=setTimeout(()=>checkIdentifier(input),300);
+      }
+    });
+    input.addEventListener('keydown',async e=>{
+      if(e.key!=='Enter' && e.key!=='Tab')return;
+      e.preventDefault();
+      clearTimeout(identifierTimer);
+      const ok=await checkIdentifier(input);
+      if(ok)focusNextIdentifier(input);
+    });
+  });
+}
+$('focusScannerBtn')?.addEventListener('click',focusFirstEmptyIdentifier);
+function updateIdentifierCount(){
+  const required=[...document.querySelectorAll('[data-identifier-primary]')];
+  const done=required.filter(i=>i.value.trim()).length;
+  countBadge.textContent=`${done} / ${required.length}`;
+}
+async function checkIdentifier(input){
+  const v=input.value.replace(/\s+/g,'').trim().toUpperCase();
+  input.value=v;
+  if(!v){clearRestoreState(input);setIdentifierState(input,'','');updateScannerBadge('ready');return input.dataset.identifierSecondary==='1';}
+  if(identifierKind()==='imei' && !/^\d{15}$/.test(v)){
+    clearRestoreState(input);setIdentifierState(input,'error','IMEI must be 15 digits');updateScannerBadge('error');return false;
+  }
+  const approvedFor=input.dataset.restoreApprovedValue||'';
+  setIdentifierState(input,'checking','Checking…');
+  updateScannerBadge('checking');
+  try{
+    const params=new URLSearchParams({check_identifier:v,product_id:String(productId.value||''),branch_id:String(activeBranchId()||'')});
+    const res=await fetch('actions/stock_in.php?'+params.toString(),{headers:{Accept:'application/json'}});
+    const data=await res.json();
+    if(!data.exists){clearRestoreState(input);setIdentifierState(input,'valid','Ready');updateScannerBadge('ready');return true;}
+
+    if(data.restorable && input.dataset.identifierSecondary!=='1'){
+      input.dataset.restoreUnitId=String(data.unit_id||'');
+      input.dataset.restoreBranch=String(data.branch_name||'');
+      input.dataset.restoreReason=String(data.adjustment_label||data.adjustment_reason||'Previous adjustment');
+      if(input.dataset.restoreApproved==='1' && approvedFor===v){setIdentifierState(input,'restore-approved','Ready to restore');updateScannerBadge('ready');return true;}
+      delete input.dataset.restoreApproved;delete input.dataset.restoreApprovedValue;
+      setIdentifierState(input,'restore',`Previously removed • ${input.dataset.restoreReason}`);
+      updateScannerBadge('error','Restore required');
+      return false;
+    }
+
+    clearRestoreState(input);
+    if(data.restore_requires_branch){setIdentifierState(input,'error','Select branch first');updateScannerBadge('error');return false;}
+    if(input.dataset.identifierSecondary==='1' && data.restorable){
+      setIdentifierState(input,'error','Already registered. Restore using IMEI 1.');
+      updateScannerBadge('error');
+      return false;
+    }
+    setIdentifierState(input,'error',data.message||'Already used');
+    updateScannerBadge('error');
+    return false;
+  }catch{
+    setIdentifierState(input,'','');
+    updateScannerBadge('ready');
+    return true;
+  }
+}
+async function validateIdentifiers(){
+  const required=[...document.querySelectorAll('[data-identifier-primary]')];
+  const optional=[...document.querySelectorAll('[data-identifier-secondary]')];
+  if(!required.length)return true;
+
+  const all=[...required,...optional];
+  all.forEach(input=>input.value=input.value.replace(/\s+/g,'').trim().toUpperCase());
+  let ok=true;
+  const seen=new Map();
+
+  for(const input of required){
+    if(!input.value){
+      setIdentifierState(input,'error','Required');
+      ok=false;
+    }
+  }
+  for(const input of all){
+    if(!input.value)continue;
+    if(seen.has(input.value)){
+      setIdentifierState(input,'error','Duplicate in list');
+      setIdentifierState(seen.get(input.value),'error','Duplicate in list');
+      ok=false;
+    }else{
+      seen.set(input.value,input);
+    }
+  }
+  if(!ok)return false;
+
+  for(const input of all){
+    if(input.value && !(await checkIdentifier(input)))ok=false;
+  }
+  return ok;
+}
+
+$('openPasteIdentifiers').addEventListener('click',()=>{
+  const dual=usesDualImei();
+  const kind=identifierKind();
+  const label=dual?'IMEI 1 / IMEI 2':(kind==='serial'?'Serial Numbers':'IMEIs');
+  const singular=kind==='serial'?'serial number':'IMEI';
+  $('pasteIdentifiersTitle').textContent='Paste '+label;
+  $('pasteIdentifiersLabel').textContent=label;
+  const help=$('pasteIdentifiersHelp');
+  if(dual){
+    $('pasteIdentifiersInput').placeholder='IMEI 1, IMEI 2 (optional) — one phone per line';
+    if(help)help.textContent='One phone per line. Separate IMEI 1 and optional IMEI 2 with a comma, tab, or |.';
+  }else{
+    $('pasteIdentifiersInput').placeholder='Paste one '+singular+' per line';
+    if(help)help.textContent='One identifier per line. Extra spaces are removed automatically.';
+  }
+  $('pasteIdentifiersInput').value='';
+  updatePasteMeta();
+  pasteModal.hidden=false;
+  document.body.classList.add('modal-open');
+  setTimeout(()=>$('pasteIdentifiersInput').focus(),40);
+});
 document.querySelectorAll('[data-paste-close]').forEach(b=>b.addEventListener('click',()=>{pasteModal.hidden=true;document.body.classList.remove('modal-open');}));
-function pastedValues(){ return $('pasteIdentifiersInput').value.split(/\r?\n|,/).map(v=>v.replace(/\s+/g,'').trim().toUpperCase()).filter(Boolean); }
-function updatePasteMeta(){ const vals=pastedValues(),needed=Number(quantity.value)||1; $('pasteIdentifiersMeta').textContent=`${vals.length} detected`; $('pasteIdentifiersWarning').textContent=vals.length>needed?`${vals.length-needed} extra will not be applied.`:vals.length<needed?`${needed-vals.length} field${needed-vals.length===1?'':'s'} will remain blank.`:''; }
+
+function pastedRows(){
+  const text=$('pasteIdentifiersInput').value.trim();
+  if(!text)return[];
+  if(usesDualImei()){
+    return text.split(/\r?\n/).map(line=>{
+      const parts=line.split(/\t|,|\|/).map(v=>v.replace(/\s+/g,'').trim().toUpperCase()).filter(Boolean);
+      return {primary:parts[0]||'',secondary:parts[1]||''};
+    }).filter(row=>row.primary);
+  }
+  return text.split(/\r?\n|,/).map(v=>v.replace(/\s+/g,'').trim().toUpperCase()).filter(Boolean).map(primary=>({primary,secondary:''}));
+}
+function updatePasteMeta(){
+  const rows=pastedRows(),needed=Number(quantity.value)||1;
+  $('pasteIdentifiersMeta').textContent=`${rows.length} unit${rows.length===1?'':'s'} detected`;
+  $('pasteIdentifiersWarning').textContent=rows.length>needed?`${rows.length-needed} extra will not be applied.`:rows.length<needed?`${needed-rows.length} unit${needed-rows.length===1?'':'s'} will remain blank.`:'';
+}
 $('pasteIdentifiersInput').addEventListener('input',updatePasteMeta);
-$('applyPasteIdentifiers').addEventListener('click',()=>{ const vals=pastedValues(),inputs=[...document.querySelectorAll('[data-identifier-input]')];inputs.forEach((i,n)=>{if(vals[n]!==undefined)i.value=vals[n];});updateIdentifierCount();pasteModal.hidden=true;document.body.classList.remove('modal-open'); });
+$('applyPasteIdentifiers').addEventListener('click',()=>{
+  const rows=pastedRows();
+  const primaries=[...document.querySelectorAll('[data-identifier-primary]')];
+  const secondaries=[...document.querySelectorAll('[data-identifier-secondary]')];
+  primaries.forEach((input,n)=>{
+    if(rows[n]!==undefined){
+      input.value=rows[n].primary||'';
+      clearRestoreState(input);
+      setIdentifierState(input,'','');
+      if(secondaries[n]){
+        secondaries[n].value=rows[n].secondary||'';
+        clearRestoreState(secondaries[n]);
+        setIdentifierState(secondaries[n],'','');
+      }
+    }
+  });
+  updateIdentifierCount();
+  pasteModal.hidden=true;
+  document.body.classList.remove('modal-open');
+});
+
+const restoreModal=$('restoreUnitModal');
+let pendingRestoreInput=null;
+identifierRows.addEventListener('click',e=>{
+  const btn=e.target.closest('[data-restore-trigger]');
+  if(!btn)return;
+  const row=btn.closest('.identifier-entry');
+  const input=row?.querySelector('[data-identifier-primary]');
+  if(!input||!input.dataset.restoreUnitId)return;
+  pendingRestoreInput=input;
+  $('restoreUnitIdentifier').textContent=input.value.trim().toUpperCase()||'—';
+  $('restoreUnitProduct').textContent=selectedItem&&selectedVariant?`${selectedItem.label} • ${selectedVariant.specs}`:'Selected variant';
+  $('restoreUnitBranch').textContent=input.dataset.restoreBranch|| (isOwner?($('branchSelect')?.selectedOptions[0]?.textContent||'Selected branch'):assignedBranchName);
+  $('restoreUnitReason').textContent=input.dataset.restoreReason||'Previous adjustment';
+  restoreModal.hidden=false;document.body.classList.add('modal-open');
+});
+document.querySelectorAll('[data-restore-close]').forEach(b=>b.addEventListener('click',()=>{restoreModal.hidden=true;pendingRestoreInput=null;document.body.classList.remove('modal-open');}));
+$('confirmRestoreUnit').addEventListener('click',()=>{
+  if(!pendingRestoreInput)return;
+  pendingRestoreInput.dataset.restoreApproved='1';
+  pendingRestoreInput.dataset.restoreApprovedValue=pendingRestoreInput.value.replace(/\s+/g,'').trim().toUpperCase();
+  setIdentifierState(pendingRestoreInput,'restore-approved','Ready to restore');
+  restoreModal.hidden=true;
+  const next=[...document.querySelectorAll('[data-identifier-input]')];
+  const idx=next.indexOf(pendingRestoreInput);
+  pendingRestoreInput=null;
+  document.body.classList.remove('modal-open');
+  next[idx+1]?.focus();
+});
 
 form.addEventListener('submit',async e=>{
   if($('confirmedField').value==='1')return;
@@ -437,7 +751,22 @@ form.addEventListener('submit',async e=>{
   $('confirmBranch').textContent=isOwner?$('branchSelect').selectedOptions[0]?.textContent||'—':assignedBranchName;
   $('confirmQuantity').textContent=(Number(quantity.value)||1)+' unit'+((Number(quantity.value)||1)===1?'':'s');
   if(isOwner && $('confirmCost')) $('confirmCost').textContent=selectedVariant.costReady?money(selectedVariant.cost):'Not set'; const salePrice=canEditSelling&&$('sellingPriceInput')?Number($('sellingPriceInput').value||0):variantSelling(selectedVariant); $('confirmSelling').textContent=money(salePrice);
-  const ids=[...document.querySelectorAll('[data-identifier-input]')].map(i=>i.value.trim().toUpperCase()).filter(Boolean); const box=$('confirmIdentifiers');box.classList.toggle('hidden',!ids.length);box.innerHTML=ids.length?`<strong>${esc(identifierKind()==='serial'?'Serial Numbers':'IMEIs')}</strong><span>${ids.map(esc).join(' • ')}</span>`:'';
+  const identifierInputs=[...document.querySelectorAll('[data-identifier-primary]')];
+  const box=$('confirmIdentifiers');
+  let identifierSummary=[];
+  if(usesDualImei()){
+    const secondaries=[...document.querySelectorAll('[data-identifier-secondary]')];
+    identifierSummary=identifierInputs.map((input,index)=>{
+      const primary=input.value.trim().toUpperCase();
+      const secondary=secondaries[index]?.value.trim().toUpperCase()||'';
+      return secondary?`IMEI 1: ${primary} / IMEI 2: ${secondary}`:`IMEI 1: ${primary}`;
+    }).filter(Boolean);
+  }else{
+    identifierSummary=identifierInputs.map(i=>i.value.trim().toUpperCase()).filter(Boolean);
+  }
+  box.classList.toggle('hidden',!identifierSummary.length);
+  box.innerHTML=identifierSummary.length?`<strong>${esc(usesDualImei()?'IMEI Numbers':(identifierKind()==='serial'?'Serial Numbers':'IMEIs'))}</strong><span>${identifierSummary.map(esc).join(' • ')}</span>`:'';
+  const restoreCount=identifierInputs.filter(i=>i.dataset.restoreApproved==='1'&&i.dataset.restoreUnitId).length; const restoreNotice=$('confirmRestoreNotice'); restoreNotice?.classList.toggle('hidden',restoreCount===0); if(restoreCount>0){restoreNotice.querySelector('strong').textContent=`Restore ${restoreCount} existing unit${restoreCount===1?'':'s'}`;}
   confirmModal.hidden=false; document.body.classList.add('modal-open');
 });
 document.querySelectorAll('[data-confirm-close]').forEach(b=>b.addEventListener('click',()=>{confirmModal.hidden=true;document.body.classList.remove('modal-open');}));

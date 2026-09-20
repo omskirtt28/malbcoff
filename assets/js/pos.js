@@ -76,7 +76,7 @@
           <span>${Number(item.quantity)}</span>
           <button type="button" data-qty-plus="${index}" aria-label="Increase quantity">+</button>
         </div>` : `<span class="mini-chip">1 unit</span>`;
-      const identifier = item.identifier ? `<span>${escapeHtml(item.identifier_type || 'Device ID')}: <b>${escapeHtml(item.identifier)}</b></span>` : '';
+      const identifier = item.identifier ? `<span>${escapeHtml(item.identifier_type || 'Device ID')}: <b>${escapeHtml(item.identifier)}</b>${item.secondary_identifier ? ` • IMEI 2: <b>${escapeHtml(item.secondary_identifier)}</b>` : ''}</span>` : '';
       row.innerHTML = `
         <div class="pos-cart-line-main">
           <div class="pos-cart-line-icon">${item.kind === 'device' ? '▣' : '◇'}</div>
@@ -121,7 +121,7 @@
       card.className = 'pos-result-card';
       card.innerHTML = `
         <div class="pos-result-icon">${item.kind === 'device' ? '▣' : '◇'}</div>
-        <div class="pos-result-copy"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.specs || '—')}</span>${item.identifier ? `<small>${escapeHtml(item.identifier_type)}: ${escapeHtml(item.identifier)}</small>` : `<small>${Number(item.available_qty || 0)} available</small>`}</div>
+        <div class="pos-result-copy"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.specs || '—')}</span>${item.identifier ? `<small>${escapeHtml(item.identifier_type)}: ${escapeHtml(item.identifier)}${item.secondary_identifier ? ` • IMEI 2: ${escapeHtml(item.secondary_identifier)}` : ''}</small>` : `<small>${Number(item.available_qty || 0)} available</small>`}</div>
         <div class="pos-result-price"><strong>${money(item.price)}</strong><span>${item.kind === 'device' ? 'Exact unit' : `${Number(item.available_qty)} in stock`}</span></div>
         <span class="pos-result-add">+ Add</span>`;
       card.addEventListener('click', () => addItem(item));

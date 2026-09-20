@@ -544,3 +544,287 @@
   .product-master-brand-logo{width:36px;height:36px;flex-basis:36px}
   .product-model-brand-logo{width:26px;height:26px;flex-basis:26px}
 }
+
+/* P2-016 Edit Variant full fields + safe locking */
+.variant-spec-section{padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid #edf0f5}.variant-spec-section .variant-price-heading{margin-bottom:11px}.variant-spec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.variant-spec-grid .field{margin:0}.variant-spec-lock-note{margin-top:10px;padding:9px 11px;border:1px solid #dfe8f5;border-radius:10px;background:#f8fbff;color:#52647b;font-size:10.5px;line-height:1.45}.variant-spec-lock-note.locked{border-color:#eadfca;background:#fffaf1;color:#7a5a26}.variant-spec-grid .field.field-locked>span{color:#667085}.variant-spec-grid .field.field-locked select,.variant-spec-grid .field.field-locked input{background:#f5f7fa;color:#667085;border-color:#e3e8ef;cursor:not-allowed;box-shadow:none}.variant-price-dialog .master-modal-form{padding-top:16px}.variant-owner-dialog .variant-spec-section{padding-top:2px}
+@media(max-width:640px){.variant-spec-grid{grid-template-columns:1fr}}
+
+/* P2-019: controlled restore state for previously adjusted-out serialized units */
+.identifier-entry.is-restore .identifier-entry-number{
+  background:#eaf2ff;
+  color:#1769e8;
+}
+.identifier-entry.is-restore .identifier-entry-control input{
+  border-color:#9ec3fb;
+  background:#fbfdff;
+  box-shadow:0 0 0 3px #f1f6ff;
+}
+.identifier-entry.is-restore .identifier-entry-status{
+  color:#1769e8;
+  max-width:145px;
+}
+.restore-review-note{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  margin-top:14px;
+  padding:12px 14px;
+  border:1px solid #cfe0fb;
+  border-radius:12px;
+  background:#f5f9ff;
+}
+.restore-review-note strong{
+  color:#175fb8;
+  font-size:12px;
+}
+.restore-review-note span{
+  color:#667085;
+  font-size:11px;
+  line-height:1.45;
+}
+
+/* P2-020 — clear restore action for previously removed units */
+.identifier-entry-control input{
+  padding-right:12px;
+}
+.identifier-entry-feedback{
+  min-height:24px;
+  margin-top:5px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.identifier-entry-status{
+  position:static;
+  transform:none;
+  max-width:none;
+  min-width:0;
+  color:#667085;
+  font-size:9.8px;
+  font-weight:750;
+  text-align:left;
+  pointer-events:auto;
+  white-space:normal;
+  overflow:visible;
+  text-overflow:clip;
+  line-height:1.35;
+}
+.identifier-restore-btn{
+  flex:0 0 auto;
+  height:28px;
+  padding:0 10px;
+  border:1px solid #9fc5fb;
+  border-radius:8px;
+  background:#f4f8ff;
+  color:#1769e8;
+  font:inherit;
+  font-size:9.5px;
+  font-weight:800;
+  cursor:pointer;
+  transition:.14s ease;
+}
+.identifier-restore-btn:hover{
+  border-color:#6ea7f5;
+  background:#eaf3ff;
+}
+.identifier-entry.is-restore .identifier-entry-number{
+  background:#eaf2ff;
+  color:#1769e8;
+}
+.identifier-entry.is-restore .identifier-entry-control input{
+  border-color:#9ec3fb;
+  background:#fbfdff;
+  box-shadow:0 0 0 3px #f1f6ff;
+}
+.identifier-entry.is-restore .identifier-entry-status{color:#4f6788}
+.identifier-entry.is-restore-approved .identifier-entry-number{
+  background:#eaf8f0;
+  color:#178a53;
+}
+.identifier-entry.is-restore-approved .identifier-entry-control input{
+  border-color:#b9e7cf;
+  background:#fcfffd;
+  box-shadow:0 0 0 3px #f2fbf6;
+}
+.identifier-entry.is-restore-approved .identifier-entry-status{color:#178a53}
+.restore-unit-dialog{
+  width:min(520px,100%);
+}
+.restore-unit-summary{
+  display:grid;
+  grid-template-columns:1fr 1.2fr;
+  gap:12px;
+}
+.restore-unit-summary>div{
+  padding:12px 13px;
+  border:1px solid #e2e8f0;
+  border-radius:11px;
+  background:#fbfcfe;
+  min-width:0;
+}
+.restore-unit-summary span,
+.restore-unit-summary small{
+  display:block;
+  color:#667085;
+  font-size:9.8px;
+  line-height:1.4;
+}
+.restore-unit-summary strong{
+  display:block;
+  margin-top:4px;
+  color:#172033;
+  font-size:11.5px;
+  font-weight:800;
+  overflow-wrap:anywhere;
+}
+.restore-unit-summary small{margin-top:4px}
+.restore-unit-info{
+  margin-top:12px;
+  padding:11px 12px;
+  border:1px solid #cfe0fb;
+  border-radius:10px;
+  background:#f5f9ff;
+}
+.restore-unit-info strong{
+  display:block;
+  color:#175fb8;
+  font-size:10.5px;
+}
+.restore-unit-info span{
+  display:block;
+  margin-top:3px;
+  color:#5f6f84;
+  font-size:10px;
+  line-height:1.45;
+}
+@media(max-width:620px){
+  .restore-unit-summary{grid-template-columns:1fr}
+  .identifier-entry-feedback{align-items:flex-start;flex-direction:column}
+  .identifier-restore-btn{width:100%}
+}
+
+
+/* P2-023 — Dual IMEI receive-stock UI */
+.identifier-entry-dual{
+  grid-column:1 / -1;
+  align-items:start;
+}
+.identifier-dual-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px 12px;
+  min-width:0;
+}
+.identifier-field-wrap{
+  min-width:0;
+}
+.identifier-field-label{
+  display:block;
+  margin:0 0 5px;
+  color:#475467;
+  font-size:10.5px;
+  font-weight:800;
+}
+.identifier-field-label b{color:#d14343}
+.identifier-field-wrap input{
+  width:100%;
+  height:44px;
+  border:1px solid #d9e2ee;
+  border-radius:10px;
+  background:#fff;
+  padding:0 12px;
+  outline:0;
+  font-size:12.5px;
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+.identifier-field-wrap input::placeholder{color:#98a2b3}
+.identifier-field-wrap input:focus{
+  border-color:#7eadf7;
+  box-shadow:0 0 0 3px #eef5ff;
+}
+.identifier-field-wrap.is-valid input{
+  border-color:#b9e7cf;
+  background:#fcfffd;
+}
+.identifier-field-wrap.is-valid .identifier-entry-status{color:#178a53}
+.identifier-field-wrap.is-checking .identifier-entry-status{color:#a86812}
+.identifier-field-wrap.is-error input{
+  border-color:#e88989!important;
+  box-shadow:0 0 0 3px #fff2f2!important;
+  background:#fffdfd;
+}
+.identifier-field-wrap.is-error .identifier-entry-status{color:#c14343}
+.identifier-field-wrap.is-restore input{
+  border-color:#9ec3fb;
+  background:#fbfdff;
+  box-shadow:0 0 0 3px #f1f6ff;
+}
+.identifier-field-wrap.is-restore .identifier-entry-status{color:#4f6788}
+.identifier-field-wrap.is-restore-approved input{
+  border-color:#b9e7cf;
+  background:#fcfffd;
+  box-shadow:0 0 0 3px #f2fbf6;
+}
+.identifier-field-wrap.is-restore-approved .identifier-entry-status{color:#178a53}
+.identifier-entry-dual .identifier-entry-number{
+  margin-top:24px;
+}
+@media (max-width:760px){
+  .identifier-dual-grid{grid-template-columns:1fr}
+  .identifier-entry-dual .identifier-entry-number{margin-top:24px}
+}
+
+/* P2-024 — Scanner-friendly Receive Stock */
+.scanner-ready-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  height:32px;
+  padding:0 11px;
+  border-radius:999px;
+  background:#eef6ff;
+  color:#1769e8;
+  font-size:10.5px;
+  font-weight:850;
+  white-space:nowrap;
+}
+.scanner-ready-badge>span{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#2f7ff0;
+  box-shadow:0 0 0 4px rgba(47,127,240,.12);
+}
+.scanner-ready-badge.is-checking{background:#fff7e8;color:#a86812}
+.scanner-ready-badge.is-checking>span{background:#d78a1d;box-shadow:0 0 0 4px rgba(215,138,29,.12)}
+.scanner-ready-badge.is-error{background:#fff0f0;color:#c14343}
+.scanner-ready-badge.is-error>span{background:#d94b4b;box-shadow:0 0 0 4px rgba(217,75,75,.12)}
+.scanner-help{
+  display:flex;
+  align-items:center;
+  min-height:38px;
+  margin:-2px 0 12px;
+  padding:9px 11px;
+  border:1px solid #e2eaf5;
+  border-radius:10px;
+  background:#f8fbff;
+  color:#667085;
+  font-size:10.5px;
+  line-height:1.45;
+}
+.identifier-field-wrap input:focus{
+  border-color:#2f7ff0;
+  box-shadow:0 0 0 3px rgba(47,127,240,.12);
+  background:#fff;
+}
+.identifier-field-wrap input:focus::placeholder{color:#7b8ba1}
+@media(max-width:860px){
+  .identifier-panel-actions{flex-wrap:wrap;justify-content:flex-end}
+  .scanner-ready-badge{order:-1}
+}
+@media(max-width:620px){
+  .identifier-panel-actions{justify-content:flex-start}
+  #focusScannerBtn,#openPasteIdentifiers{flex:1 1 auto}
+  .scanner-help{font-size:10px}
+}

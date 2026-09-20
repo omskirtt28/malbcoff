@@ -74,6 +74,7 @@ try {
                 "SELECT p.id,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,p.is_active,
                         (SELECT COUNT(*) FROM inventory_units iu WHERE iu.product_id=p.id) unit_count,
                         (SELECT COUNT(*) FROM inventory_units ia WHERE ia.product_id=p.id AND ia.status='available') available_count,
+                        (SELECT COUNT(*) FROM inventory_units il WHERE il.product_id=p.id AND il.status IN ('available','reserved','sold','transferred')) locked_unit_count,
                         (SELECT COUNT(*) FROM stock_movements sm WHERE sm.product_id=p.id) movement_count
                  FROM products p WHERE p.model_id=? AND p.product_type IN ('phone','tablet') AND {$configWhere}
                  ORDER BY p.is_active DESC,p.ram,p.storage,p.connectivity,p.color", [$selectedModelId]
@@ -475,11 +476,23 @@ function product_master_url(array $overrides = []): string
                     <tr class="<?= !(int)$config['is_active'] ? 'archived-row' : '' ?>" data-variant-row="<?= (int)$config['id'] ?>">
                         <td><strong><?= e($specs) ?></strong></td>
                         <td><?php if($shownPrice!==null): ?><strong><?= peso($shownPrice) ?></strong><span class="table-subtext"><?= e($priceNote ?: 'All branches') ?></span><?php else: ?><strong>Varies by branch</strong><span class="table-subtext">Select a branch above to view its price</span><?php endif; ?></td>
-                        <td><strong><span data-variant-stock="<?= (int)$config['id'] ?>"><?= number_format((int)$config['available_count']) ?></span> available</strong><span class="table-subtext"><?= number_format((int)$config['unit_count']) ?> tracked</span></td>
+                        <td><strong><span data-variant-stock="<?= (int)$config['id'] ?>"><?= number_format((int)$config['available_count']) ?></span> available</strong></td>
                         <td><span class="status-pill <?= (int)$config['is_active']?'available':'low' ?>"><?= (int)$config['is_active']?'Active':'Archived' ?></span></td>
                         <td><div class="master-table-actions">
                             <?php if ($canEditVariantPrice): ?>
-                                <button class="table-action-btn" type="button" data-master-open="configuration" data-mode="edit" data-id="<?= (int)$config['id'] ?>" data-cost-price="<?= e((string)$config['cost_price']) ?>" data-selling-price="<?= e((string)($priceBranchId ? ($branchPricesForVariant[(int)$priceBranchId] ?? $config['selling_price']) : $config['selling_price'])) ?>" data-branch-prices='<?= e(json_encode($branchPricesForVariant, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)) ?>' data-config-label="<?= e($selectedModel['brand_name'].' '.$selectedModel['name'].' • '.$specs) ?>"><?= icon('edit') ?><span>Edit</span></button>
+                                <button class="table-action-btn" type="button"
+                                    data-master-open="configuration"
+                                    data-mode="edit"
+                                    data-id="<?= (int)$config['id'] ?>"
+                                    data-ram="<?= e((string)($config['ram'] ?? '')) ?>"
+                                    data-storage="<?= e((string)($config['storage'] ?? '')) ?>"
+                                    data-color="<?= e((string)($config['color'] ?? '')) ?>"
+                                    data-connectivity="<?= e((string)($config['connectivity'] ?? '')) ?>"
+                                    data-specs-locked="<?= ((int)($config['locked_unit_count'] ?? 0) > 0) ? '1' : '0' ?>"
+                                    data-cost-price="<?= e((string)$config['cost_price']) ?>"
+                                    data-selling-price="<?= e((string)($priceBranchId ? ($branchPricesForVariant[(int)$priceBranchId] ?? $config['selling_price']) : $config['selling_price'])) ?>"
+                                    data-branch-prices='<?= e(json_encode($branchPricesForVariant, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)) ?>'
+                                    data-config-label="<?= e($selectedModel['brand_name'].' '.$selectedModel['name'].' • '.$specs) ?>"><?= icon('edit') ?><span>Edit</span></button>
                             <?php endif; ?>
                             <?php if ($isOwner): ?>
                                 <form method="post" action="actions/product_master.php" data-confirm="<?= (int)$config['is_active']?'Archive this variant? Existing stock and history will remain.':'Restore this variant?' ?>">
@@ -641,6 +654,51 @@ function product_master_url(array $overrides = []): string
                 <input type="hidden" name="return_model" value="<?= (int)($selectedModel['id'] ?? 0) ?>">
                 <input type="hidden" name="action" value="edit" data-action-field>
                 <input type="hidden" name="id" value="" data-id-field>
+
+                <?php
+                    $variantEditType = $selectedModel['device_type'] ?? 'phone';
+                    $variantEditIsApple = $selectedModel && strcasecmp(trim((string)($selectedModel['brand_name'] ?? '')), 'APPLE') === 0;
+                ?>
+                <section class="variant-spec-section">
+                    <div class="variant-price-heading">
+                        <strong>Variant Details</strong>
+                        <span>Correct the specs before stock or history is attached to this variant.</span>
+                    </div>
+                    <div class="variant-spec-grid">
+                        <?php if (!$variantEditIsApple): ?>
+                            <label class="field">
+                                <span>RAM <b>*</b></span>
+                                <select name="ram" data-variant-ram-field required>
+                                    <option value="">Select RAM</option>
+                                    <option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option>
+                                </select>
+                            </label>
+                        <?php endif; ?>
+                        <label class="field">
+                            <span>Storage <b>*</b></span>
+                            <select name="storage" data-variant-storage-field required>
+                                <option value="">Select storage</option>
+                                <option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Color <b>*</b></span>
+                            <input type="text" name="color" maxlength="80" data-uppercase data-variant-color-field placeholder="E.G. DEEP BLUE" required>
+                        </label>
+                        <?php if ($variantEditType === 'tablet'): ?>
+                            <label class="field">
+                                <span>Connectivity <b>*</b></span>
+                                <select name="connectivity" data-variant-connectivity-field required>
+                                    <option value="">Select connectivity</option>
+                                    <option value="Wi-Fi">Wi-Fi</option>
+                                    <option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option>
+                                </select>
+                            </label>
+                        <?php endif; ?>
+                    </div>
+                    <div class="variant-spec-lock-note" data-variant-spec-note>Specs can be edited while this variant has no stock or history.</div>
+                </section>
+
                 <?php if ($isOwner): ?>
                     <label class="field">
                         <span>Cost Price / Unit <b>*</b></span>

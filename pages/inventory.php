@@ -45,9 +45,9 @@ try {
     if ($search !== '') {
         $conditions[] = '(br.name LIKE :s1 OR pm.name LIKE :s2 OR p.product_name LIKE :s3 OR p.barcode LIKE :s4 OR EXISTS (
             SELECT 1 FROM inventory_units six
-            WHERE six.product_id=p.id AND (six.imei LIKE :s5 OR six.serial_no LIKE :s6)
+            WHERE six.product_id=p.id AND (six.imei LIKE :s5 OR six.imei2 LIKE :s6 OR six.serial_no LIKE :s7)
         ))';
-        for ($i=1; $i<=6; $i++) $params['s'.$i] = '%'.$search.'%';
+        for ($i=1; $i<=7; $i++) $params['s'.$i] = '%'.$search.'%';
     }
 
     $productSql = "SELECT p.id,p.product_type,p.brand_id,p.model_id,p.product_name,p.ram,p.storage,p.color,p.connectivity,p.barcode,

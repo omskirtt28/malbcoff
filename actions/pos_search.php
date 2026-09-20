@@ -37,7 +37,7 @@ try {
 
     // Serialized brand-new devices: one result per physical unit so the cashier sells an exact IMEI / Serial Number.
     $deviceRows = Database::query(
-        "SELECT iu.id unit_id, iu.product_id, iu.imei, iu.serial_no, iu.acquisition_cost,
+        "SELECT iu.id unit_id, iu.product_id, iu.imei, iu.imei2, iu.serial_no, iu.acquisition_cost,
                 COALESCE(bpp.selling_price,p.selling_price) sale_price,
                 p.product_type,p.ram,p.storage,p.connectivity,p.color,
                 br.name brand_name,pm.name model_name
@@ -49,18 +49,19 @@ try {
          WHERE iu.branch_id=? AND iu.status='available' AND iu.condition_type='brand_new'
            AND p.product_type IN ('phone','tablet')
            AND (
-                COALESCE(iu.imei,'') LIKE ? OR COALESCE(iu.serial_no,'') LIKE ? OR
+                COALESCE(iu.imei,'') LIKE ? OR COALESCE(iu.imei2,'') LIKE ? OR COALESCE(iu.serial_no,'') LIKE ? OR
                 COALESCE(br.name,'') LIKE ? OR COALESCE(pm.name,'') LIKE ? OR
                 CONCAT_WS(' ',COALESCE(br.name,''),COALESCE(pm.name,''),COALESCE(p.ram,''),COALESCE(p.storage,''),COALESCE(p.connectivity,''),COALESCE(p.color,'')) LIKE ?
            )
-         ORDER BY CASE WHEN iu.imei=? OR iu.serial_no=? THEN 0 ELSE 1 END, br.name, pm.name, iu.id
+         ORDER BY CASE WHEN iu.imei=? OR iu.imei2=? OR iu.serial_no=? THEN 0 ELSE 1 END, br.name, pm.name, iu.id
          LIMIT 20",
-        [$branchId,$like,$like,$like,$like,$like,$q,$q]
+        [$branchId,$like,$like,$like,$like,$like,$like,$q,$q,$q]
     )->fetchAll();
 
     foreach ($deviceRows as $row) {
         $identifier = trim((string)($row['serial_no'] ?: $row['imei'] ?: ''));
-        $identifierType = $row['serial_no'] ? 'Serial Number' : 'IMEI';
+        $identifierType = $row['serial_no'] ? 'Serial Number' : 'IMEI 1';
+        $secondaryIdentifier = !$row['serial_no'] ? trim((string)($row['imei2'] ?? '')) : '';
         $items[] = [
             'key' => 'unit:' . (int)$row['unit_id'],
             'kind' => 'device',
@@ -70,6 +71,8 @@ try {
             'specs' => malbcoff_product_specs($row),
             'identifier' => $identifier,
             'identifier_type' => $identifierType,
+            'secondary_identifier' => $secondaryIdentifier,
+            'secondary_identifier_type' => $secondaryIdentifier !== '' ? 'IMEI 2' : '',
             'price' => (float)$row['sale_price'],
             'available_qty' => 1,
         ];

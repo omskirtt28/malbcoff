@@ -96,6 +96,7 @@ function brand_logo_asset(?string $brand): ?string
         'oppo' => 'oppo.svg',
         'vivo' => 'vivo.svg',
         'realme' => 'realme.svg',
+        'redmi' => 'redmi.svg',
         'tecno' => 'tecno.svg',
         'itel' => 'itel.svg',
         'infinix' => 'infinix.svg',

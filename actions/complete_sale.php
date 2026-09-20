@@ -61,7 +61,7 @@ try {
             $seenUnits[$unitId] = true;
 
             $row = Database::query(
-                "SELECT iu.id unit_id,iu.product_id,iu.branch_id,iu.imei,iu.serial_no,iu.acquisition_cost,iu.selling_price_snapshot,
+                "SELECT iu.id unit_id,iu.product_id,iu.branch_id,iu.imei,iu.imei2,iu.serial_no,iu.acquisition_cost,iu.selling_price_snapshot,
                         iu.status,iu.condition_type,p.product_type,COALESCE(bpp.selling_price,p.selling_price) selling_price,p.ram,p.storage,p.connectivity,p.color,
                         br.name brand_name,pm.name model_name
                  FROM inventory_units iu
@@ -82,6 +82,9 @@ try {
             if ($unitPrice < 0) $unitPrice = 0;
             $unitCost = max(0, (float)$row['acquisition_cost']);
             $identifier = (string)($row['serial_no'] ?: $row['imei'] ?: '');
+            if (empty($row['serial_no']) && !empty($row['imei2'])) {
+                $identifier = 'IMEI 1: ' . $identifier . ' | IMEI 2: ' . (string)$row['imei2'];
+            }
             $lineTotal = round($unitPrice, 2);
             $subtotal += $lineTotal;
 

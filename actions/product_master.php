@@ -176,12 +176,67 @@ function handle_category(string $action, ?int $id): void {
 
 function handle_configuration(string $action, ?int $id): void {
     if (!$id) throw new RuntimeException('Variant not found.');
-    $config = Database::query("SELECT p.id,p.model_id,p.is_active,p.product_type,p.cost_price,p.selling_price FROM products p WHERE p.id=? AND p.product_type IN ('phone','tablet') LIMIT 1", [$id])->fetch();
+    $config = Database::query(
+        "SELECT p.id,p.brand_id,p.model_id,p.is_active,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,
+                pm.device_type,b.name AS brand_name
+         FROM products p
+         JOIN product_models pm ON pm.id=p.model_id
+         JOIN brands b ON b.id=p.brand_id
+         WHERE p.id=? AND p.product_type IN ('phone','tablet') LIMIT 1",
+        [$id]
+    )->fetch();
     if (!$config) throw new RuntimeException('Variant not found.');
 
     if ($action === 'edit') {
         $role = Auth::user()['role'] ?? '';
         $userId = (int)(Auth::user()['id'] ?? 0);
+
+        // Specs stay locked only while operational or sold units still depend on this variant.
+        // Adjustment-out / defective / returned units remain in audit history but no longer block correcting specs.
+        $lockedUnitCount = (int)Database::query(
+            "SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status IN ('available','reserved','sold','transferred')",
+            [$id]
+        )->fetchColumn();
+        $specsLocked = $lockedUnitCount > 0;
+
+        if (!$specsLocked) {
+            $isApple = strcasecmp(trim((string)$config['brand_name']), 'APPLE') === 0;
+            $storage = normalize_variant_capacity($_POST['storage'] ?? '');
+            $ram = $isApple ? null : normalize_variant_capacity($_POST['ram'] ?? '');
+            $color = clean_variant_value($_POST['color'] ?? '', 80, true);
+            $connectivity = ($config['product_type'] === 'tablet') ? clean_variant_value($_POST['connectivity'] ?? '', 40, false) : null;
+
+            if ($storage === '') throw new RuntimeException('Storage is required.');
+            if (!$isApple && $ram === '') throw new RuntimeException('RAM is required for Android variants.');
+            if ($color === '') throw new RuntimeException('Color is required.');
+            if ($config['product_type'] === 'tablet' && !in_array($connectivity, ['Wi-Fi','Wi-Fi + Cellular'], true)) {
+                throw new RuntimeException('Please select tablet connectivity.');
+            }
+
+            $deletedFilter = Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch()
+                ? ' AND catalog_deleted_at IS NULL'
+                : '';
+            $duplicate = Database::query(
+                "SELECT id,is_active FROM products
+                 WHERE id<>? AND product_type=? AND brand_id=? AND model_id=?
+                   AND COALESCE(ram,'')=COALESCE(?,'')
+                   AND storage=?
+                   AND COALESCE(color,'')=COALESCE(?,'')
+                   AND COALESCE(connectivity,'')=COALESCE(?,''){$deletedFilter}
+                 LIMIT 1",
+                [$id,$config['product_type'],$config['brand_id'],$config['model_id'],$ram,$storage,$color,$connectivity]
+            )->fetch();
+            if ($duplicate) {
+                throw new RuntimeException((int)$duplicate['is_active']
+                    ? 'Another variant already uses the same RAM, storage, color and connectivity.'
+                    : 'The same variant already exists in Archived Products. Restore that variant instead.');
+            }
+
+            Database::query(
+                'UPDATE products SET ram=?,storage=?,color=?,connectivity=? WHERE id=?',
+                [$ram,$storage,$color,$connectivity,$id]
+            );
+        }
 
         if (Auth::isOwner()) {
             $cost = round(max(0, (float)($_POST['cost_price'] ?? $config['cost_price'] ?? 0)), 2);
@@ -204,7 +259,7 @@ function handle_configuration(string $action, ?int $id): void {
             if ($price <= 0) throw new RuntimeException('Enter a valid selling price.');
             save_branch_selling_price($id, $branchId, $price, $userId ?: null);
         } else {
-            throw new RuntimeException('Your account cannot update variant pricing.');
+            throw new RuntimeException('Your account cannot update variants.');
         }
     } elseif ($action === 'archive') {
         $available = (int)Database::query("SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status='available'", [$id])->fetchColumn();
@@ -230,11 +285,9 @@ function handle_configuration(string $action, ?int $id): void {
         try { $sales = (int)Database::query('SELECT COUNT(*) FROM sale_items WHERE product_id=?', [$id])->fetchColumn(); } catch (Throwable $e) {}
 
         if (!$units && !$movements && !$sales) {
-            // Truly unused variants can be physically deleted.
             if (branch_pricing_ready()) Database::query('DELETE FROM branch_product_prices WHERE product_id=?', [$id]);
             Database::query('DELETE FROM products WHERE id=?', [$id]);
         } else {
-            // Used variants must retain their database row so old stock movements and sales remain auditable.
             $column = Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
             if (!$column) {
                 throw new RuntimeException('Run the P2-009 archive cleanup database update first.');
@@ -244,6 +297,22 @@ function handle_configuration(string $action, ?int $id): void {
     } else {
         throw new RuntimeException('Invalid variant action.');
     }
+}
+
+function clean_variant_value(mixed $value, int $max, bool $uppercase=true): string {
+    $value = trim((string)$value);
+    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    if ($uppercase) $value = function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
+    return mb_substr($value, 0, $max);
+}
+
+function normalize_variant_capacity(mixed $value): string {
+    $value = strtoupper(preg_replace('/\s+/', '', trim((string)$value)) ?? '');
+    if ($value === '') return '';
+    if (preg_match('/^\d+(?:\.\d+)?$/', $value)) return $value.'GB';
+    if (preg_match('/^(\d+(?:\.\d+)?)G(?:B)?$/', $value, $m)) return $m[1].'GB';
+    if (preg_match('/^(\d+(?:\.\d+)?)T(?:B)?$/', $value, $m)) return $m[1].'TB';
+    return $value;
 }
 
 function require_brand(?int $id): array {

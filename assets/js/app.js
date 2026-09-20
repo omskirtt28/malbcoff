@@ -45,11 +45,11 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Unable to load units');
       if (!data.rows?.length) {
-        body.innerHTML = '<div class="empty-state small"><strong>No tracked units</strong><span>This product may be quantity-based or has no unit records yet.</span></div>';
+        body.innerHTML = '<div class="empty-state small"><strong>No available units</strong><span>There are no available units for this product right now.</span></div>';
         return;
       }
       body.innerHTML = '<div class="unit-list">' + data.rows.map(row => `
-        <div class="unit-row"><div><strong>${escapeHtml(row.identifier_type || 'Device ID')}: ${escapeHtml(row.identifier || row.serial_no || row.imei || '—')}</strong><span>${escapeHtml(row.branch_name || '')}${row.condition_type==='preloved' ? ' • Pre-Loved' : ''}${row.condition_grade ? ' • '+escapeHtml(row.condition_grade) : ''}</span></div><div><span class="status-pill ${row.status==='available'?'available':'low'}">${escapeHtml(capitalize(row.status))}</span>${row.battery_health ? `<small>${row.battery_health}% battery</small>` : ''}</div></div>
+        <div class="unit-row"><div><strong>${escapeHtml(row.identifier_type || 'Device ID')}: ${escapeHtml(row.identifier || row.serial_no || row.imei || '—')}</strong>${row.imei2 ? `<small>IMEI 2: ${escapeHtml(row.imei2)}</small>` : ''}<span>${escapeHtml(row.branch_name || '')}${row.condition_type==='preloved' ? ' • Pre-Loved' : ''}${row.condition_grade ? ' • '+escapeHtml(row.condition_grade) : ''}</span></div><div><span class="status-pill ${row.status==='available'?'available':'low'}">${escapeHtml(capitalize(row.status))}</span>${row.battery_health ? `<small>${row.battery_health}% battery</small>` : ''}</div></div>
       `).join('') + '</div>';
     } catch (err) {
       body.innerHTML = '<div class="alert alert-error">' + escapeHtml(err.message) + '</div>';
@@ -98,9 +98,44 @@
       const sellingField = form.querySelector('[data-selling-field]');
       const costField = form.querySelector('[data-cost-field]');
       const label = modal.querySelector('[data-config-modal-label]');
+      const ramField = form.querySelector('[data-variant-ram-field]');
+      const storageField = form.querySelector('[data-variant-storage-field]');
+      const colorField = form.querySelector('[data-variant-color-field]');
+      const connectivityField = form.querySelector('[data-variant-connectivity-field]');
+      const specNote = form.querySelector('[data-variant-spec-note]');
+      const specsLocked = button.dataset.specsLocked === '1';
+
+      const setSelectValue = (field, value='') => {
+        if (!field) return;
+        if (value && ![...field.options].some(option => option.value === value)) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          field.appendChild(option);
+        }
+        field.value = value || '';
+      };
+
       if (title) title.textContent = 'Edit Variant';
       if (sellingField) sellingField.value = button.dataset.sellingPrice || '0';
       if (costField) costField.value = button.dataset.costPrice || '0';
+      setSelectValue(ramField, button.dataset.ram || '');
+      setSelectValue(storageField, button.dataset.storage || '');
+      if (colorField) colorField.value = button.dataset.color || '';
+      setSelectValue(connectivityField, button.dataset.connectivity || '');
+
+      [ramField, storageField, colorField, connectivityField].forEach(field => {
+        if (!field) return;
+        field.disabled = specsLocked;
+        field.closest('.field')?.classList.toggle('field-locked', specsLocked);
+      });
+      if (specNote) {
+        specNote.classList.toggle('locked', specsLocked);
+        specNote.textContent = specsLocked
+          ? 'Variant specs are locked while active or sold units still use this variant. Remove or complete those units before changing the specs.'
+          : 'RAM, storage, color and connectivity can be corrected because no active or sold units are attached to this variant.';
+      }
+
       let branchPrices = {};
       try { branchPrices = JSON.parse(button.dataset.branchPrices || '{}'); } catch {}
       form.querySelectorAll('[data-branch-price]').forEach(input => {
@@ -296,7 +331,7 @@
               <label class="variant-adjust-unit">
                 <input type="checkbox" value="${Number(unit.id)}" data-unit-select>
                 <span class="variant-adjust-unit-index">${esc(unit.identifier_type === 'Serial Number' ? 'SN' : 'IMEI')}</span>
-                <span class="variant-adjust-unit-copy"><strong>${esc(unit.identifier)}</strong><small>Available</small></span>
+                <span class="variant-adjust-unit-copy"><strong>${esc(unit.identifier)}</strong>${unit.secondary_identifier ? `<small>IMEI 2: ${esc(unit.secondary_identifier)}</small>` : '<small>Available</small>'}</span>
               </label>
             `).join('')}
           </div>
