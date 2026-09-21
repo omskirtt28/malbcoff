@@ -130,7 +130,7 @@ try{
         $conditionType='brand_new';
         $isPreloved=false;
         $quantity=max(1,min(100,(int)($_POST['quantity']??1)));
-        $isApple=strcasecmp(trim((string)($product['brand_name']??'')),'Apple')===0;
+        $isApple=stock_uses_apple_serial((string)($product['brand_name']??''),(string)($product['model_name']??''));
         $dualImeiPhone=(!$isApple && $type==='phone');
         $requiresImei=(!$isApple && ($type==='phone' || ($type==='tablet' && stripos((string)($product['connectivity']??''),'Cellular')!==false)));
 
@@ -141,6 +141,9 @@ try{
             $primary=normalize_stock_identifier($primaryRaw[$i]??'');
             $secondary=$dualImeiPhone?normalize_stock_identifier($secondaryRaw[$i]??''):'';
             if($primary==='') throw new RuntimeException('Please provide IMEI 1 / Serial Number for every device unit.');
+            if($isApple && (!preg_match('/^[A-Z0-9]{1,80}$/',$primary) || !preg_match('/[A-Z]/',$primary))) {
+                throw new RuntimeException('Apple devices require the alphanumeric Serial Number (S/N), not the IMEI or retail barcode.');
+            }
             if($requiresImei && !preg_match('/^\d{15}$/',$primary)) throw new RuntimeException('IMEI 1 must be exactly 15 digits.');
             if($requiresImei && !stock_valid_imei($primary)) throw new RuntimeException('IMEI 1 is not valid. Scan the IMEI barcode again.');
             if($dualImeiPhone && $secondary!=='' && !preg_match('/^\d{15}$/',$secondary)) throw new RuntimeException('IMEI 2 must be exactly 15 digits when provided.');
@@ -385,4 +388,3 @@ function clean_receive_text(mixed $value,int $max,bool $uppercase=true):string{
     if($uppercase)$value=function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);
     return mb_substr($value,0,$max);
 }
-

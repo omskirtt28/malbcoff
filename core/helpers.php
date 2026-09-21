@@ -190,6 +190,15 @@ function branch_selling_price(int $productId, int $branchId, float $fallback = 0
     return max(0, $fallback);
 }
 
+// One rule shared by Receive Stock's UI payload and server-side storage.
+function stock_uses_apple_serial(string $brand, string $model = ''): bool
+{
+    $brand = trim($brand);
+    $model = trim($model);
+    return preg_match('/^(?:apple|iphone|ipad)(?:$|[^a-z0-9])/i', $brand) === 1
+        || preg_match('/^(?:apple\s+)?(?:iphone|ipad)(?:$|[^a-z0-9])/i', $model) === 1;
+}
+
 function save_branch_selling_price(int $productId, int $branchId, float $price, ?int $userId = null): void
 {
     if (!branch_pricing_ready()) {

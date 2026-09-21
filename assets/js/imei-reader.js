@@ -55,7 +55,7 @@
     return { canvas, cos, sin, w, h };
   }
 
-  async function read(source, { live = false, cancelled = () => false } = {}) {
+  function configure() {
     if (!window.ZXingWASM) throw new Error('Barcode reader did not load. Refresh this page.');
     if (!configured) {
       window.ZXingWASM.prepareZXingModule({ overrides: {
@@ -63,6 +63,40 @@
       } });
       configured = true;
     }
+  }
+
+  // Serial numbers are alphanumeric. Do not reinterpret 15-digit IMEIs or
+  // numeric EAN/UPC barcodes as serial numbers, and do not guess/remove digits.
+  function validSerial(value) {
+    return /^[A-Z0-9]{1,80}$/.test(value) && /[A-Z]/.test(value);
+  }
+
+  async function readSerial(source, { live = false, cancelled = () => false } = {}) {
+    configure();
+    const values = new Set();
+    for (const angle of (live ? [0] : [0, -4, 4])) {
+      if (cancelled()) return { values: [] };
+      const { canvas } = canvasFrom(source, angle, live ? 1600 : 2400);
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      const codes = await window.ZXingWASM.readBarcodes(pixels, {
+        formats: ['Code128', 'Code39', 'Code93', 'DataMatrix'], tryHarder: true,
+        tryRotate: true, tryDownscale: false, maxNumberOfSymbols: 64
+      });
+      if (cancelled()) return { values: [] };
+      for (const code of codes) {
+        if (code.error) continue;
+        const value = String(code.text || '').trim().toUpperCase()
+          .replace(/^(?:SERIAL(?:\s*(?:NUMBER|NO\.?))?|S\/N|SN)\s*[:#]\s*/, '');
+        if (validSerial(value)) values.add(value);
+      }
+      if (values.size) break;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return { values: [...values] };
+  }
+
+  async function read(source, { live = false, cancelled = () => false } = {}) {
+    configure();
     const hits = [];
     // Slight rotations recover skewed Code 128 bars, including photographed screens.
     for (const angle of (live ? [0] : [0, -4, 4, -8, 8])) {
@@ -95,5 +129,5 @@
     return summarize(hits);
   }
 
-  window.MalbcoffImeiReader = { read, valid, summarize };
+  window.MalbcoffImeiReader = { read, valid, summarize, readSerial, validSerial };
 })();

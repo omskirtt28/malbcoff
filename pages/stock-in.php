@@ -74,6 +74,7 @@ foreach ($models as $model) {
         'id' => (int)$model['id'],
         'brandId' => (int)$model['brand_id'],
         'brand' => $model['brand_name'],
+        'appleSerial' => stock_uses_apple_serial((string)$model['brand_name'], (string)$model['name']),
         'model' => $model['name'],
         'type' => $model['device_type'] ?: 'phone',
         'label' => trim($model['brand_name'].' '.$model['name']),
@@ -370,7 +371,7 @@ let identifierTimer = null;
 function money(v){ return '₱' + Number(v || 0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function esc(v=''){ return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function initials(label=''){ return label.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase() || 'IT'; }
-function isApple(item){ return (item?.brand || '').toLowerCase() === 'apple'; }
+function isApple(item){ return item?.appleSerial === true; }
 function itemMatches(item,q){ q=q.toLowerCase(); return [item.label,item.category,item.barcode,item.type].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)); }
 function activeBranchId(){ return isOwner ? Number($('branchSelect')?.value||0) : assignedBranchId; }
 function variantSelling(v){ const bid=activeBranchId(); return Number((v?.prices&&v.prices[bid]!==undefined)?v.prices[bid]:v?.selling||0); }
@@ -398,6 +399,9 @@ results.addEventListener('click',e=>{
 });
 
 function selectItem(item){
+  // Identifiers belong to the previous device, not to the next selected item.
+  identifierRows.innerHTML='';
+  delete identifierRows.dataset.mode;
   selectedItem=item; selectedVariant=null; productId.value=''; itemSearch.value=''; results.hidden=true;
   selectedItemCard.classList.remove('hidden'); $('selectedItemIcon').textContent=initials(item.label); $('selectedItemName').textContent=item.label;
   $('selectedItemMeta').textContent=item.kind==='model' ? (item.type==='tablet'?'Tablet':'Phone') : (item.category||'Accessory');
@@ -492,7 +496,7 @@ function identifierFieldHtml({name,value,placeholder,label,required=false,second
       <input name="${name}" value="${esc(value||'')}" autocomplete="off" placeholder="${esc(placeholder)}"
         ${numeric?'inputmode="numeric" pattern="[0-9]*"':''}
         data-identifier-input ${secondary?'data-identifier-secondary="1"':'data-identifier-primary="1"'} data-uppercase>
-      ${includeCamera?`<button class="btn btn-outline identifier-camera-btn" type="button" data-camera-scan aria-label="Scan ${esc(scanLabel)} with camera">Scan</button>`:''}
+      ${includeCamera?`<button class="btn btn-outline identifier-camera-btn" type="button" data-camera-scan aria-label="Scan ${esc(scanLabel)} with camera">Scan ${esc(scanLabel)}</button>`:''}
     </div>
     <div class="identifier-entry-feedback">
       <span class="identifier-entry-status" data-identifier-status></span>
@@ -505,6 +509,10 @@ function renderIdentifierRows(){
   const count=Math.max(1,Math.min(100,Number(quantity.value)||1));
   const kind=identifierKind();
   const dual=usesDualImei();
+
+  const mode=dual?'dual-imei':kind;
+  if(identifierRows.dataset.mode && identifierRows.dataset.mode!==mode)identifierRows.innerHTML='';
+  identifierRows.dataset.mode=mode;
 
   const existingPrimary=[...identifierRows.querySelectorAll('[data-identifier-primary]')].map(i=>i.value);
   const existingSecondary=[...identifierRows.querySelectorAll('[data-identifier-secondary]')].map(i=>i.value);
@@ -537,7 +545,7 @@ function renderIdentifierRows(){
     identifierRows.innerHTML=Array.from({length:count},(_,i)=>`
       <div class="identifier-entry">
         <span class="identifier-entry-number">${i+1}</span>
-        ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:`SCAN OR ENTER ${label}`,required:true,numeric:kind==='imei'})}
+        ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:`SCAN OR ENTER ${label.toUpperCase()}`,label:singular,required:true,numeric:kind==='imei'})}
       </div>`).join('');
   }
 
@@ -871,6 +879,9 @@ async function cameraAcceptValue(raw){
       cameraState.textContent='Not an IMEI — keep scanning';
       return false;
     }
+  }else if(isApple(selectedItem) && !MalbcoffImeiReader.validSerial(value)){
+    cameraShowMessage('Scan the Serial Number (S/N) barcode. An IMEI or retail barcode cannot be used as the Apple serial number.');
+    return false;
   }else if(!value){
     return false;
   }
@@ -957,6 +968,11 @@ async function cameraDetectLoop(timestamp=0){
         }
         else if(result.pair){if(await acceptGuidedPair(result.pair,session))return;}
         else if(result.unique.length===1)showSingleImei(result.unique[0]);
+      }else if(identifierKind()==='serial'){
+        const result=await MalbcoffImeiReader.readSerial(cameraVideo,{live:true,cancelled:()=>session!==cameraSession});
+        if(session!==cameraSession)return;
+        if(result.values.length===1){if(await cameraAcceptValue(result.values[0]))return;}
+        else if(result.values.length>1)cameraShowMessage('Several codes were found. Frame only the barcode beside Serial Number / S/N.');
       }else if(cameraDetector){
         const found=await cameraDetector.detect(cameraVideo);
         if(session!==cameraSession)return;
@@ -1673,6 +1689,7 @@ function startGuidedImeiScanner(button){
   if(!row)return;
   cameraStop();
   clearCapturedPhoto();
+  cameraModal.querySelector('.camera-scan-tips').textContent='Keep one phone box label clear and sharp. Repeated copies of the same IMEI pair are accepted.';
   cameraPairRow=null;
   guidedImeiRow=row;
   const primary=row.querySelector('[data-identifier-primary]');
@@ -2001,6 +2018,29 @@ async function decodeSingleImeiBarcodePhoto(file,slot=1){
 }
 async function decodeLocalPhoto(file){
   if(!file || !cameraTargetInput)return;
+  if(identifierKind()==='serial'){
+    cameraStop();
+    const session=cameraSession;
+    cameraBusy=true;
+    cameraState.textContent='Reading Serial Number…';
+    cameraMessage.classList.add('hidden');
+    try{
+      const base=await fileToPairBaseCanvas(file,2400);
+      if(session!==cameraSession)return;
+      const result=await MalbcoffImeiReader.readSerial(base.canvas,{cancelled:()=>session!==cameraSession});
+      if(session!==cameraSession || cameraModal.hidden)return;
+      if(result.values.length===1){if(await cameraAcceptValue(result.values[0]))return;}
+      else cameraShowMessage(result.values.length>1
+        ? 'Several serial-like codes were found. Take a closer photo of only the Serial Number / S/N barcode.'
+        : 'Serial Number not found. Photograph the barcode beside Serial Number / S/N, or type the printed serial number.');
+    }catch(err){
+      if(session===cameraSession)cameraShowMessage('Serial reader could not run. Refresh and try again, or enter the Serial Number manually.');
+    }finally{
+      if(session===cameraSession)cameraBusy=false;
+      cameraPhotoInput.value='';cameraGalleryInput.value='';
+    }
+    return;
+  }
   if(guidedImeiRow){
     const slot=guidedImeiStep===2?2:1;
     cameraState.textContent=`Reading printed IMEI ${slot}…`;
@@ -2073,7 +2113,9 @@ async function decodeLocalPhoto(file){
 function openLocalPhotoScanner(){
   cameraStop();
   cameraState.textContent='Local camera mode';
-  cameraShowMessage(usesDualImei() ? `Local test: frame the printed ${cameraTargetInput?.dataset.identifierSecondary==='1'?'IMEI 2':'IMEI 1'} row closely. Keep the 15-digit number large and sharp.` : 'Local HTTP test: take a close-up of one identifier barcode.',false);
+  cameraShowMessage(identifierKind()==='serial'
+    ? 'Take a close-up of the barcode beside Serial Number / S/N, then choose Use Photo. Avoid the IMEI and retail barcode.'
+    : 'Take a close-up of one IMEI barcode, then choose Use Photo.',false);
   if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera';
   cameraGalleryBtn?.classList.remove('hidden');
   cameraPhotoInput?.click();
@@ -2081,41 +2123,49 @@ function openLocalPhotoScanner(){
 
 async function startCameraScanner(input){
   cameraStop();
+  clearCapturedPhoto();
+  resetGuidedImeiScanner();
+  cameraPairRow=null;
   cameraTargetInput=input;
   const label=cameraFieldLabel(input);
   $('cameraScanTitle').textContent='Scan '+label;
   $('cameraScanSubtitle').textContent='Only a valid '+label+' will be accepted.';
+  cameraModal.querySelector('.camera-scan-tips').textContent=identifierKind()==='serial'
+    ? 'Frame only the Serial Number / S/N barcode. Apple stock is recorded by serial number.'
+    : 'Keep one identifier barcode clear and sharp.';
   cameraState.textContent='Starting camera…';
   cameraMessage.classList.add('hidden');
   cameraMessage.classList.remove('is-error');
   cameraModal.hidden=false;
   document.body.classList.add('modal-open');
 
-  if(!window.isSecureContext){
+  if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
     openLocalPhotoScanner();
     return;
   }
-  if(cameraRetryBtn)cameraRetryBtn.textContent='Retry Camera';
-  cameraGalleryBtn?.classList.add('hidden');
-  if(!('BarcodeDetector' in window)){
-    cameraShowMessage('This browser does not support the built-in barcode detector. Use External Scanner or manual input on this device.');
-    return;
-  }
-  if(!navigator.mediaDevices?.getUserMedia){
-    cameraShowMessage('Camera access is not available in this browser. Use External Scanner or manual input.');
-    return;
-  }
+  if(cameraRetryBtn)cameraRetryBtn.textContent='Take Photo';
+  cameraGalleryBtn?.classList.remove('hidden');
+  const session=cameraSession;
   try{
-    const supported=await BarcodeDetector.getSupportedFormats?.() || [];
-    const preferred=['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e','qr_code'].filter(f=>supported.includes(f));
-    cameraDetector=new BarcodeDetector(preferred.length?{formats:preferred}:undefined);
-    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-    cameraVideo.srcObject=cameraStream;
+    if(identifierKind()!=='serial'){
+      if(!('BarcodeDetector' in window)){openLocalPhotoScanner();return;}
+      const supported=await BarcodeDetector.getSupportedFormats?.() || [];
+      const preferred=['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e','qr_code'].filter(f=>supported.includes(f));
+      cameraDetector=new BarcodeDetector(preferred.length?{formats:preferred}:undefined);
+    }
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    if(session!==cameraSession || cameraModal.hidden){stream.getTracks().forEach(track=>track.stop());return;}
+    cameraStream=stream;
+    cameraVideo.srcObject=stream;
     await cameraVideo.play();
+    if(session!==cameraSession)return;
     cameraState.textContent='Scanning '+label+'…';
+    cameraLastFrame=0;
     cameraFrameHandle=requestAnimationFrame(cameraDetectLoop);
   }catch(err){
-    cameraShowMessage('Camera could not start. Allow camera permission, or use External Scanner / manual input.');
+    if(session!==cameraSession)return;
+    cameraStop();
+    cameraShowMessage('Camera could not start. Allow camera permission, tap Take Photo, or use an existing photo.');
   }
 }
 identifierRows.addEventListener('click',e=>{
@@ -2134,6 +2184,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape' && !cameraModal.hidd
 window.addEventListener('pagehide',cameraStop);
 cameraRetryBtn?.addEventListener('click',()=>{
   if(!cameraTargetInput)return;
+  if(identifierKind()==='serial'){
+    cameraStop();cameraPhotoInput.value='';cameraPhotoInput.click();return;
+  }
   if(guidedImeiRow){
     cameraMessage.classList.add('hidden');
     clearCapturedPhoto();
@@ -2256,6 +2309,9 @@ async function checkIdentifier(input){
   const v=input.value.replace(/\s+/g,'').trim().toUpperCase();
   input.value=v;
   if(!v){clearRestoreState(input);setIdentifierState(input,'','');updateScannerBadge('ready');return input.dataset.identifierSecondary==='1';}
+  if(isApple(selectedItem) && !MalbcoffImeiReader.validSerial(v)){
+    clearRestoreState(input);setIdentifierState(input,'error','Enter the alphanumeric Serial Number (S/N), not the IMEI');updateScannerBadge('error');return false;
+  }
   if(identifierKind()==='imei' && !/^\d{15}$/.test(v)){
     clearRestoreState(input);setIdentifierState(input,'error','IMEI must be 15 digits');updateScannerBadge('error');return false;
   }
