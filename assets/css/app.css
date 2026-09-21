@@ -855,6 +855,23 @@
 }
 .camera-gallery-btn{width:100%;margin-top:12px}
 
+/* Keep the camera and all actions reachable above a phone browser's toolbar. */
+.camera-scan-dialog{display:flex;flex-direction:column;max-height:calc(100dvh - 24px);overflow:hidden}
+.camera-scan-dialog .modal-header,.camera-scan-dialog .modal-actions{flex-shrink:0}
+.camera-scan-dialog .modal-body{overflow-y:auto;min-height:0}
+.camera-scan-stage,.camera-scan-stage video{min-height:220px;height:clamp(220px,38dvh,420px);max-height:420px}
+.camera-scan-state{white-space:normal;width:max-content}
+.camera-scan-actions{gap:8px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.camera-scan-actions .camera-gallery-btn{margin-top:0;width:auto}
+.camera-single-result{width:100%;margin-top:12px;white-space:normal;overflow-wrap:anywhere;min-height:44px}
+@media(max-width:700px){
+  .camera-scan-modal{padding:8px}
+  .camera-scan-dialog{max-height:calc(100dvh - 16px);border-radius:18px;align-self:center}
+  .camera-scan-dialog .modal-header,.camera-scan-dialog .modal-body{padding:16px}
+  .camera-scan-actions{padding:12px;grid-template-columns:1fr 1fr}
+  .camera-scan-actions .btn{white-space:normal;min-height:44px}
+}
+
 /* P2-032 Fast Paired IMEI Label Scan */
 .identifier-input-row-solo{grid-template-columns:minmax(0,1fr)}
 .identifier-pair-scan-card{
