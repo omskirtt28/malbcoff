@@ -142,7 +142,9 @@ try{
             $secondary=$dualImeiPhone?normalize_stock_identifier($secondaryRaw[$i]??''):'';
             if($primary==='') throw new RuntimeException('Please provide IMEI 1 / Serial Number for every device unit.');
             if($requiresImei && !preg_match('/^\d{15}$/',$primary)) throw new RuntimeException('IMEI 1 must be exactly 15 digits.');
+            if($requiresImei && !stock_valid_imei($primary)) throw new RuntimeException('IMEI 1 is not valid. Scan the IMEI barcode again.');
             if($dualImeiPhone && $secondary!=='' && !preg_match('/^\d{15}$/',$secondary)) throw new RuntimeException('IMEI 2 must be exactly 15 digits when provided.');
+            if($dualImeiPhone && $secondary!=='' && !stock_valid_imei($secondary)) throw new RuntimeException('IMEI 2 is not valid. Scan the IMEI barcode again.');
             if($secondary!=='' && $secondary===$primary) throw new RuntimeException('IMEI 1 and IMEI 2 cannot be the same for the same unit.');
             $identifiers[]=$primary;
             $secondaryIdentifiers[]=$secondary;
@@ -267,6 +269,16 @@ function restore_adjustment_label(string $notes):string{
 }
 
 function normalize_stock_identifier(mixed $value):string{$value=preg_replace('/\s+/','',trim((string)$value))??'';return function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);}
+function stock_valid_imei(string $value):bool{
+    if(!preg_match('/^\d{15}$/',$value))return false;
+    $sum=0;
+    for($i=0;$i<14;$i++){
+        $digit=(int)$value[$i];
+        if($i%2===1){$digit*=2;if($digit>9)$digit-=9;}
+        $sum+=$digit;
+    }
+    return ((10-($sum%10))%10)===(int)$value[14];
+}
 function ensure_stock_in_schema_p1004():void{
     $unitCost=Database::query("SHOW COLUMNS FROM inventory_units LIKE 'acquisition_cost'")->fetch();
     $condition=Database::query("SHOW COLUMNS FROM inventory_units LIKE 'condition_type'")->fetch();

@@ -828,3 +828,52 @@
   #focusScannerBtn,#openPasteIdentifiers{flex:1 1 auto}
   .scanner-help{font-size:10px}
 }
+
+/* P2-025 Mobile Camera + External Scanner */
+.identifier-input-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:stretch}
+.identifier-camera-btn{min-width:88px;padding-inline:18px}
+.camera-scan-dialog{width:min(620px,calc(100vw - 28px))}
+.camera-scan-stage{position:relative;overflow:hidden;border-radius:18px;background:#101826;min-height:360px;display:grid;place-items:center}
+.camera-scan-stage video{display:block;width:100%;min-height:360px;max-height:62vh;object-fit:cover;background:#101826}
+.camera-scan-guide{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.camera-scan-guide span{display:block;width:min(82%,470px);height:150px;border:3px solid rgba(255,255,255,.95);border-radius:18px;box-shadow:0 0 0 999px rgba(5,15,30,.28)}
+.camera-scan-state{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);max-width:90%;padding:10px 16px;border-radius:999px;background:rgba(10,20,35,.84);color:#fff;font-weight:800;font-size:13px;text-align:center;white-space:nowrap}
+.camera-scan-message{padding:14px 16px;border-radius:14px;background:#eff6ff;color:#1d4ed8;font-weight:700;line-height:1.45}
+.camera-scan-message.is-error{background:#fff7ed;color:#9a3412}
+.camera-scan-tips{margin-top:12px;color:var(--muted);font-size:13px;line-height:1.45}
+.camera-scan-actions{justify-content:flex-end}
+@media (max-width:700px){
+  .identifier-input-row{grid-template-columns:1fr}
+  .identifier-camera-btn{width:100%;min-height:48px}
+  .identifier-panel-actions{align-items:stretch}
+  .identifier-panel-actions .btn{width:100%}
+  .camera-scan-dialog{width:100%;max-width:none;align-self:flex-end;border-radius:22px 22px 0 0;margin:0}
+  .camera-scan-stage,.camera-scan-stage video{min-height:48vh}
+  .camera-scan-guide span{height:128px;width:88%}
+  .camera-scan-actions{display:grid;grid-template-columns:1fr 1fr}
+  .camera-scan-actions .btn{width:100%}
+}
+.camera-gallery-btn{width:100%;margin-top:12px}
+
+/* P2-032 Fast Paired IMEI Label Scan */
+.identifier-input-row-solo{grid-template-columns:minmax(0,1fr)}
+.identifier-pair-scan-card{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 16px;
+  margin-bottom:2px;
+  border:1px solid #d9e7fb;
+  border-radius:14px;
+  background:#f8fbff;
+}
+.identifier-pair-scan-card>div{display:grid;gap:3px;min-width:0}
+.identifier-pair-scan-card strong{font-size:13px;color:#162033}
+.identifier-pair-scan-card span{font-size:11px;line-height:1.45;color:var(--muted)}
+.identifier-pair-scan-btn{flex:0 0 auto;min-width:150px;white-space:nowrap}
+@media(max-width:700px){
+  .identifier-pair-scan-card{display:grid;gap:12px;padding:14px}
+  .identifier-pair-scan-btn{width:100%;min-height:48px}
+}

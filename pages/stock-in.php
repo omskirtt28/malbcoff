@@ -245,6 +245,32 @@ foreach ($accessories as $accessory) {
     </div>
 </div>
 
+<div class="modal camera-scan-modal" id="cameraScanModal" hidden>
+    <div class="modal-backdrop" data-camera-close></div>
+    <div class="modal-dialog camera-scan-dialog">
+        <div class="modal-header">
+            <div><span class="eyebrow">CAMERA SCANNER</span><h2 id="cameraScanTitle">Scan Identifier</h2><p class="modal-subtitle" id="cameraScanSubtitle">Point the camera at one barcode only.</p></div>
+            <button type="button" class="icon-button" data-camera-close>×</button>
+        </div>
+        <div class="modal-body">
+            <div class="camera-scan-stage" id="cameraScanStage">
+                <video id="cameraScanVideo" playsinline muted></video>
+                <div class="camera-scan-guide"><span></span></div>
+                <div class="camera-scan-state" id="cameraScanState">Starting camera…</div>
+            </div>
+            <div class="camera-scan-message hidden" id="cameraScanMessage"></div>
+            <div class="camera-scan-tips">Keep the IMEI label close and sharp. The scanner accepts a valid IMEI barcode or the printed IMEI 1 / IMEI 2 text.</div>
+            <button class="btn btn-outline camera-gallery-btn hidden" type="button" id="cameraGalleryBtn">Use Existing Photo</button>
+        </div>
+        <div class="modal-actions camera-scan-actions">
+            <button class="btn btn-secondary" type="button" data-camera-close>Cancel</button>
+            <button class="btn btn-outline" type="button" id="cameraRetryBtn">Retry Camera</button>
+        </div>
+    </div>
+</div>
+<input type="file" id="cameraPhotoInput" accept="image/*" capture="environment" hidden>
+<input type="file" id="cameraGalleryInput" accept="image/*" hidden>
+
 <div class="modal paste-identifiers-modal" id="pasteIdentifiersModal" hidden>
     <div class="modal-backdrop" data-paste-close></div>
     <div class="modal-dialog paste-identifiers-dialog">
@@ -286,6 +312,8 @@ foreach ($accessories as $accessory) {
     </div>
 </div>
 
+<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
 (() => {
 const items = <?= json_encode($itemPayload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
@@ -434,12 +462,16 @@ function configureIdentifiers(){
   $('openPasteIdentifiers').textContent='Paste Multiple';
   renderIdentifierRows();
 }
-function identifierFieldHtml({name,value,placeholder,label,required=false,secondary=false,numeric=false}){
+function identifierFieldHtml({name,value,placeholder,label,required=false,secondary=false,numeric=false,includeCamera=true}){
+  const scanLabel=label || (identifierKind()==='serial'?'Serial Number':'IMEI');
   return `<div class="identifier-field-wrap">
     ${label?`<span class="identifier-field-label">${esc(label)}${required?' <b>*</b>':''}</span>`:''}
-    <input name="${name}" value="${esc(value||'')}" autocomplete="off" placeholder="${esc(placeholder)}"
-      ${numeric?'inputmode="numeric" pattern="[0-9]*"':''}
-      data-identifier-input ${secondary?'data-identifier-secondary="1"':'data-identifier-primary="1"'} data-uppercase>
+    <div class="identifier-input-row ${includeCamera?'':'identifier-input-row-solo'}">
+      <input name="${name}" value="${esc(value||'')}" autocomplete="off" placeholder="${esc(placeholder)}"
+        ${numeric?'inputmode="numeric" pattern="[0-9]*"':''}
+        data-identifier-input ${secondary?'data-identifier-secondary="1"':'data-identifier-primary="1"'} data-uppercase>
+      ${includeCamera?`<button class="btn btn-outline identifier-camera-btn" type="button" data-camera-scan aria-label="Scan ${esc(scanLabel)} with camera">Scan</button>`:''}
+    </div>
     <div class="identifier-entry-feedback">
       <span class="identifier-entry-status" data-identifier-status></span>
       ${secondary?'':'<button class="identifier-restore-btn" type="button" data-restore-trigger hidden>Restore This Unit</button>'}
@@ -464,8 +496,15 @@ function renderIdentifierRows(){
       <div class="identifier-entry identifier-entry-dual">
         <span class="identifier-entry-number">${i+1}</span>
         <div class="identifier-dual-grid">
-          ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:'SCAN OR ENTER IMEI 1',label:'IMEI 1',required:true,numeric:true})}
-          ${identifierFieldHtml({name:'secondary_identifiers[]',value:existingSecondary[i]||'',placeholder:'SCAN OR ENTER IMEI 2 (OPTIONAL)',label:'IMEI 2',secondary:true,numeric:true})}
+          <div class="identifier-pair-scan-card">
+            <div>
+              <strong>Camera Scan</strong>
+              <span>Take one close photo of the IMEI label. We will fill IMEI 1 and IMEI 2 together.</span>
+            </div>
+            <button class="btn btn-outline identifier-pair-scan-btn" type="button" data-camera-scan-pair>Scan IMEI Label</button>
+          </div>
+          ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:'SCAN OR ENTER IMEI 1',label:'IMEI 1',required:true,numeric:true,includeCamera:false})}
+          ${identifierFieldHtml({name:'secondary_identifiers[]',value:existingSecondary[i]||'',placeholder:'SCAN OR ENTER IMEI 2 (OPTIONAL)',label:'IMEI 2',secondary:true,numeric:true,includeCamera:false})}
         </div>
       </div>`).join('');
   }else{
@@ -538,6 +577,744 @@ function focusNextIdentifier(input){
   if(next){next.focus();next.select?.();updateScannerBadge('ready');}
   else{document.querySelector('#receiveFormActions button[type="submit"]')?.focus();updateScannerBadge('ready','Scan complete');}
 }
+function validImeiChecksum(value){
+  if(!/^\d{15}$/.test(value))return false;
+  let sum=0;
+  for(let i=0;i<14;i++){
+    let digit=Number(value[i]);
+    if(i%2===1){digit*=2;if(digit>9)digit-=9;}
+    sum+=digit;
+  }
+  return ((10-(sum%10))%10)===Number(value[14]);
+}
+
+const cameraModal=$('cameraScanModal');
+const cameraVideo=$('cameraScanVideo');
+const cameraState=$('cameraScanState');
+const cameraMessage=$('cameraScanMessage');
+const cameraPhotoInput=$('cameraPhotoInput');
+const cameraGalleryInput=$('cameraGalleryInput');
+const cameraGalleryBtn=$('cameraGalleryBtn');
+const cameraRetryBtn=$('cameraRetryBtn');
+let cameraTargetInput=null;
+let cameraPairRow=null;
+let cameraStream=null;
+let cameraDetector=null;
+let cameraFrameHandle=0;
+let cameraBusy=false;
+
+function cameraFieldLabel(input){
+  if(input?.dataset.identifierSecondary==='1')return 'IMEI 2';
+  if(identifierKind()==='serial')return 'Serial Number';
+  return usesDualImei()?'IMEI 1':'IMEI';
+}
+function cameraStop(){
+  if(cameraFrameHandle)cancelAnimationFrame(cameraFrameHandle);
+  cameraFrameHandle=0;
+  cameraBusy=false;
+  if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;}
+  if(cameraVideo){cameraVideo.srcObject=null;}
+}
+function closeCameraScanner(){
+  cameraStop();
+  if(cameraModal)cameraModal.hidden=true;
+  document.body.classList.remove('modal-open');
+  cameraTargetInput?.focus();
+  cameraTargetInput=null;
+  cameraPairRow=null;
+}
+function cameraShowMessage(message,isError=true,stateText=''){
+  cameraState.textContent=stateText || (isError?'Scan needs attention':'Ready');
+  cameraMessage.textContent=message;
+  cameraMessage.classList.remove('hidden');
+  cameraMessage.classList.toggle('is-error',isError);
+}
+async function cameraAcceptValue(raw){
+  if(!cameraTargetInput)return false;
+  const value=String(raw||'').replace(/\s+/g,'').trim().toUpperCase();
+  const imeiField=identifierKind()==='imei';
+  if(imeiField){
+    if(!/^\d{15}$/.test(value) || !validImeiChecksum(value)){
+      cameraState.textContent='Not an IMEI — keep scanning';
+      return false;
+    }
+  }else if(!value){
+    return false;
+  }
+  cameraBusy=true;
+  cameraTargetInput.value=value;
+  cameraTargetInput.dispatchEvent(new Event('input',{bubbles:true}));
+  const ok=await checkIdentifier(cameraTargetInput);
+  if(!ok){cameraState.textContent='Identifier needs attention';cameraBusy=false;return false;}
+  const completed=cameraTargetInput;
+  cameraStop();
+  cameraModal.hidden=true;
+  document.body.classList.remove('modal-open');
+  cameraTargetInput=null;
+  focusNextIdentifier(completed);
+  return true;
+}
+async function cameraDetectLoop(){
+  if(!cameraStream || !cameraDetector || !cameraVideo || cameraModal.hidden)return;
+  if(!cameraBusy && cameraVideo.readyState>=2){
+    try{
+      const found=await cameraDetector.detect(cameraVideo);
+      for(const code of found){
+        if(await cameraAcceptValue(code.rawValue))return;
+      }
+    }catch(e){}
+  }
+  cameraFrameHandle=requestAnimationFrame(cameraDetectLoop);
+}
+let cameraOcrWorker=null;
+let cameraOcrWarmup=null;
+function cleanOcrText(text=''){
+  return String(text)
+    .toUpperCase()
+    .replace(/[\u2010-\u2015]/g,'-')
+    .replace(/\r/g,'\n');
+}
+function normalizeOcrDigits(value=''){
+  return String(value)
+    .toUpperCase()
+    .replace(/[OQ]/g,'0')
+    .replace(/[IL|]/g,'1')
+    .replace(/Z/g,'2')
+    .replace(/S/g,'5')
+    .replace(/G/g,'6')
+    .replace(/B/g,'8');
+}
+function validImeisFromText(text=''){
+  const cleaned=cleanOcrText(text);
+  const candidates=[];
+  const add=value=>{
+    const digits=normalizeOcrDigits(value).replace(/\D/g,'');
+    if(/^\d{15}$/.test(digits) && validImeiChecksum(digits) && !candidates.includes(digits)) candidates.push(digits);
+  };
+  // Keep matches on the same OCR line. Using \s here can cross from IMEI 1 into
+  // IMEI 2 and silently reverse the slot assignment.
+  const labelled=/IMEI\s*([12])?\s*[:#\-]?\s*([0-9OQILZSG B|._\-]{15,30})/g;
+  let match;
+  while((match=labelled.exec(cleaned))!==null) add(match[2]);
+  const compact=normalizeOcrDigits(cleaned).replace(/(?<=\d)[ \t._-]+(?=\d)/g,'');
+  for(const m of compact.matchAll(/(?:^|\D)(\d{15})(?!\d)/g)) add(m[1]);
+  return candidates;
+}
+function imeiDigitsFromFragment(fragment=''){
+  const digits=normalizeOcrDigits(fragment).replace(/\D/g,'').slice(0,15);
+  return /^\d{15}$/.test(digits) && validImeiChecksum(digits) ? digits : '';
+}
+function imeiMarkerMatch(line=''){
+  // OCR often drops or distorts the first "I" in IMEI (for example \\MEI1,
+  // /MEI1, MEI1, 1MEI1). Be tolerant when locating the slot label only;
+  // the 15-digit value still has to pass the IMEI checksum.
+  return String(line).toUpperCase().match(/(?:I|1|L|\||\\|\/)?M(?:E|3)(?:I|1|L|\|)\s*([12])\s*[:#\-]?\s*(.*)$/i);
+}
+function imeiSlotMarkersFromText(text=''){
+  const markers={1:false,2:false};
+  const lines=cleanOcrText(text).split(/\n+/).map(line=>line.trim()).filter(Boolean);
+  for(const line of lines){
+    const marker=imeiMarkerMatch(line);
+    if(marker)markers[Number(marker[1])]=true;
+  }
+  return markers;
+}
+function labelledImeisFromText(text=''){
+  const cleaned=cleanOcrText(text);
+  const found={1:'',2:''};
+  const lines=cleaned.split(/\n+/).map(line=>line.trim()).filter(Boolean);
+
+  for(let i=0;i<lines.length;i++){
+    const marker=imeiMarkerMatch(lines[i]);
+    if(!marker)continue;
+    const slot=Number(marker[1]);
+    let value=imeiDigitsFromFragment(marker[2]);
+    // OCR may move the number onto the next line. Only use that line when it
+    // is not another IMEI slot label.
+    if(!value && lines[i+1] && !imeiMarkerMatch(lines[i+1])){
+      value=imeiDigitsFromFragment(lines[i+1]);
+    }
+    if(value)found[slot]=value;
+  }
+
+  // Exact-label fallback for OCR output that contains extra punctuation.
+  for(const slot of [1,2]){
+    if(found[slot])continue;
+    const exact=new RegExp('IMEI\\s*'+slot+'\\s*[:#\\-]?\\s*([0-9OQILZSG B|._\\-]{15,30})','i');
+    const m=cleaned.match(exact);
+    if(m)found[slot]=imeiDigitsFromFragment(m[1]);
+  }
+  return found;
+}
+function imeiEvidenceFromText(text=''){
+  return {
+    labelled:labelledImeisFromText(text),
+    ordered:validImeisFromText(text),
+    markers:imeiSlotMarkersFromText(text)
+  };
+}
+function selectImeiFromEvidence(evidence,slot=1){
+  if(evidence.labelled?.[slot])return evidence.labelled[slot];
+
+  const ordered=Array.isArray(evidence.ordered)?evidence.ordered:[];
+  // When both valid IMEIs are visible in the printed label, OCR text order is
+  // top-to-bottom. Packaging prints IMEI1 above IMEI2, so this safely maps the
+  // pair without trusting the unrelated 1D barcode below them.
+  if(ordered.length>=2)return slot===2?ordered[1]:ordered[0];
+
+  // One detected IMEI is only safe when OCR also recognized the requested slot
+  // marker and did not recognize the opposite slot marker.
+  const other=slot===1?2:1;
+  if(ordered.length===1 && evidence.markers?.[slot] && !evidence.markers?.[other]){
+    return ordered[0];
+  }
+  return '';
+}
+function labelledImeiFromText(text='',slot=1){
+  return labelledImeisFromText(text)[slot] || '';
+}
+function pickImeiFromOcrText(text='',slot=1,strictSlot=false){
+  const evidence=imeiEvidenceFromText(text);
+  if(evidence.labelled[slot])return evidence.labelled[slot];
+  if(strictSlot)return '';
+  return selectImeiFromEvidence(evidence,slot);
+}
+async function getCameraOcrWorker(){
+  if(cameraOcrWorker)return cameraOcrWorker;
+  if(cameraOcrWarmup)return cameraOcrWarmup;
+  if(!window.Tesseract?.createWorker)throw new Error('OCR engine unavailable');
+  cameraOcrWarmup=(async()=>{
+    cameraState.textContent='Preparing IMEI reader…';
+    const worker=await Tesseract.createWorker('eng',1,{
+      logger:m=>{
+        if(!cameraTargetInput)return;
+        if(m.status==='recognizing text') cameraState.textContent=`Reading IMEI… ${Math.round((m.progress||0)*100)}%`;
+        else if(m.status) cameraState.textContent='Preparing IMEI reader…';
+      }
+    });
+    await worker.setParameters({
+      tessedit_char_whitelist:'IME0123456789OQILZSG B|: #-._',
+      tessedit_pageseg_mode:window.Tesseract?.PSM?.SPARSE_TEXT ?? '11',
+      preserve_interword_spaces:'1',
+      user_defined_dpi:'220'
+    });
+    cameraOcrWorker=worker;
+    return worker;
+  })();
+  try{
+    return await cameraOcrWarmup;
+  }finally{
+    cameraOcrWarmup=null;
+  }
+}
+function warmCameraOcr(){
+  if(identifierKind()!=='imei' || cameraOcrWorker || cameraOcrWarmup)return;
+  getCameraOcrWorker().catch(()=>{});
+}
+
+async function fileToPairBaseCanvas(file,maxSide=1800){
+  const bitmap=await createImageBitmap(file);
+  const sourceWidth=bitmap.width,sourceHeight=bitmap.height;
+  const scale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(sourceWidth*scale));
+  canvas.height=Math.max(1,Math.round(sourceHeight*scale));
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  bitmap.close?.();
+  return {canvas,sourceWidth,sourceHeight};
+}
+function zxingPointXY(point){
+  if(!point)return null;
+  const x=typeof point.getX==='function'?point.getX():point.x;
+  const y=typeof point.getY==='function'?point.getY():point.y;
+  return Number.isFinite(Number(x))&&Number.isFinite(Number(y))?{x:Number(x),y:Number(y)}:null;
+}
+async function decodeBarcodeAnchor(file,baseInfo){
+  if(!window.ZXing?.BrowserMultiFormatReader)return {raw:'',rect:null};
+  const url=URL.createObjectURL(file);
+  try{
+    const reader=new ZXing.BrowserMultiFormatReader();
+    const result=await reader.decodeFromImageUrl(url);
+    const raw=result?.getText?.() ?? result?.text ?? String(result||'');
+    const rawPoints=result?.getResultPoints?.() ?? result?.resultPoints ?? [];
+    const points=[...rawPoints].map(zxingPointXY).filter(Boolean);
+    if(points.length<2)return {raw:String(raw||''),rect:null};
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const scaleX=baseInfo.canvas.width/Math.max(1,baseInfo.sourceWidth);
+    const scaleY=baseInfo.canvas.height/Math.max(1,baseInfo.sourceHeight);
+    const minX=Math.min(...xs)*scaleX,maxX=Math.max(...xs)*scaleX;
+    const minY=Math.min(...ys)*scaleY,maxY=Math.max(...ys)*scaleY;
+    const bw=Math.max(30,maxX-minX),bh=Math.max(12,maxY-minY);
+    const padX=Math.max(24,bw*.18);
+    const above=Math.max(110,bh*5.5);
+    const below=Math.max(28,bh*.7);
+    const left=Math.max(0,minX-padX);
+    const right=Math.min(baseInfo.canvas.width,maxX+padX);
+    const top=Math.max(0,minY-above);
+    const bottom=Math.min(baseInfo.canvas.height,maxY+below);
+    if(right-left<80 || bottom-top<60)return {raw:String(raw||''),rect:null};
+    return {raw:String(raw||''),rect:{left,top,width:right-left,height:bottom-top}};
+  }catch(err){
+    return {raw:'',rect:null};
+  }finally{
+    URL.revokeObjectURL(url);
+  }
+}
+function preparePairOcrCanvas(source,rect=null){
+  const r=rect||{left:0,top:0,width:source.width,height:source.height};
+  const targetWidth=Math.min(1800,Math.max(1300,Math.round(r.width*3.2)));
+  const scale=targetWidth/Math.max(1,r.width);
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(r.width*scale));
+  out.height=Math.max(1,Math.round(r.height*scale));
+  const ctx=out.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(source,r.left,r.top,r.width,r.height,0,0,out.width,out.height);
+  const image=ctx.getImageData(0,0,out.width,out.height);
+  const d=image.data;
+  for(let i=0;i<d.length;i+=4){
+    const gray=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+    let v=(gray-128)*1.9+128;
+    v=v<0?0:v>255?255:v;
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  ctx.putImageData(image,0,0);
+  return out;
+}
+function mergeImeiEvidence(target,evidence){
+  for(const slot of [1,2]){
+    if(!target.labelled[slot] && evidence?.labelled?.[slot])target.labelled[slot]=evidence.labelled[slot];
+    if(evidence?.markers?.[slot])target.markers[slot]=true;
+  }
+  for(const value of (evidence?.ordered||[])){
+    if(!target.ordered.includes(value))target.ordered.push(value);
+  }
+}
+function pairFromEvidence(evidence,{anchored=false,barcodeRaw=''}={}){
+  let imei1=evidence.labelled?.[1]||'';
+  let imei2=evidence.labelled?.[2]||'';
+  const ordered=[...(evidence.ordered||[])];
+  if(anchored && ordered.length>=2){
+    if(!imei1)imei1=ordered[0];
+    if(!imei2)imei2=ordered.find(v=>v!==imei1)||ordered[1]||'';
+  }
+  const raw=String(barcodeRaw||'').replace(/\D/g,'');
+  if(/^\d{15}$/.test(raw) && validImeiChecksum(raw)){
+    if(imei1===raw || imei2===raw){/* already mapped */}
+    else if(imei1 && !imei2 && evidence.markers?.[2])imei2=raw;
+    else if(imei2 && !imei1 && evidence.markers?.[1])imei1=raw;
+  }
+  if(imei1===imei2)imei2='';
+  return {1:imei1,2:imei2};
+}
+async function recognizeImeiPairFast(file){
+  const worker=await getCameraOcrWorker();
+  const base=await fileToPairBaseCanvas(file);
+  cameraState.textContent='Finding IMEI label…';
+  const anchor=await decodeBarcodeAnchor(file,base);
+  const merged={labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
+  const run=async(canvas,psm,label)=>{
+    cameraState.textContent=label;
+    await worker.setParameters({
+      tessedit_pageseg_mode:String(psm),
+      preserve_interword_spaces:'1'
+    });
+    const result=await worker.recognize(canvas);
+    const evidence=imeiEvidenceFromText(result?.data?.text||'');
+    mergeImeiEvidence(merged,evidence);
+    return evidence;
+  };
+
+  // Fast path: use the detected 1D/QR barcode only as a LOCATION anchor.
+  // The barcode value itself is never blindly assigned to IMEI 1/2.
+  if(anchor.rect){
+    const focused=preparePairOcrCanvas(base.canvas,anchor.rect);
+    await run(focused,6,'Reading IMEI 1 + IMEI 2…');
+    let pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:anchor.raw});
+    if(pair[1] && (pair[2] || !usesDualImei()))return {pair,evidence:merged,anchored:true,barcodeRaw:anchor.raw};
+
+    // One small sparse-text fallback only when the focused block pass missed a line.
+    await run(focused,11,'Checking IMEI label…');
+    pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:anchor.raw});
+    if(pair[1] || pair[2])return {pair,evidence:merged,anchored:true,barcodeRaw:anchor.raw};
+  }
+
+  // Fallback when the barcode itself could not be decoded: locate the densest
+  // label-like region first so we still avoid OCR over the entire camera photo.
+  const likely=likelyImeiRect(base.canvas);
+  if(likely && likely.width>80 && likely.height>60){
+    const focused=preparePairOcrCanvas(base.canvas,likely);
+    await run(focused,6,'Reading IMEI label…');
+    let pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:''});
+    if(pair[1] && (pair[2] || !usesDualImei()))return {pair,evidence:merged,anchored:true,barcodeRaw:''};
+    await run(focused,11,'Checking IMEI label…');
+    pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:''});
+    if(pair[1] || pair[2])return {pair,evidence:merged,anchored:true,barcodeRaw:''};
+  }
+
+  // Last resort: one resized full-image pass only.
+  const full=preparePairOcrCanvas(base.canvas,null);
+  await run(full,6,'Reading close-up IMEI label…');
+  const pair=pairFromEvidence(merged,{anchored:false,barcodeRaw:anchor.raw});
+  return {pair,evidence:merged,anchored:false,barcodeRaw:anchor.raw};
+}
+async function setCameraIdentifierValue(input,value){
+  if(!input || !value)return false;
+  input.value=value;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return await checkIdentifier(input);
+}
+async function decodeImeiPairPhoto(file){
+  if(!cameraPairRow)return;
+  const primary=cameraPairRow.querySelector('[data-identifier-primary]');
+  const secondary=cameraPairRow.querySelector('[data-identifier-secondary]');
+  cameraState.textContent='Reading IMEI label…';
+  cameraMessage.classList.add('hidden');
+  try{
+    const result=await recognizeImeiPairFast(file);
+    const imei1=result.pair?.[1]||'';
+    const imei2=result.pair?.[2]||'';
+    let ok1=false,ok2=false;
+    if(imei1)ok1=await setCameraIdentifierValue(primary,imei1);
+    if(imei2)ok2=await setCameraIdentifierValue(secondary,imei2);
+
+    if(ok1 && (ok2 || !imei2)){
+      if(ok2){
+        cameraStop();
+        cameraModal.hidden=true;
+        const completedSecondary=secondary;
+        cameraTargetInput=null;
+        cameraPairRow=null;
+        focusNextIdentifier(completedSecondary);
+        return;
+      }
+      cameraShowMessage('IMEI 1 captured. IMEI 2 was not clear. Retake the same label once more, or leave IMEI 2 blank only for a single-IMEI phone.',false,'IMEI 1 captured');
+      secondary?.focus();
+      return;
+    }
+    if(!imei1 && imei2){
+      cameraShowMessage('IMEI 2 was detected, but IMEI 1 was not clear. Retake one close photo showing both IMEI lines.');
+      return;
+    }
+    if(imei1 && !ok1){
+      cameraShowMessage('IMEI 1 was read but needs attention. Check the field message before scanning again.');
+      return;
+    }
+    cameraShowMessage('IMEI label not detected. Take one close, straight photo showing IMEI1 and IMEI2 together.');
+  }catch(err){
+    cameraShowMessage('Could not read the IMEI label. Retake one close, sharp photo of the IMEI1 / IMEI2 sticker.');
+  }
+}
+function startImeiPairScanner(button){
+  const row=button.closest('.identifier-entry-dual');
+  if(!row)return;
+  cameraStop();
+  cameraPairRow=row;
+  cameraTargetInput=row.querySelector('[data-identifier-primary]');
+  $('cameraScanTitle').textContent='Scan IMEI Label';
+  $('cameraScanSubtitle').textContent='Take one close photo. IMEI 1 and IMEI 2 will be filled together.';
+  cameraState.textContent='Preparing IMEI reader…';
+  cameraMessage.classList.add('hidden');
+  cameraMessage.classList.remove('is-error');
+  cameraModal.hidden=false;
+  document.body.classList.add('modal-open');
+  if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera';
+  cameraGalleryBtn?.classList.remove('hidden');
+  warmCameraOcr();
+  cameraPhotoInput?.click();
+}
+async function fileToOcrCanvas(file){
+  const bitmap=await createImageBitmap(file);
+  const maxSide=1600;
+  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+  canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  bitmap.close?.();
+
+  const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const d=image.data;
+  for(let i=0;i<d.length;i+=4){
+    const gray=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+    const contrasted=Math.max(0,Math.min(255,(gray-128)*1.55+128));
+    d[i]=d[i+1]=d[i+2]=contrasted;
+  }
+  ctx.putImageData(image,0,0);
+  return canvas;
+}
+function scoreOcrRect(canvas,rect){
+  const sampleW=90,sampleH=60;
+  const tmp=document.createElement('canvas');
+  tmp.width=sampleW;tmp.height=sampleH;
+  const t=tmp.getContext('2d',{willReadFrequently:true});
+  t.drawImage(canvas,rect.left,rect.top,rect.width,rect.height,0,0,sampleW,sampleH);
+  const data=t.getImageData(0,0,sampleW,sampleH).data;
+  let dark=0,light=0,transitions=0,total=0;
+  for(let y=0;y<sampleH;y++){
+    let prev=null;
+    for(let x=0;x<sampleW;x++){
+      const i=(y*sampleW+x)*4;
+      const g=data[i];
+      if(g<95)dark++;
+      if(g>185)light++;
+      if(prev!==null && Math.abs(g-prev)>75)transitions++;
+      prev=g; total++;
+    }
+  }
+  const mix=(dark/total)*(light/total);
+  return mix*5+(transitions/(sampleW*sampleH))*1.4;
+}
+function likelyImeiRect(canvas){
+  const w=canvas.width,h=canvas.height;
+  const rw=Math.round(w*.68),rh=Math.round(h*.44);
+  let best={left:0,top:0,width:w,height:h,score:-1};
+  const maxX=Math.max(0,w-rw),maxY=Math.max(0,h-rh);
+  const xs=[0,.5,1].map(v=>Math.round(maxX*v));
+  const ys=[0,.33,.66,1].map(v=>Math.round(maxY*v));
+  for(const left of xs){
+    for(const top of ys){
+      const rect={left,top,width:rw,height:rh};
+      const score=scoreOcrRect(canvas,rect);
+      if(score>best.score)best={...rect,score};
+    }
+  }
+  return best;
+}
+function cropCanvasForOcr(canvas,rect){
+  const minWidth=1200;
+  const scale=Math.max(1,Math.min(3,minWidth/Math.max(1,rect.width)));
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(rect.width*scale));
+  out.height=Math.max(1,Math.round(rect.height*scale));
+  const ctx=out.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(canvas,rect.left,rect.top,rect.width,rect.height,0,0,out.width,out.height);
+  return out;
+}
+async function recognizeImeiText(worker,canvas,slot){
+  const primary=likelyImeiRect(canvas);
+  const focused=cropCanvasForOcr(canvas,primary);
+  const merged={labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
+  const mergeEvidence=evidence=>{
+    for(const s of [1,2]){
+      if(!merged.labelled[s] && evidence?.labelled?.[s])merged.labelled[s]=evidence.labelled[s];
+      if(evidence?.markers?.[s])merged.markers[s]=true;
+    }
+    for(const imei of (evidence?.ordered||[])){
+      if(!merged.ordered.includes(imei))merged.ordered.push(imei);
+    }
+  };
+  const runPass=async(source,psm,label)=>{
+    cameraState.textContent=label;
+    await worker.setParameters({
+      tessedit_pageseg_mode:String(psm),
+      preserve_interword_spaces:'1'
+    });
+    const result=await worker.recognize(source);
+    const evidence=imeiEvidenceFromText(result?.data?.text||'');
+    mergeEvidence(evidence);
+    return evidence;
+  };
+
+  // Pass 1: treat the cropped label as one text block. This is especially good
+  // at keeping "IMEI1:" attached to the first number instead of drifting to IMEI2.
+  let evidence=await runPass(focused,6,`Reading IMEI ${slot} label…`);
+  if(evidence.labelled?.[slot]){
+    return {value:evidence.labelled[slot],labelled:merged.labelled,ordered:merged.ordered,markers:merged.markers};
+  }
+
+  // Pass 2: sparse text recovers labels/numbers that the block pass missed.
+  // We still only accept a value when it is tied to the requested IMEI slot.
+  evidence=await runPass(focused,11,`Checking IMEI ${slot} line…`);
+  if(evidence.labelled?.[slot]){
+    return {value:evidence.labelled[slot],labelled:merged.labelled,ordered:merged.ordered,markers:merged.markers};
+  }
+
+  // Last resort: run the same two modes on the resized full image. Do not map
+  // IMEI1/IMEI2 from raw number order because OCR reading order can change.
+  evidence=await runPass(canvas,6,'Checking full label…');
+  if(evidence.labelled?.[slot]){
+    return {value:evidence.labelled[slot],labelled:merged.labelled,ordered:merged.ordered,markers:merged.markers};
+  }
+  evidence=await runPass(canvas,11,'Checking remaining text…');
+  const value=evidence.labelled?.[slot] || merged.labelled?.[slot] || '';
+  return {value,labelled:merged.labelled,ordered:merged.ordered,markers:merged.markers};
+}
+async function decodePrintedImei(file){
+  if(identifierKind()!=='imei' || !cameraTargetInput)return {accepted:false,labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
+  try{
+    const worker=await getCameraOcrWorker();
+    const slot=cameraTargetInput.dataset.identifierSecondary==='1'?2:1;
+    const canvas=await fileToOcrCanvas(file);
+    const result=await recognizeImeiText(worker,canvas,slot);
+    if(result.value){
+      return {
+        accepted:await cameraAcceptValue(result.value),
+        labelled:result.labelled,
+        ordered:result.ordered||[],
+        markers:result.markers||{1:false,2:false}
+      };
+    }
+    return {
+      accepted:false,
+      labelled:result.labelled,
+      ordered:result.ordered||[],
+      markers:result.markers||{1:false,2:false}
+    };
+  }catch(err){
+    return {accepted:false,labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
+  }
+}
+async function decodeLocalPhoto(file){
+  if(!file || !cameraTargetInput)return;
+  if(cameraPairRow){
+    try{await decodeImeiPairPhoto(file);}
+    finally{
+      if(cameraPhotoInput)cameraPhotoInput.value='';
+      if(cameraGalleryInput)cameraGalleryInput.value='';
+    }
+    return;
+  }
+  const slot=cameraTargetInput.dataset.identifierSecondary==='1'?2:1;
+  cameraState.textContent=`Reading IMEI ${slot}…`;
+  cameraMessage.classList.add('hidden');
+  let barcodeRaw='';
+  const url=URL.createObjectURL(file);
+  try{
+    // Strict rule for photos: read the printed IMEI1:/IMEI2: labels first.
+    // A raw 15-digit barcode has no slot metadata, so accepting the first valid
+    // barcode could put IMEI 2 into the IMEI 1 field (or vice versa).
+    const printed=await decodePrintedImei(file);
+    if(printed.accepted)return;
+
+    if(window.ZXing?.BrowserMultiFormatReader){
+      try{
+        const reader=new ZXing.BrowserMultiFormatReader();
+        const result=await reader.decodeFromImageUrl(url);
+        barcodeRaw=result?.getText?.() ?? result?.text ?? String(result||'');
+      }catch(err){}
+    }
+
+    const otherSlot=slot===1?2:1;
+    if(printed.labelled?.[otherSlot] && !printed.labelled?.[slot] && !(printed.ordered?.length>=2)){
+      cameraShowMessage(`IMEI ${slot} was not found. The photo read IMEI ${otherSlot} instead. Retake closer so both IMEI lines are sharp and visible.`);
+      return;
+    }
+
+    // Never use an unlabeled barcode to decide IMEI 1 vs IMEI 2 on dual-IMEI
+    // phones. Some packaging has a single 1D barcode that represents IMEI 2;
+    // accepting it while Scan IMEI 1 is active would silently swap the slots.
+    // Barcode-only fallback remains available only for non-dual identifier flows.
+    if(barcodeRaw && !usesDualImei() && !printed.labelled?.[1] && !printed.labelled?.[2]){
+      const normalized=String(barcodeRaw||'').replace(/\s+/g,'').trim();
+      if(/^\d{15}$/.test(normalized) && validImeiChecksum(normalized)){
+        if(await cameraAcceptValue(normalized))return;
+      }
+    }
+
+    if(barcodeRaw){
+      cameraShowMessage(`IMEI ${slot} not confirmed. Retake closer so the IMEI 1 / IMEI 2 lines are sharp and fill most of the photo.`);
+    }else{
+      cameraShowMessage(`IMEI ${slot} not detected. Retake closer so both IMEI lines fill most of the photo.`);
+    }
+  }finally{
+    URL.revokeObjectURL(url);
+    if(cameraPhotoInput)cameraPhotoInput.value='';
+    if(cameraGalleryInput)cameraGalleryInput.value='';
+  }
+}
+function openLocalPhotoScanner(){
+  cameraStop();
+  cameraState.textContent='Local camera mode';
+  cameraShowMessage('Local HTTP test: take a close-up so the IMEI label fills most of the photo. For owner-sent test photos, use Existing Photo to avoid re-photographing a screen.',false);
+  if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera';
+  cameraGalleryBtn?.classList.remove('hidden');
+  warmCameraOcr();
+  cameraPhotoInput?.click();
+}
+
+async function startCameraScanner(input){
+  cameraStop();
+  cameraTargetInput=input;
+  const label=cameraFieldLabel(input);
+  $('cameraScanTitle').textContent='Scan '+label;
+  $('cameraScanSubtitle').textContent='Only a valid '+label+' will be accepted.';
+  cameraState.textContent='Starting camera…';
+  cameraMessage.classList.add('hidden');
+  cameraMessage.classList.remove('is-error');
+  cameraModal.hidden=false;
+  document.body.classList.add('modal-open');
+
+  if(!window.isSecureContext){
+    openLocalPhotoScanner();
+    return;
+  }
+  if(cameraRetryBtn)cameraRetryBtn.textContent='Retry Camera';
+  cameraGalleryBtn?.classList.add('hidden');
+  if(!('BarcodeDetector' in window)){
+    cameraShowMessage('This browser does not support the built-in barcode detector. Use External Scanner or manual input on this device.');
+    return;
+  }
+  if(!navigator.mediaDevices?.getUserMedia){
+    cameraShowMessage('Camera access is not available in this browser. Use External Scanner or manual input.');
+    return;
+  }
+  try{
+    const supported=await BarcodeDetector.getSupportedFormats?.() || [];
+    const preferred=['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e','qr_code'].filter(f=>supported.includes(f));
+    cameraDetector=new BarcodeDetector(preferred.length?{formats:preferred}:undefined);
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    cameraVideo.srcObject=cameraStream;
+    await cameraVideo.play();
+    cameraState.textContent='Scanning '+label+'…';
+    cameraFrameHandle=requestAnimationFrame(cameraDetectLoop);
+  }catch(err){
+    cameraShowMessage('Camera could not start. Allow camera permission, or use External Scanner / manual input.');
+  }
+}
+identifierRows.addEventListener('click',e=>{
+  const pairBtn=e.target.closest('[data-camera-scan-pair]');
+  if(pairBtn){
+    startImeiPairScanner(pairBtn);
+    return;
+  }
+  const btn=e.target.closest('[data-camera-scan]');
+  if(!btn)return;
+  const input=btn.closest('.identifier-field-wrap')?.querySelector('[data-identifier-input]');
+  if(input)startCameraScanner(input);
+});
+document.querySelectorAll('[data-camera-close]').forEach(b=>b.addEventListener('click',closeCameraScanner));
+cameraRetryBtn?.addEventListener('click',()=>{
+  if(!cameraTargetInput)return;
+  if(cameraPairRow){
+    warmCameraOcr();
+    cameraState.textContent='Ready for one close IMEI label photo…';
+    cameraMessage.classList.add('hidden');
+    cameraPhotoInput?.click();
+    return;
+  }
+  if(!window.isSecureContext)openLocalPhotoScanner();
+  else startCameraScanner(cameraTargetInput);
+});
+cameraPhotoInput?.addEventListener('change',()=>{
+  const file=cameraPhotoInput.files?.[0];
+  if(file)decodeLocalPhoto(file);
+});
+cameraGalleryBtn?.addEventListener('click',()=>{
+  if(!cameraTargetInput)return;
+  warmCameraOcr();
+  cameraGalleryInput?.click();
+});
+cameraGalleryInput?.addEventListener('change',()=>{
+  const file=cameraGalleryInput.files?.[0];
+  if(file)decodeLocalPhoto(file);
+});
+
 function bindIdentifierInputs(){
   const inputs=[...document.querySelectorAll('[data-identifier-input]')];
   inputs.forEach(input=>{
@@ -579,6 +1356,9 @@ async function checkIdentifier(input){
   if(!v){clearRestoreState(input);setIdentifierState(input,'','');updateScannerBadge('ready');return input.dataset.identifierSecondary==='1';}
   if(identifierKind()==='imei' && !/^\d{15}$/.test(v)){
     clearRestoreState(input);setIdentifierState(input,'error','IMEI must be 15 digits');updateScannerBadge('error');return false;
+  }
+  if(identifierKind()==='imei' && !validImeiChecksum(v)){
+    clearRestoreState(input);setIdentifierState(input,'error','Invalid IMEI');updateScannerBadge('error');return false;
   }
   const approvedFor=input.dataset.restoreApprovedValue||'';
   setIdentifierState(input,'checking','Checking…');
