@@ -245,6 +245,19 @@ foreach ($accessories as $accessory) {
     </div>
 </div>
 
+
+<style>
+#cameraCapturedPreview:not([hidden]){z-index:1}
+#cameraScanStage .camera-scan-guide{z-index:2;pointer-events:none}
+#cameraScanStage .camera-scan-state{z-index:3}
+#cameraScanStage .camera-scan-guide.is-photo-tap span{border-style:dashed}
+.camera-scan-actions{flex-wrap:wrap;gap:10px}
+.camera-scan-actions .btn{min-height:46px}
+.camera-scan-actions .camera-gallery-btn{flex:1 1 44%}
+.camera-scan-actions #cameraRetryBtn{flex:1 1 44%}
+@media (max-width:640px){.camera-scan-actions .btn{font-size:15px}.camera-scan-actions [data-camera-close]{flex:1 1 100%}}
+</style>
+
 <div class="modal camera-scan-modal" id="cameraScanModal" hidden>
     <div class="modal-backdrop" data-camera-close></div>
     <div class="modal-dialog camera-scan-dialog">
@@ -255,16 +268,18 @@ foreach ($accessories as $accessory) {
         <div class="modal-body">
             <div class="camera-scan-stage" id="cameraScanStage">
                 <video id="cameraScanVideo" playsinline muted></video>
-                <div class="camera-scan-guide"><span></span></div>
+                <img id="cameraCapturedPreview" alt="Captured IMEI label" hidden style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b1422;touch-action:manipulation;cursor:crosshair;">
+                <div class="camera-scan-guide" id="cameraScanGuide"><span></span></div>
                 <div class="camera-scan-state" id="cameraScanState">Starting camera…</div>
             </div>
             <div class="camera-scan-message hidden" id="cameraScanMessage"></div>
-            <div class="camera-scan-tips">Keep the IMEI label close and sharp. The scanner accepts a valid IMEI barcode or the printed IMEI 1 / IMEI 2 text.</div>
-            <button class="btn btn-outline camera-gallery-btn hidden" type="button" id="cameraGalleryBtn">Use Existing Photo</button>
+            <div class="camera-scan-tips">Keep one phone box label clear and sharp. Repeated copies of the same IMEI pair are accepted; different phone labels are blocked.</div>
         </div>
         <div class="modal-actions camera-scan-actions">
             <button class="btn btn-secondary" type="button" data-camera-close>Cancel</button>
-            <button class="btn btn-outline" type="button" id="cameraRetryBtn">Retry Camera</button>
+            <button class="btn btn-outline camera-gallery-btn hidden" type="button" id="cameraGalleryBtn">Use Existing Photo</button>
+            <button class="btn btn-outline hidden" type="button" id="cameraSkipSecondaryBtn">No IMEI 2</button>
+            <button class="btn btn-outline" type="button" id="cameraRetryBtn">Take Photo</button>
         </div>
     </div>
 </div>
@@ -498,13 +513,14 @@ function renderIdentifierRows(){
         <div class="identifier-dual-grid">
           <div class="identifier-pair-scan-card">
             <div>
-              <strong>Camera Scan</strong>
-              <span>Take one close photo of the IMEI label. We will fill IMEI 1 and IMEI 2 together.</span>
+              <strong>Guided IMEI Scan</strong>
+              <span>Recommended: scan the printed IMEI 1 row first, then IMEI 2. This is faster and more reliable on sealed-box labels.</span>
             </div>
-            <button class="btn btn-outline identifier-pair-scan-btn" type="button" data-camera-scan-pair>Scan IMEI Label</button>
+            <button class="btn btn-primary identifier-pair-scan-btn" type="button" data-guided-imei-scan>Start Guided Scan</button>
+            <button class="btn btn-ghost identifier-pair-scan-btn" type="button" data-camera-scan-pair>Printed Label Scan (Optional)</button>
           </div>
-          ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:'SCAN OR ENTER IMEI 1',label:'IMEI 1',required:true,numeric:true,includeCamera:false})}
-          ${identifierFieldHtml({name:'secondary_identifiers[]',value:existingSecondary[i]||'',placeholder:'SCAN OR ENTER IMEI 2 (OPTIONAL)',label:'IMEI 2',secondary:true,numeric:true,includeCamera:false})}
+          ${identifierFieldHtml({name:'identifiers[]',value:existingPrimary[i]||'',placeholder:'SCAN OR ENTER IMEI 1',label:'IMEI 1',required:true,numeric:true,includeCamera:true})}
+          ${identifierFieldHtml({name:'secondary_identifiers[]',value:existingSecondary[i]||'',placeholder:'SCAN OR ENTER IMEI 2 (OPTIONAL)',label:'IMEI 2',secondary:true,numeric:true,includeCamera:true})}
         </div>
       </div>`).join('');
   }else{
@@ -596,8 +612,15 @@ const cameraPhotoInput=$('cameraPhotoInput');
 const cameraGalleryInput=$('cameraGalleryInput');
 const cameraGalleryBtn=$('cameraGalleryBtn');
 const cameraRetryBtn=$('cameraRetryBtn');
+const cameraSkipSecondaryBtn=$('cameraSkipSecondaryBtn');
+const cameraCapturedPreview=$('cameraCapturedPreview');
+const cameraScanGuide=$('cameraScanGuide');
+let cameraCapturedFile=null;
+let cameraCapturedUrl='';
 let cameraTargetInput=null;
 let cameraPairRow=null;
+let guidedImeiRow=null;
+let guidedImeiStep=0;
 let cameraStream=null;
 let cameraDetector=null;
 let cameraFrameHandle=0;
@@ -615,13 +638,144 @@ function cameraStop(){
   if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;}
   if(cameraVideo){cameraVideo.srcObject=null;}
 }
+function clearCapturedPhoto(){
+  cameraCapturedFile=null;
+  if(cameraCapturedUrl){URL.revokeObjectURL(cameraCapturedUrl);cameraCapturedUrl='';}
+  if(cameraCapturedPreview){
+    cameraCapturedPreview.hidden=true;
+    cameraCapturedPreview.removeAttribute('src');
+  }
+  if(cameraVideo)cameraVideo.hidden=false;
+  if(cameraScanGuide)cameraScanGuide.classList.remove('is-photo-tap');
+}
+function showCapturedPhoto(file){
+  if(!file || !cameraCapturedPreview)return;
+  if(cameraCapturedUrl)URL.revokeObjectURL(cameraCapturedUrl);
+  cameraCapturedFile=file;
+  cameraCapturedUrl=URL.createObjectURL(file);
+  cameraCapturedPreview.src=cameraCapturedUrl;
+  cameraCapturedPreview.hidden=false;
+  if(cameraVideo)cameraVideo.hidden=true;
+  if(cameraScanGuide)cameraScanGuide.classList.add('is-photo-tap');
+  const slot=guidedImeiStep===2?2:1;
+  cameraState.textContent=`Tap the 15-digit IMEI ${slot} number`;
+  cameraShowMessage(`Photo kept at original quality. Tap directly on the printed 15-digit IMEI ${slot} number — not the barcode.`,false,`Photo ready · IMEI ${slot}`);
+  if(cameraRetryBtn)cameraRetryBtn.textContent='Take Another Photo';
+  if(cameraGalleryBtn)cameraGalleryBtn.textContent='Use Different Photo';
+}
+async function ocrTappedImeiRegion(file,nx,ny,slot){
+  if(!file)return {value:'',candidates:[]};
+  const worker=await getCameraOcrWorker();
+  const bitmap=await createImageBitmap(file);
+  try{
+    // Precision row reader: the user already tells us exactly which printed
+    // number to read by tapping it. Keep the crop thin so nearby CODE128 bars,
+    // QR codes and the other IMEI row cannot confuse OCR.
+    const attempts=[
+      {w:.48,h:.050,y:.000},
+      {w:.60,h:.064,y:.004},
+      {w:.40,h:.045,y:.008}
+    ];
+    const all=[];
+    for(let ai=0;ai<attempts.length;ai++){
+      const a=attempts[ai];
+      const cropW=Math.max(240,Math.round(bitmap.width*a.w));
+      const cropH=Math.max(44,Math.round(bitmap.height*a.h));
+      let left=Math.round(nx*bitmap.width-cropW/2);
+      let top=Math.round((ny+a.y)*bitmap.height-cropH/2);
+      left=Math.max(0,Math.min(bitmap.width-cropW,left));
+      top=Math.max(0,Math.min(bitmap.height-cropH,top));
+
+      const targetW=Math.min(1800,Math.max(1200,cropW*4));
+      const scale=targetW/cropW;
+      const c=document.createElement('canvas');
+      c.width=Math.max(1,Math.round(cropW*scale));
+      c.height=Math.max(1,Math.round(cropH*scale));
+      const ctx=c.getContext('2d',{willReadFrequently:true});
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(bitmap,left,top,cropW,cropH,0,0,c.width,c.height);
+
+      const image=ctx.getImageData(0,0,c.width,c.height);
+      const d=image.data;
+      let avg=0;
+      for(let i=0;i<d.length;i+=4){
+        let g=(d[i]*.299)+(d[i+1]*.587)+(d[i+2]*.114);
+        g=(g-128)*1.75+128;
+        g=Math.max(0,Math.min(255,g));
+        d[i]=d[i+1]=d[i+2]=g;
+        avg+=g;
+      }
+      avg/=Math.max(1,d.length/4);
+      ctx.putImageData(image,0,0);
+
+      cameraState.textContent=`Reading IMEI ${slot} digits…`;
+      await worker.setParameters({
+        tessedit_char_whitelist:'0123456789',
+        tessedit_pageseg_mode:'7',
+        classify_bln_numeric_mode:'1',
+        preserve_interword_spaces:'0',
+        user_defined_dpi:'300'
+      });
+      let result=await worker.recognize(c);
+      let values=guidedImeiCandidatesFromText(result?.data?.text||'');
+      for(const v of values)if(!all.includes(v))all.push(v);
+      if(all.length===1)return {value:all[0],candidates:all};
+      if(all.length>1)break;
+
+      // One binary retry on the same small row only. This is still fast and is
+      // much more reliable for photos of small factory-label digits.
+      const binary=ctx.getImageData(0,0,c.width,c.height);
+      const bd=binary.data;
+      const threshold=Math.max(120,Math.min(205,avg*.92));
+      for(let i=0;i<bd.length;i+=4){
+        const g=bd[i];
+        const v=g<threshold?0:255;
+        bd[i]=bd[i+1]=bd[i+2]=v;
+      }
+      ctx.putImageData(binary,0,0);
+      await worker.setParameters({
+        tessedit_char_whitelist:'0123456789',
+        tessedit_pageseg_mode:'13',
+        classify_bln_numeric_mode:'1',
+        preserve_interword_spaces:'0',
+        user_defined_dpi:'300'
+      });
+      result=await worker.recognize(c);
+      values=guidedImeiCandidatesFromText(result?.data?.text||'');
+      for(const v of values)if(!all.includes(v))all.push(v);
+      if(all.length===1)return {value:all[0],candidates:all};
+      if(all.length>1)break;
+    }
+    return {value:all.length===1?all[0]:'',candidates:all};
+  }finally{bitmap.close?.();}
+}
+function previewNormalizedPoint(event){
+  const img=cameraCapturedPreview;
+  if(!img || img.hidden || !img.naturalWidth || !img.naturalHeight)return null;
+  const rect=img.getBoundingClientRect();
+  const scale=Math.min(rect.width/img.naturalWidth,rect.height/img.naturalHeight);
+  const shownW=img.naturalWidth*scale,shownH=img.naturalHeight*scale;
+  const left=rect.left+(rect.width-shownW)/2,top=rect.top+(rect.height-shownH)/2;
+  const x=event.clientX-left,y=event.clientY-top;
+  if(x<0||y<0||x>shownW||y>shownH)return null;
+  return {x:x/shownW,y:y/shownH};
+}
+
+function resetGuidedImeiScanner(){
+  guidedImeiRow=null;
+  guidedImeiStep=0;
+  cameraSkipSecondaryBtn?.classList.add('hidden');
+}
 function closeCameraScanner(){
   cameraStop();
+  clearCapturedPhoto();
   if(cameraModal)cameraModal.hidden=true;
   document.body.classList.remove('modal-open');
   cameraTargetInput?.focus();
   cameraTargetInput=null;
   cameraPairRow=null;
+  resetGuidedImeiScanner();
 }
 function cameraShowMessage(message,isError=true,stateText=''){
   cameraState.textContent=stateText || (isError?'Scan needs attention':'Ready');
@@ -646,7 +800,42 @@ async function cameraAcceptValue(raw){
   cameraTargetInput.dispatchEvent(new Event('input',{bubbles:true}));
   const ok=await checkIdentifier(cameraTargetInput);
   if(!ok){cameraState.textContent='Identifier needs attention';cameraBusy=false;return false;}
+
   const completed=cameraTargetInput;
+
+  // Guided dual-IMEI mode intentionally does not close the modal after IMEI 1.
+  // The selected step is the slot authority: step 1 always fills IMEI 1, step 2
+  // always fills IMEI 2. This removes OCR/order guessing from the main workflow.
+  if(guidedImeiRow && usesDualImei()){
+    if(guidedImeiStep===1){
+      cameraStop();
+      guidedImeiStep=2;
+      cameraTargetInput=guidedImeiRow.querySelector('[data-identifier-secondary]');
+      cameraBusy=false;
+      updateGuidedImeiUi('IMEI 1 captured ✓');
+      cameraShowMessage('IMEI 1 saved. Now scan IMEI 2, or choose No IMEI 2 for a single-IMEI phone.',false,'Step 2 of 2');
+      if(cameraCapturedFile && !cameraCapturedPreview?.hidden){
+        cameraState.textContent='Tap the printed IMEI 2 number in the same photo';
+        cameraShowMessage('IMEI 1 saved. Keep this photo open and tap directly on the printed IMEI 2 row.',false,'Step 2 of 2 · Same photo');
+        if(cameraRetryBtn)cameraRetryBtn.textContent='Take Another Photo';
+      }else if(!window.isSecureContext){
+        if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera for IMEI 2';
+      }else{
+        setTimeout(()=>startGuidedCameraStep(),120);
+      }
+      return true;
+    }
+
+    cameraStop();
+    cameraModal.hidden=true;
+    document.body.classList.remove('modal-open');
+    const doneInput=completed;
+    cameraTargetInput=null;
+    resetGuidedImeiScanner();
+    focusNextIdentifier(doneInput);
+    return true;
+  }
+
   cameraStop();
   cameraModal.hidden=true;
   document.body.classList.remove('modal-open');
@@ -709,6 +898,61 @@ function imeiMarkerMatch(line=''){
   // /MEI1, MEI1, 1MEI1). Be tolerant when locating the slot label only;
   // the 15-digit value still has to pass the IMEI checksum.
   return String(line).toUpperCase().match(/(?:I|1|L|\||\\|\/)?M(?:E|3)(?:I|1|L|\|)\s*([12])\s*[:#\-]?\s*(.*)$/i);
+}
+function imeiAnyMarkerMatch(line=''){
+  // Some sealed-box labels (notably Infinix-style labels) print both rows simply
+  // as "IMEI:" with no 1/2 suffix. Keep the slot optional here so a tight
+  // label crop can use the top-to-bottom pair order safely.
+  return String(line).toUpperCase().match(/(?:I|1|L|\||\\|\/)?M(?:E|3)(?:I|1|L|\|)\s*([12])?\s*[:#\-]?\s*(.*)$/i);
+}
+function imeiRowsFromText(text=''){
+  const lines=cleanOcrText(text).split(/\n+/).map(line=>line.trim()).filter(Boolean);
+  const rows=[];
+  for(let i=0;i<lines.length;i++){
+    const marker=imeiAnyMarkerMatch(lines[i]);
+    if(!marker)continue;
+    const slot=marker[1]?Number(marker[1]):0;
+    let value=imeiDigitsFromFragment(marker[2]);
+    if(!value && lines[i+1] && !imeiAnyMarkerMatch(lines[i+1])){
+      value=imeiDigitsFromFragment(lines[i+1]);
+    }
+    if(value)rows.push({slot,value,line:i});
+  }
+  return rows;
+}
+function pairFromImeiRows(text=''){
+  const rows=imeiRowsFromText(text);
+  if(!rows.length)return {pair:null,rows,ambiguous:false};
+
+  const explicit={1:'',2:''};
+  for(const row of rows){
+    if(row.slot && !explicit[row.slot])explicit[row.slot]=row.value;
+  }
+  if(explicit[1] && explicit[2] && explicit[1]!==explicit[2]){
+    return {pair:{1:explicit[1],2:explicit[2]},rows,ambiguous:false,mode:'explicit'};
+  }
+
+  // For labels that say IMEI: on both rows, score adjacent IMEI rows. Repeated
+  // tear-off stickers produce A,B,A,B... so A→B wins by consensus while B→A
+  // gets fewer votes. We only use rows that were explicitly introduced by an
+  // IMEI marker, never arbitrary 15-digit text elsewhere on the box.
+  const pairVotes=new Map();
+  const unique=new Set(rows.map(r=>r.value));
+  for(let i=0;i<rows.length-1;i++){
+    const a=rows[i],b=rows[i+1];
+    if(!a.value || !b.value || a.value===b.value)continue;
+    if(a.slot===2 || b.slot===1)continue;
+    const key=a.value+'|'+b.value;
+    pairVotes.set(key,(pairVotes.get(key)||0)+1);
+  }
+  if(!pairVotes.size)return {pair:null,rows,ambiguous:unique.size>2};
+  const ranked=[...pairVotes.entries()].sort((a,b)=>b[1]-a[1]);
+  if(ranked.length>1 && ranked[0][1]===ranked[1][1] && ranked[0][0]!==ranked[1][0]){
+    return {pair:null,rows,ambiguous:true};
+  }
+  if(unique.size>2 && ranked[0][1]<2)return {pair:null,rows,ambiguous:true};
+  const [a,b]=ranked[0][0].split('|');
+  return {pair:{1:a,2:b},rows,ambiguous:false,mode:'ordered-imei-lines',votes:ranked[0][1]};
 }
 function imeiSlotMarkersFromText(text=''){
   const markers={1:false,2:false};
@@ -909,56 +1153,336 @@ function pairFromEvidence(evidence,{anchored=false,barcodeRaw=''}={}){
   if(imei1===imei2)imei2='';
   return {1:imei1,2:imei2};
 }
+function rectKey(rect){
+  return [rect.left,rect.top,rect.width,rect.height].map(v=>Math.round(v/12)).join(':');
+}
+function clampRect(rect,w,h){
+  const left=Math.max(0,Math.min(w-1,rect.left));
+  const top=Math.max(0,Math.min(h-1,rect.top));
+  const right=Math.max(left+1,Math.min(w,rect.left+rect.width));
+  const bottom=Math.max(top+1,Math.min(h,rect.top+rect.height));
+  return {left,top,width:right-left,height:bottom-top};
+}
+function makeDecodeTile(source,rect,{binary=false,contrast=false}={}){
+  const r=clampRect(rect,source.width,source.height);
+  // Barcode lines must stay crisp. Smoothing blurred narrow CODE128 bars on
+  // sealed-box photos, so barcode tiles are always scaled with nearest-neighbor.
+  const targetWidth=1600;
+  const scale=Math.max(1,Math.min(3.0,targetWidth/Math.max(1,r.width)));
+  const tile=document.createElement('canvas');
+  tile.width=Math.max(1,Math.round(r.width*scale));
+  tile.height=Math.max(1,Math.round(r.height*scale));
+  const ctx=tile.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(source,r.left,r.top,r.width,r.height,0,0,tile.width,tile.height);
+  if(binary || contrast){
+    const image=ctx.getImageData(0,0,tile.width,tile.height);
+    const d=image.data;
+    // A light contrast boost preserves quiet zones better than heavy OCR-style
+    // processing. The binary variant is only a second decode attempt.
+    for(let i=0;i<d.length;i+=4){
+      const gray=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+      let v=contrast?((gray-128)*1.55+128):gray;
+      if(binary)v=v<150?0:255;
+      v=Math.max(0,Math.min(255,v));
+      d[i]=d[i+1]=d[i+2]=v;
+    }
+    ctx.putImageData(image,0,0);
+  }
+  return {canvas:tile,rect:r,scale};
+}
+function scoreBarcodeRect(canvas,rect){
+  const r=clampRect(rect,canvas.width,canvas.height);
+  const sw=180,sh=56;
+  const tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+  const ctx=tmp.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(canvas,r.left,r.top,r.width,r.height,0,0,sw,sh);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  let transitions=0,dark=0,rowsWithBars=0;
+  for(let y=0;y<sh;y++){
+    let rowTransitions=0;
+    let prev=null;
+    for(let x=0;x<sw;x++){
+      const i=(y*sw+x)*4;
+      const g=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+      if(g<105)dark++;
+      if(prev!==null && Math.abs(g-prev)>55)rowTransitions++;
+      prev=g;
+    }
+    transitions+=rowTransitions;
+    if(rowTransitions>=18)rowsWithBars++;
+  }
+  const transitionDensity=transitions/(sw*sh);
+  const barRowRatio=rowsWithBars/sh;
+  const darkRatio=dark/(sw*sh);
+  // Text has some transitions, but long barcode rows sustain them across many y rows.
+  return transitionDensity*8 + barRowRatio*3 + Math.min(.35,darkRatio)*.8;
+}
+function buildBarcodeLineRects(canvas){
+  const w=canvas.width,h=canvas.height;
+  const candidates=[];
+  const push=rect=>{
+    const r=clampRect(rect,w,h);
+    if(r.width<120||r.height<36)return;
+    candidates.push({...r,score:scoreBarcodeRect(canvas,r)});
+  };
+  // Scan narrow horizontal bands across several column widths. This isolates
+  // CODE128 IMEI rows from EAN/QR codes and from repeated tear-off stickers.
+  const columnSpecs=[
+    [0,1],[0,.68],[0,.56],[.34,.66],[.48,.52]
+  ];
+  for(const hf of [.07,.09,.12,.15]){
+    const rh=Math.max(44,Math.round(h*hf));
+    const step=Math.max(22,Math.round(rh*.42));
+    for(let top=0;top<=h-rh;top+=step){
+      for(const [xf,wf] of columnSpecs)push({left:w*xf,top,width:w*wf,height:rh});
+    }
+  }
+  const likely=likelyImeiRect(canvas);
+  if(likely){
+    const rowH=Math.max(42,likely.height*.20);
+    for(let y=likely.top;y<=likely.top+likely.height-rowH;y+=rowH*.36){
+      push({left:likely.left,top:y,width:likely.width,height:rowH});
+    }
+  }
+  const seen=new Set();
+  return candidates.sort((a,b)=>b.score-a.score).filter(r=>{
+    const key=rectKey(r);if(seen.has(key))return false;seen.add(key);return true;
+  }).slice(0,36);
+}
+function buildBarcodeScanRects(canvas){
+  const w=canvas.width,h=canvas.height;
+  const candidates=[];
+  const push=rect=>{
+    const r=clampRect(rect,w,h);
+    if(r.width<100||r.height<55)return;
+    candidates.push({...r,score:scoreBarcodeRect(canvas,r)});
+  };
+  const specs=[
+    [.62,.32,[0,.38,1],[0,.25,.5,.75,1]],
+    [.48,.24,[0,.26,.52,1],[0,.25,.5,.75,1]]
+  ];
+  for(const [wf,hf,xp,yp] of specs){
+    const rw=Math.round(w*wf),rh=Math.round(h*hf);
+    const maxX=Math.max(0,w-rw),maxY=Math.max(0,h-rh);
+    for(const xv of xp)for(const yv of yp)push({left:maxX*xv,top:maxY*yv,width:rw,height:rh});
+  }
+  const likely=likelyImeiRect(canvas);if(likely)push(likely);
+  const seen=new Set();
+  return candidates.sort((a,b)=>b.score-a.score).filter(r=>{
+    const key=rectKey(r);if(seen.has(key))return false;seen.add(key);return true;
+  }).slice(0,16);
+}
+function median(values=[]){
+  if(!values.length)return 0;
+  const sorted=[...values].sort((a,b)=>a-b);
+  const mid=Math.floor(sorted.length/2);
+  return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;
+}
+function imeiFromBarcodeRaw(raw=''){
+  const digits=String(raw||'').replace(/\D/g,'');
+  return /^\d{15}$/.test(digits) && validImeiChecksum(digits)?digits:'';
+}
+function makeImeiBarcodeReader(){
+  if(!window.ZXing?.BrowserMultiFormatReader)return null;
+  try{
+    const formats=[];
+    const B=window.ZXing.BarcodeFormat||{};
+    // Exclude EAN/UPC on purpose: retail EAN was repeatedly winning the first
+    // decode on Infinix photos even though the IMEI CODE128 bars were present.
+    for(const key of ['CODE_128','CODE_39','ITF','QR_CODE','DATA_MATRIX']){
+      if(B[key]!==undefined)formats.push(B[key]);
+    }
+    if(formats.length && window.ZXing.DecodeHintType?.POSSIBLE_FORMATS!==undefined){
+      const hints=new Map();
+      hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS,formats);
+      if(window.ZXing.DecodeHintType.TRY_HARDER!==undefined)hints.set(window.ZXing.DecodeHintType.TRY_HARDER,true);
+      return new ZXing.BrowserMultiFormatReader(hints,300);
+    }
+  }catch(err){}
+  return new ZXing.BrowserMultiFormatReader();
+}
+async function decodeBarcodeFromTile(reader,source,rect){
+  const variants=[
+    makeDecodeTile(source,rect),
+    makeDecodeTile(source,rect,{contrast:true}),
+    makeDecodeTile(source,rect,{binary:true})
+  ];
+  for(const tile of variants){
+    try{
+      let result=null;
+      if(typeof reader.decodeFromCanvas==='function')result=await reader.decodeFromCanvas(tile.canvas);
+      else result=await reader.decodeFromImageUrl(tile.canvas.toDataURL('image/png'));
+      const raw=result?.getText?.() ?? result?.text ?? String(result||'');
+      const imei=imeiFromBarcodeRaw(raw);
+      if(!imei)continue;
+      const points=[...(result?.getResultPoints?.() ?? result?.resultPoints ?? [])].map(zxingPointXY).filter(Boolean);
+      let localX=tile.canvas.width/2,localY=tile.canvas.height/2;
+      if(points.length){
+        localX=points.reduce((sum,p)=>sum+p.x,0)/points.length;
+        localY=points.reduce((sum,p)=>sum+p.y,0)/points.length;
+      }
+      return {
+        raw:String(raw||''),imei,
+        x:tile.rect.left+(localX/Math.max(1,tile.canvas.width))*tile.rect.width,
+        y:tile.rect.top+(localY/Math.max(1,tile.canvas.height))*tile.rect.height,
+        rect:tile.rect
+      };
+    }catch(err){}
+  }
+  return null;
+}
+async function scanImeiBarcodesFast(canvas,{maxUnique=3}={}){
+  const reader=makeImeiBarcodeReader();
+  if(!reader)return {pair:null,unique:[],hits:[],ambiguous:false};
+  const rects=[...buildBarcodeLineRects(canvas),...buildBarcodeScanRects(canvas)].filter((r,i,arr)=>{
+    const key=rectKey(r);return arr.findIndex(x=>rectKey(x)===key)===i;
+  }).slice(0,42);
+  const hits=[];
+  const byValue=new Map();
+  cameraState.textContent='Scanning IMEI barcode rows…';
+  for(const rect of rects){
+    const hit=await decodeBarcodeFromTile(reader,canvas,rect);
+    if(!hit?.imei)continue;
+    hits.push(hit);
+    if(!byValue.has(hit.imei))byValue.set(hit.imei,[]);
+    byValue.get(hit.imei).push(hit);
+    if(byValue.size>maxUnique)break;
+    // Repeated labels are common. Two unique IMEIs are enough once each has
+    // positional evidence, and one unique IMEI is enough for a tightly-framed
+    // guided single-slot scan.
+    if(byValue.size===2 && hits.length>=2)break;
+  }
+  const unique=[...byValue.keys()];
+  if(unique.length>2)return {pair:null,unique,hits,ambiguous:true};
+  if(unique.length!==2)return {pair:null,unique,hits,ambiguous:false};
+  const positions=unique.map(value=>({
+    value,
+    y:median((byValue.get(value)||[]).map(h=>h.y)),
+    x:median((byValue.get(value)||[]).map(h=>h.x)),
+    count:(byValue.get(value)||[]).length
+  })).sort((a,b)=>a.y-b.y);
+  const yGap=Math.abs(positions[1].y-positions[0].y);
+  const xGap=Math.abs(positions[1].x-positions[0].x);
+  const sameLabel=yGap>=Math.max(8,canvas.height*.006) && yGap<=Math.max(110,canvas.height*.34) && xGap<=canvas.width*.55;
+  if(!sameLabel)return {pair:null,unique,hits,ambiguous:false,suggestedPair:null};
+  return {
+    pair:{1:positions[0].value,2:positions[1].value},
+    suggestedPair:{1:positions[0].value,2:positions[1].value},
+    unique,hits,ambiguous:false,
+    confidence:(positions[0].count>=2&&positions[1].count>=2)?'consensus':'same-label-order'
+  };
+}
+function buildOcrCandidateRects(canvas,barcodeInfo){
+  const w=canvas.width,h=canvas.height;
+  const out=[];
+  const push=rect=>{
+    const r=clampRect(rect,w,h);
+    if(r.width<100||r.height<60)return;
+    const key=rectKey(r);
+    if(out.some(x=>rectKey(x)===key))return;
+    out.push(r);
+  };
+  // If valid IMEI barcodes were found, OCR around their cluster first so the
+  // printed IMEI1:/IMEI2: labels stay close to their numbers.
+  const validHits=barcodeInfo?.hits||[];
+  if(validHits.length){
+    const xs=validHits.map(h=>h.x),ys=validHits.map(h=>h.y);
+    const cx=(Math.min(...xs)+Math.max(...xs))/2;
+    const cy=(Math.min(...ys)+Math.max(...ys))/2;
+    const rw=Math.min(w,Math.max(w*.55,(Math.max(...xs)-Math.min(...xs))+w*.22));
+    const rh=Math.min(h,Math.max(h*.30,(Math.max(...ys)-Math.min(...ys))+h*.20));
+    push({left:cx-rw/2,top:cy-rh*.58,width:rw,height:rh});
+  }
+  const candidates=buildBarcodeScanRects(canvas).slice(0,4);
+  for(const c of candidates)push(c);
+  return out.slice(0,5);
+}
+function collectPairConsensus(pairVotes,pair){
+  if(!pair?.[1]||!pair?.[2]||pair[1]===pair[2])return;
+  const key=pair[1]+'|'+pair[2];
+  pairVotes.set(key,(pairVotes.get(key)||0)+1);
+}
+function bestPairVote(pairVotes){
+  if(!pairVotes.size)return null;
+  const ranked=[...pairVotes.entries()].sort((a,b)=>b[1]-a[1]);
+  const [key,count]=ranked[0];
+  if(ranked.length>1 && ranked[1][1]===count)return {ambiguous:true,pair:null,count};
+  const [a,b]=key.split('|');
+  return {ambiguous:false,pair:{1:a,2:b},count};
+}
 async function recognizeImeiPairFast(file){
-  const worker=await getCameraOcrWorker();
   const base=await fileToPairBaseCanvas(file);
-  cameraState.textContent='Finding IMEI label…';
-  const anchor=await decodeBarcodeAnchor(file,base);
+
+  // FAST PATH — decode multiple barcode regions first. This is especially
+  // effective for sealed boxes that repeat the same IMEI pair on tear-off
+  // stickers. No OCR is needed when exactly two valid IMEI barcodes agree.
+  const barcodeInfo=await scanImeiBarcodesFast(base.canvas);
+  if(barcodeInfo.ambiguous){
+    return {pair:{1:'',2:''},evidence:{labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}},ambiguous:true,reason:'multiple-imeis',barcodeInfo};
+  }
+  if(barcodeInfo.pair?.[1] && barcodeInfo.pair?.[2]){
+    return {pair:barcodeInfo.pair,evidence:{labelled:{1:'',2:''},ordered:barcodeInfo.unique,markers:{1:false,2:false}},anchored:true,source:'multi-barcode',barcodeInfo};
+  }
+
+  // OCR FALLBACK — used for packages such as OPPO where the visible 1D barcode
+  // may not encode both IMEIs and the printed IMEI1:/IMEI2: text is authoritative.
+  const worker=await getCameraOcrWorker();
   const merged={labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
-  const run=async(canvas,psm,label)=>{
+  const pairVotes=new Map();
+  const run=async(rect,psm,label)=>{
     cameraState.textContent=label;
-    await worker.setParameters({
-      tessedit_pageseg_mode:String(psm),
-      preserve_interword_spaces:'1'
-    });
-    const result=await worker.recognize(canvas);
-    const evidence=imeiEvidenceFromText(result?.data?.text||'');
+    const focused=preparePairOcrCanvas(base.canvas,rect);
+    await worker.setParameters({tessedit_pageseg_mode:String(psm),preserve_interword_spaces:'1'});
+    const result=await worker.recognize(focused);
+    const text=result?.data?.text||'';
+    const evidence=imeiEvidenceFromText(text);
     mergeImeiEvidence(merged,evidence);
+    const rowPair=pairFromImeiRows(text);
+    if(rowPair.ambiguous) evidence.ambiguousRows=true;
+    collectPairConsensus(pairVotes,rowPair.pair||{1:evidence.labelled?.[1]||'',2:evidence.labelled?.[2]||''});
+    evidence.localPair=rowPair.pair;
     return evidence;
   };
 
-  // Fast path: use the detected 1D/QR barcode only as a LOCATION anchor.
-  // The barcode value itself is never blindly assigned to IMEI 1/2.
-  if(anchor.rect){
-    const focused=preparePairOcrCanvas(base.canvas,anchor.rect);
-    await run(focused,6,'Reading IMEI 1 + IMEI 2…');
-    let pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:anchor.raw});
-    if(pair[1] && (pair[2] || !usesDualImei()))return {pair,evidence:merged,anchored:true,barcodeRaw:anchor.raw};
-
-    // One small sparse-text fallback only when the focused block pass missed a line.
-    await run(focused,11,'Checking IMEI label…');
-    pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:anchor.raw});
-    if(pair[1] || pair[2])return {pair,evidence:merged,anchored:true,barcodeRaw:anchor.raw};
+  const rects=buildOcrCandidateRects(base.canvas,barcodeInfo);
+  for(let i=0;i<rects.length;i++){
+    const evidence=await run(rects[i],6,i===0?'Reading IMEI label…':'Checking repeated IMEI label…');
+    if(evidence.localPair || (evidence.labelled?.[1] && evidence.labelled?.[2])){
+      const best=bestPairVote(pairVotes);
+      if(best?.pair && best.count>=1)return {pair:best.pair,evidence:merged,anchored:true,source:'label-ocr',barcodeInfo};
+    }
   }
 
-  // Fallback when the barcode itself could not be decoded: locate the densest
-  // label-like region first so we still avoid OCR over the entire camera photo.
-  const likely=likelyImeiRect(base.canvas);
-  if(likely && likely.width>80 && likely.height>60){
-    const focused=preparePairOcrCanvas(base.canvas,likely);
-    await run(focused,6,'Reading IMEI label…');
-    let pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:''});
-    if(pair[1] && (pair[2] || !usesDualImei()))return {pair,evidence:merged,anchored:true,barcodeRaw:''};
-    await run(focused,11,'Checking IMEI label…');
-    pair=pairFromEvidence(merged,{anchored:true,barcodeRaw:''});
-    if(pair[1] || pair[2])return {pair,evidence:merged,anchored:true,barcodeRaw:''};
+  // One sparse-text retry on the best candidate only. Avoid multiple heavy OCR
+  // passes over the same photo, which caused the previous long render time.
+  if(rects[0]){
+    await run(rects[0],11,'Checking IMEI text…');
+    const best=bestPairVote(pairVotes);
+    if(best?.ambiguous)return {pair:{1:'',2:''},evidence:merged,ambiguous:true,reason:'conflicting-labels',barcodeInfo};
+    if(best?.pair)return {pair:best.pair,evidence:merged,anchored:true,source:'label-ocr',barcodeInfo};
   }
 
-  // Last resort: one resized full-image pass only.
+  // Last resort: one resized full-image pass. Never blindly map more than two
+  // different valid IMEIs from a crowded photo.
   const full=preparePairOcrCanvas(base.canvas,null);
-  await run(full,6,'Reading close-up IMEI label…');
-  const pair=pairFromEvidence(merged,{anchored:false,barcodeRaw:anchor.raw});
-  return {pair,evidence:merged,anchored:false,barcodeRaw:anchor.raw};
+  cameraState.textContent='Final IMEI check…';
+  await worker.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});
+  const result=await worker.recognize(full);
+  const fullText=result?.data?.text||'';
+  const evidence=imeiEvidenceFromText(fullText);
+  mergeImeiEvidence(merged,evidence);
+  const fullRowPair=pairFromImeiRows(fullText);
+  collectPairConsensus(pairVotes,fullRowPair.pair||{1:evidence.labelled?.[1]||'',2:evidence.labelled?.[2]||''});
+  const best=bestPairVote(pairVotes);
+  if(best?.ambiguous)return {pair:{1:'',2:''},evidence:merged,ambiguous:true,reason:'conflicting-labels',barcodeInfo};
+  if(best?.pair)return {pair:best.pair,evidence:merged,anchored:false,source:'label-ocr',barcodeInfo};
+
+  // Safe partial fallback only when exactly two ordered IMEIs were found in the
+  // same OCR evidence and no barcode ambiguity exists.
+  const pair=pairFromEvidence(merged,{anchored:false,barcodeRaw:''});
+  return {pair,evidence:merged,anchored:false,source:'fallback',barcodeInfo};
 }
 async function setCameraIdentifierValue(input,value){
   if(!input || !value)return false;
@@ -974,6 +1498,10 @@ async function decodeImeiPairPhoto(file){
   cameraMessage.classList.add('hidden');
   try{
     const result=await recognizeImeiPairFast(file);
+    if(result.ambiguous){
+      cameraShowMessage('Multiple different IMEI labels were detected. Move closer to one sealed phone box label and scan again.');
+      return;
+    }
     const imei1=result.pair?.[1]||'';
     const imei2=result.pair?.[2]||'';
     let ok1=false,ok2=false;
@@ -1002,11 +1530,80 @@ async function decodeImeiPairPhoto(file){
       cameraShowMessage('IMEI 1 was read but needs attention. Check the field message before scanning again.');
       return;
     }
-    cameraShowMessage('IMEI label not detected. Take one close, straight photo showing IMEI1 and IMEI2 together.');
+    cameraShowMessage('Printed-label scan could not confirm the pair. Use Start Guided Scan for separate barcode rows.');
   }catch(err){
-    cameraShowMessage('Could not read the IMEI label. Retake one close, sharp photo of the IMEI1 / IMEI2 sticker.');
+    cameraShowMessage('Could not read both IMEIs from one label photo. For separate barcode rows, use the individual Scan buttons beside IMEI 1 and IMEI 2.');
   }
 }
+function updateGuidedImeiUi(note=''){
+  const slot=guidedImeiStep===2?2:1;
+  $('cameraScanTitle').textContent='Scan Device IMEIs';
+  $('cameraScanSubtitle').textContent=`Step ${slot} of 2 · Use one original photo (recommended) or take one photo, then tap the printed IMEI ${slot} digits.`;
+  cameraState.textContent=note || `Ready for IMEI ${slot}`;
+  if(cameraRetryBtn)cameraRetryBtn.textContent=cameraCapturedFile?'Take Another Photo':'Take Photo';
+  if(cameraGalleryBtn)cameraGalleryBtn.textContent=cameraCapturedFile?'Use Different Photo':'Use Existing Photo';
+  cameraGalleryBtn?.classList.remove('hidden');
+  cameraSkipSecondaryBtn?.classList.toggle('hidden',slot!==2);
+}
+async function startGuidedCameraStep(){
+  if(!guidedImeiRow || !cameraTargetInput)return;
+  updateGuidedImeiUi();
+  cameraMessage.classList.add('hidden');
+  if(!window.isSecureContext){
+    cameraPhotoInput?.click();
+    return;
+  }
+  cameraStop();
+  if(!('BarcodeDetector' in window)){
+    cameraShowMessage('Live camera detection is unavailable here. Take one clear label photo, then tap the printed IMEI number inside that photo.');
+    return;
+  }
+  if(!navigator.mediaDevices?.getUserMedia){
+    cameraShowMessage('Camera access is unavailable in this browser. Use the external scanner or manual input.');
+    return;
+  }
+  try{
+    const supported=await BarcodeDetector.getSupportedFormats?.() || [];
+    const preferred=['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e','qr_code'].filter(f=>supported.includes(f));
+    cameraDetector=new BarcodeDetector(preferred.length?{formats:preferred}:undefined);
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    cameraVideo.srcObject=cameraStream;
+    await cameraVideo.play();
+    cameraState.textContent=`Scanning IMEI ${guidedImeiStep}…`;
+    cameraFrameHandle=requestAnimationFrame(cameraDetectLoop);
+  }catch(err){
+    cameraShowMessage('Camera could not start. Allow camera permission, or use the external scanner / manual input.');
+  }
+}
+function startGuidedImeiScanner(button){
+  const row=button.closest('.identifier-entry-dual');
+  if(!row)return;
+  cameraStop();
+  clearCapturedPhoto();
+  cameraPairRow=null;
+  guidedImeiRow=row;
+  const primary=row.querySelector('[data-identifier-primary]');
+  const secondary=row.querySelector('[data-identifier-secondary]');
+  const primaryReady=/^\d{15}$/.test(primary?.value||'') && validImeiChecksum(primary.value);
+  guidedImeiStep=primaryReady && !(secondary?.value||'').trim()?2:1;
+  cameraTargetInput=guidedImeiStep===2?secondary:primary;
+  cameraMessage.classList.add('hidden');
+  cameraMessage.classList.remove('is-error');
+  cameraModal.hidden=false;
+  document.body.classList.add('modal-open');
+  updateGuidedImeiUi();
+  // Warm OCR in the background, but do not force-open the camera on local HTTP.
+  // For Viber/gallery test photos, choosing the ORIGINAL file avoids screen
+  // moire/compression and is far more accurate than photographing a monitor.
+  warmCameraOcr();
+  if(!window.isSecureContext){
+    cameraState.textContent='Choose photo source';
+    cameraShowMessage('Recommended for saved/Viber photos: Use Existing Photo. Use Take Photo only for the actual phone box.',false,'Choose photo source');
+    if(cameraRetryBtn)cameraRetryBtn.textContent='Take Photo';
+    cameraGalleryBtn?.classList.remove('hidden');
+  }else startGuidedCameraStep();
+}
+
 function startImeiPairScanner(button){
   const row=button.closest('.identifier-entry-dual');
   if(!row)return;
@@ -1014,7 +1611,7 @@ function startImeiPairScanner(button){
   cameraPairRow=row;
   cameraTargetInput=row.querySelector('[data-identifier-primary]');
   $('cameraScanTitle').textContent='Scan IMEI Label';
-  $('cameraScanSubtitle').textContent='Take one close photo. IMEI 1 and IMEI 2 will be filled together.';
+  $('cameraScanSubtitle').textContent='Optional printed-label mode. For boxes with separate barcode rows, use Start Guided Scan instead.';
   cameraState.textContent='Preparing IMEI reader…';
   cameraMessage.classList.add('hidden');
   cameraMessage.classList.remove('is-error');
@@ -1022,7 +1619,6 @@ function startImeiPairScanner(button){
   document.body.classList.add('modal-open');
   if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera';
   cameraGalleryBtn?.classList.remove('hidden');
-  warmCameraOcr();
   cameraPhotoInput?.click();
 }
 async function fileToOcrCanvas(file){
@@ -1170,8 +1766,168 @@ async function decodePrintedImei(file){
     return {accepted:false,labelled:{1:'',2:''},ordered:[],markers:{1:false,2:false}};
   }
 }
+function cropSingleImeiWorkingArea(canvas){
+  // Guided mode asks the user to frame ONE IMEI row. Trim quiet margins first so
+  // Tesseract spends its time on the printed number instead of the whole photo.
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const w=canvas.width,h=canvas.height;
+  if(w<20||h<20)return canvas;
+  const data=ctx.getImageData(0,0,w,h).data;
+  let minX=w,minY=h,maxX=-1,maxY=-1;
+  const step=Math.max(1,Math.floor(Math.max(w,h)/900));
+  for(let y=0;y<h;y+=step){
+    for(let x=0;x<w;x+=step){
+      const i=(y*w+x)*4;
+      const lum=(data[i]*0.299)+(data[i+1]*0.587)+(data[i+2]*0.114);
+      if(lum<185){
+        if(x<minX)minX=x;if(x>maxX)maxX=x;
+        if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
+    }
+  }
+  if(maxX<=minX||maxY<=minY)return canvas;
+  const bw=maxX-minX+1,bh=maxY-minY+1;
+  // If dark content covers almost the whole image, auto-cropping is not useful.
+  if((bw*bh)/(w*h)>0.88)return canvas;
+  const padX=Math.round(bw*0.08),padY=Math.round(bh*0.18);
+  const left=Math.max(0,minX-padX),top=Math.max(0,minY-padY);
+  const right=Math.min(w,maxX+padX),bottom=Math.min(h,maxY+padY);
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,right-left);out.height=Math.max(1,bottom-top);
+  out.getContext('2d',{willReadFrequently:true}).drawImage(canvas,left,top,out.width,out.height,0,0,out.width,out.height);
+  return out;
+}
+function prepareSingleImeiOcrCanvas(source){
+  const cropped=cropSingleImeiWorkingArea(source);
+  const targetWidth=Math.max(1000,Math.min(1400,cropped.width*1.5));
+  const scale=targetWidth/Math.max(1,cropped.width);
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(cropped.width*scale));
+  out.height=Math.max(1,Math.round(cropped.height*scale));
+  const ctx=out.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(cropped,0,0,out.width,out.height);
+  const image=ctx.getImageData(0,0,out.width,out.height);
+  const d=image.data;
+  // Light grayscale + contrast only. Heavy thresholding destroyed thin digits on
+  // several Infinix labels, so keep anti-aliased edges intact for OCR.
+  for(let i=0;i<d.length;i+=4){
+    let g=(d[i]*0.299)+(d[i+1]*0.587)+(d[i+2]*0.114);
+    g=(g-128)*1.45+128;
+    g=Math.max(0,Math.min(255,g));
+    d[i]=d[i+1]=d[i+2]=g;
+  }
+  ctx.putImageData(image,0,0);
+  return out;
+}
+function guidedImeiCandidatesFromText(text=''){
+  const values=validImeisFromText(text);
+  if(values.length)return values;
+  // Guided scan is already slot-bound, so a clean 15-character OCR run is safe
+  // to normalize even when the word IMEI itself was missed by OCR.
+  const cleaned=cleanOcrText(text);
+  const candidates=[];
+  const fragments=cleaned.match(/[0-9OQILZSGB| ._\-]{15,34}/g)||[];
+  for(const fragment of fragments){
+    const normalized=normalizeOcrDigits(fragment).replace(/\D/g,'');
+    for(let i=0;i+15<=normalized.length;i++){
+      const value=normalized.slice(i,i+15);
+      if(validImeiChecksum(value)&&!candidates.includes(value))candidates.push(value);
+    }
+  }
+  return candidates;
+}
+async function decodeFastSingleImeiRow(file,slot=1){
+  if(!file || identifierKind()!=='imei')return {value:'',unique:[],ambiguous:false,source:''};
+  try{
+    const worker=await getCameraOcrWorker();
+    const base=await fileToPairBaseCanvas(file,1800);
+    const working=prepareSingleImeiOcrCanvas(base.canvas);
+    const recognize=async(psm,label)=>{
+      cameraState.textContent=label;
+      await worker.setParameters({
+        tessedit_char_whitelist:'IME0123456789OQILZSGB|: #-._',
+        tessedit_pageseg_mode:String(psm),
+        preserve_interword_spaces:'1',
+        user_defined_dpi:'250'
+      });
+      const result=await worker.recognize(working);
+      return guidedImeiCandidatesFromText(result?.data?.text||'');
+    };
+
+    // Fast path: one framed row behaves like a single text line.
+    let unique=await recognize(7,`Reading printed IMEI ${slot}…`);
+    if(unique.length===1)return {value:unique[0],unique,ambiguous:false,source:'ocr-line'};
+    if(unique.length>1)return {value:'',unique,ambiguous:true,source:'ocr-line'};
+
+    // One fallback only. This remains much faster than the old multi-region OCR
+    // pipeline while recovering photos where IMEI: and the digits wrap slightly.
+    unique=await recognize(6,`Checking IMEI ${slot} row…`);
+    if(unique.length===1)return {value:unique[0],unique,ambiguous:false,source:'ocr-block'};
+    if(unique.length>1)return {value:'',unique,ambiguous:true,source:'ocr-block'};
+
+    // Last, cheap barcode attempt on the already tightly-framed photo. No tile
+    // scanning and no multi-label consensus work in guided mode.
+    const url=URL.createObjectURL(file);
+    try{
+      if(window.ZXing?.BrowserMultiFormatReader){
+        try{
+          const reader=makeImeiBarcodeReader() || new ZXing.BrowserMultiFormatReader();
+          const result=await reader.decodeFromImageUrl(url);
+          const raw=result?.getText?.() ?? result?.text ?? String(result||'');
+          const value=imeiFromBarcodeRaw(raw);
+          if(value)return {value,unique:[value],ambiguous:false,source:'barcode-fallback'};
+        }catch(err){}
+      }
+    }finally{URL.revokeObjectURL(url);}
+  }catch(err){}
+  return {value:'',unique:[],ambiguous:false,source:''};
+}
+async function decodeSingleImeiBarcodePhoto(file,slot=1){
+  if(!file || identifierKind()!=='imei')return {value:'',unique:[],ambiguous:false,pair:null};
+  try{
+    const base=await fileToPairBaseCanvas(file,2600);
+    const info=await scanImeiBarcodesFast(base.canvas,{maxUnique:3});
+    const unique=[...(info?.unique||[])];
+    if(info?.pair?.[1] && info?.pair?.[2]){
+      return {value:info.pair[slot]||'',unique,ambiguous:false,pair:info.pair,source:'pair-bars'};
+    }
+    if(unique.length===1){
+      // Guided mode is already slot-bound by the button/step the user selected.
+      return {value:unique[0],unique,ambiguous:false,pair:null,source:'single-bar'};
+    }
+    if(unique.length>2 || info?.ambiguous)return {value:'',unique,ambiguous:true,pair:null,source:'bars'};
+    if(unique.length===2){
+      // Two valid values were found but their positions were too uncertain to
+      // assign automatically. Do not guess the slot.
+      return {value:'',unique,ambiguous:true,pair:null,source:'bars'};
+    }
+  }catch(err){}
+  return {value:'',unique:[],ambiguous:false,pair:null};
+}
 async function decodeLocalPhoto(file){
   if(!file || !cameraTargetInput)return;
+  if(guidedImeiRow){
+    const slot=guidedImeiStep===2?2:1;
+    cameraState.textContent=`Reading printed IMEI ${slot}…`;
+    cameraMessage.classList.add('hidden');
+    try{
+      const single=await decodeFastSingleImeiRow(file,slot);
+      if(single.value){
+        if(await cameraAcceptValue(single.value))return;
+      }
+      if(single.ambiguous){
+        cameraShowMessage(`More than one valid IMEI was found. Move closer and keep only the printed IMEI ${slot} row inside the photo.`);
+        return;
+      }
+      cameraShowMessage(`IMEI ${slot} not detected. Move closer so the printed 15-digit IMEI ${slot} number fills most of the photo.`);
+    }finally{
+      if(cameraPhotoInput)cameraPhotoInput.value='';
+      if(cameraGalleryInput)cameraGalleryInput.value='';
+    }
+    return;
+  }
   if(cameraPairRow){
     try{await decodeImeiPairPhoto(file);}
     finally{
@@ -1183,47 +1939,40 @@ async function decodeLocalPhoto(file){
   const slot=cameraTargetInput.dataset.identifierSecondary==='1'?2:1;
   cameraState.textContent=`Reading IMEI ${slot}…`;
   cameraMessage.classList.add('hidden');
-  let barcodeRaw='';
-  const url=URL.createObjectURL(file);
   try{
-    // Strict rule for photos: read the printed IMEI1:/IMEI2: labels first.
-    // A raw 15-digit barcode has no slot metadata, so accepting the first valid
-    // barcode could put IMEI 2 into the IMEI 1 field (or vice versa).
-    const printed=await decodePrintedImei(file);
-    if(printed.accepted)return;
-
-    if(window.ZXing?.BrowserMultiFormatReader){
-      try{
-        const reader=new ZXing.BrowserMultiFormatReader();
-        const result=await reader.decodeFromImageUrl(url);
-        barcodeRaw=result?.getText?.() ?? result?.text ?? String(result||'');
-      }catch(err){}
-    }
-
-    const otherSlot=slot===1?2:1;
-    if(printed.labelled?.[otherSlot] && !printed.labelled?.[slot] && !(printed.ordered?.length>=2)){
-      cameraShowMessage(`IMEI ${slot} was not found. The photo read IMEI ${otherSlot} instead. Retake closer so both IMEI lines are sharp and visible.`);
+    // For dual-IMEI phones, individual Scan buttons are intentionally slot-bound.
+    // Scan IMEI 1 means "put the one barcode I frame into IMEI 1"; Scan IMEI 2
+    // means the same for slot 2. This is much more reliable for sealed boxes
+    // with several repeated stickers than trying to infer both slots from one photo.
+    if(usesDualImei()){
+      cameraState.textContent=`Reading printed IMEI ${slot}…`;
+      const single=await decodeFastSingleImeiRow(file,slot);
+      if(single.value){
+        if(await cameraAcceptValue(single.value))return;
+      }
+      if(single.ambiguous){
+        cameraShowMessage(`More than one valid IMEI was found. Move closer and keep only the printed IMEI ${slot} row inside the photo.`);
+        return;
+      }
+      cameraShowMessage(`IMEI ${slot} not detected. Frame the printed 15-digit IMEI ${slot} row closely and try again.`);
       return;
     }
 
-    // Never use an unlabeled barcode to decide IMEI 1 vs IMEI 2 on dual-IMEI
-    // phones. Some packaging has a single 1D barcode that represents IMEI 2;
-    // accepting it while Scan IMEI 1 is active would silently swap the slots.
-    // Barcode-only fallback remains available only for non-dual identifier flows.
-    if(barcodeRaw && !usesDualImei() && !printed.labelled?.[1] && !printed.labelled?.[2]){
-      const normalized=String(barcodeRaw||'').replace(/\s+/g,'').trim();
-      if(/^\d{15}$/.test(normalized) && validImeiChecksum(normalized)){
-        if(await cameraAcceptValue(normalized))return;
+    // Non-dual flows (single IMEI / Serial) can accept a direct barcode because
+    // there is no slot ambiguity.
+    const url=URL.createObjectURL(file);
+    try{
+      if(window.ZXing?.BrowserMultiFormatReader){
+        try{
+          const reader=new ZXing.BrowserMultiFormatReader();
+          const result=await reader.decodeFromImageUrl(url);
+          const raw=result?.getText?.() ?? result?.text ?? String(result||'');
+          if(await cameraAcceptValue(raw))return;
+        }catch(err){}
       }
-    }
-
-    if(barcodeRaw){
-      cameraShowMessage(`IMEI ${slot} not confirmed. Retake closer so the IMEI 1 / IMEI 2 lines are sharp and fill most of the photo.`);
-    }else{
-      cameraShowMessage(`IMEI ${slot} not detected. Retake closer so both IMEI lines fill most of the photo.`);
-    }
+    }finally{URL.revokeObjectURL(url);}
+    cameraShowMessage('Barcode not detected. Retake closer with only one identifier barcode visible.');
   }finally{
-    URL.revokeObjectURL(url);
     if(cameraPhotoInput)cameraPhotoInput.value='';
     if(cameraGalleryInput)cameraGalleryInput.value='';
   }
@@ -1231,10 +1980,9 @@ async function decodeLocalPhoto(file){
 function openLocalPhotoScanner(){
   cameraStop();
   cameraState.textContent='Local camera mode';
-  cameraShowMessage('Local HTTP test: take a close-up so the IMEI label fills most of the photo. For owner-sent test photos, use Existing Photo to avoid re-photographing a screen.',false);
+  cameraShowMessage(usesDualImei() ? `Local test: frame the printed ${cameraTargetInput?.dataset.identifierSecondary==='1'?'IMEI 2':'IMEI 1'} row closely. Keep the 15-digit number large and sharp.` : 'Local HTTP test: take a close-up of one identifier barcode.',false);
   if(cameraRetryBtn)cameraRetryBtn.textContent='Open Camera';
   cameraGalleryBtn?.classList.remove('hidden');
-  warmCameraOcr();
   cameraPhotoInput?.click();
 }
 
@@ -1278,6 +2026,11 @@ async function startCameraScanner(input){
   }
 }
 identifierRows.addEventListener('click',e=>{
+  const guidedBtn=e.target.closest('[data-guided-imei-scan]');
+  if(guidedBtn){
+    startGuidedImeiScanner(guidedBtn);
+    return;
+  }
   const pairBtn=e.target.closest('[data-camera-scan-pair]');
   if(pairBtn){
     startImeiPairScanner(pairBtn);
@@ -1291,8 +2044,14 @@ identifierRows.addEventListener('click',e=>{
 document.querySelectorAll('[data-camera-close]').forEach(b=>b.addEventListener('click',closeCameraScanner));
 cameraRetryBtn?.addEventListener('click',()=>{
   if(!cameraTargetInput)return;
+  if(guidedImeiRow){
+    cameraMessage.classList.add('hidden');
+    clearCapturedPhoto();
+    if(!window.isSecureContext)cameraPhotoInput?.click();
+    else startGuidedCameraStep();
+    return;
+  }
   if(cameraPairRow){
-    warmCameraOcr();
     cameraState.textContent='Ready for one close IMEI label photo…';
     cameraMessage.classList.add('hidden');
     cameraPhotoInput?.click();
@@ -1301,18 +2060,64 @@ cameraRetryBtn?.addEventListener('click',()=>{
   if(!window.isSecureContext)openLocalPhotoScanner();
   else startCameraScanner(cameraTargetInput);
 });
+cameraSkipSecondaryBtn?.addEventListener('click',()=>{
+  if(!guidedImeiRow || guidedImeiStep!==2)return;
+  const secondary=guidedImeiRow.querySelector('[data-identifier-secondary]');
+  cameraStop();
+  cameraModal.hidden=true;
+  document.body.classList.remove('modal-open');
+  cameraTargetInput=null;
+  resetGuidedImeiScanner();
+  if(secondary)focusNextIdentifier(secondary);
+});
+
 cameraPhotoInput?.addEventListener('change',()=>{
   const file=cameraPhotoInput.files?.[0];
-  if(file)decodeLocalPhoto(file);
+  if(!file)return;
+  if(guidedImeiRow){
+    showCapturedPhoto(file);
+    cameraPhotoInput.value='';
+    return;
+  }
+  decodeLocalPhoto(file);
 });
 cameraGalleryBtn?.addEventListener('click',()=>{
   if(!cameraTargetInput)return;
-  warmCameraOcr();
   cameraGalleryInput?.click();
 });
 cameraGalleryInput?.addEventListener('change',()=>{
   const file=cameraGalleryInput.files?.[0];
-  if(file)decodeLocalPhoto(file);
+  if(!file)return;
+  if(guidedImeiRow){
+    showCapturedPhoto(file);
+    cameraGalleryInput.value='';
+    return;
+  }
+  decodeLocalPhoto(file);
+});
+
+cameraCapturedPreview?.addEventListener('click',async e=>{
+  if(!guidedImeiRow || !cameraCapturedFile || cameraBusy)return;
+  const point=previewNormalizedPoint(e);
+  if(!point)return;
+  const slot=guidedImeiStep===2?2:1;
+  cameraBusy=true;
+  cameraMessage.classList.add('hidden');
+  try{
+    const result=await ocrTappedImeiRegion(cameraCapturedFile,point.x,point.y,slot);
+    if(result.value){
+      if(await cameraAcceptValue(result.value))return;
+    }
+    if(result.candidates?.length>1){
+      cameraShowMessage(`More than one valid IMEI was found near that point. Tap directly on the printed IMEI ${slot} digits.`,true,`IMEI ${slot} needs a closer tap`);
+    }else{
+      cameraShowMessage(`IMEI ${slot} was not read from that tap. Tap the middle of the printed 15-digit number. If this is a saved/Viber image, use the original photo instead of photographing the laptop screen.`,true,`IMEI ${slot} not read`);
+    }
+  }catch(err){
+    cameraShowMessage(`Could not read IMEI ${slot}. Tap the printed digits again, or choose Use Existing Photo for the original image.`,true,`IMEI ${slot} not read`);
+  }finally{
+    cameraBusy=false;
+  }
 });
 
 function bindIdentifierInputs(){
