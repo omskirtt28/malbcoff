@@ -74,13 +74,15 @@
   async function readSerial(source, { live = false, cancelled = () => false } = {}) {
     configure();
     const values = new Set();
-    for (const angle of (live ? [0] : [0, -4, 4])) {
+    for (const angle of (live ? [0] : [0, -4, 4, -8, 8])) {
       if (cancelled()) return { values: [] };
-      const { canvas } = canvasFrom(source, angle, live ? 1600 : 2400);
+      // Keep fine bars from a full phone photograph; let the decoder try its
+      // own smaller scales instead of discarding detail before the first pass.
+      const { canvas } = canvasFrom(source, angle, live ? 1600 : 4096);
       const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
       const codes = await window.ZXingWASM.readBarcodes(pixels, {
         formats: ['Code128', 'Code39', 'Code93', 'DataMatrix'], tryHarder: true,
-        tryRotate: true, tryDownscale: false, maxNumberOfSymbols: 64
+        tryRotate: true, tryDownscale: !live, maxNumberOfSymbols: 64
       });
       if (cancelled()) return { values: [] };
       for (const code of codes) {

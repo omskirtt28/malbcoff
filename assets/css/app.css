@@ -864,6 +864,14 @@
 .camera-scan-actions{gap:8px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
 .camera-scan-actions .camera-gallery-btn{margin-top:0;width:auto}
 .camera-single-result{width:100%;margin-top:12px;white-space:normal;overflow-wrap:anywhere;min-height:44px}
+.camera-serial-review{display:grid;gap:10px;margin-top:12px;padding:14px;background:#f4f8ff;border:1px solid #cbdcf8;border-radius:12px}
+.camera-serial-review input{font-family:monospace;font-size:18px;letter-spacing:.08em;text-transform:uppercase;width:100%}
+.camera-serial-review small{color:var(--muted)}
+.camera-serial-candidates{display:flex;gap:8px;flex-wrap:wrap}
+.camera-serial-candidates:empty{display:none}
+.camera-serial-candidates .btn{font-family:monospace;font-size:14px;min-height:40px}
+#cameraScanVideo[hidden]{display:none}
+#cameraScanGuide.is-photo-tap{display:none}
 @media(max-width:700px){
   .camera-scan-modal{padding:8px}
   .camera-scan-dialog{max-height:calc(100dvh - 16px);border-radius:18px;align-self:center}

@@ -251,6 +251,11 @@ foreach ($accessories as $accessory) {
 #cameraCapturedPreview:not([hidden]){z-index:1}
 #cameraScanStage .camera-scan-guide{z-index:2;pointer-events:none}
 #cameraScanStage .camera-scan-state{z-index:3}
+#cameraScanStage .camera-scan-state{pointer-events:none}
+#cameraSerialSelection{position:absolute;z-index:4;border:2px solid #1670ea;background:rgba(22,112,234,.12);pointer-events:none}
+.camera-serial-crop{margin-top:12px;padding:10px;border:1px solid #cbdcf8;border-radius:12px;background:#fff}
+.camera-serial-crop img{display:block;max-width:100%;max-height:100px;margin:8px auto;object-fit:contain}
+.camera-serial-crop small{color:var(--muted)}
 #cameraScanStage .camera-scan-guide.is-photo-tap span{border-style:dashed}
 .camera-scan-actions{flex-wrap:wrap;gap:10px}
 .camera-scan-actions .btn{min-height:46px}
@@ -273,12 +278,20 @@ foreach ($accessories as $accessory) {
         <div class="modal-body">
             <div class="camera-scan-stage" id="cameraScanStage">
                 <video id="cameraScanVideo" playsinline muted></video>
-                <img id="cameraCapturedPreview" alt="Captured IMEI label" hidden style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b1422;touch-action:manipulation;cursor:crosshair;">
+                <img id="cameraCapturedPreview" alt="Captured device label" hidden style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b1422;touch-action:manipulation;cursor:crosshair;">
                 <div class="camera-scan-guide" id="cameraScanGuide"><span></span></div>
                 <div class="camera-scan-state" id="cameraScanState">Starting camera…</div>
+                <div id="cameraSerialSelection" hidden></div>
             </div>
             <div class="camera-scan-message hidden" id="cameraScanMessage" role="status" aria-live="polite"></div>
+            <button class="btn btn-outline hidden" type="button" id="cameraSelectSerialBtn">Select Serial Text</button>
+            <div class="camera-serial-crop" id="cameraSerialCrop" hidden><small>Area being read — include the printed serial, without the barcode.</small><img id="cameraSerialCropImage" alt="Selected serial text"></div>
             <button class="btn btn-primary hidden camera-single-result" type="button" id="cameraUseSingleBtn"></button>
+            <div id="cameraSerialReview" class="camera-serial-review hidden">
+                <label class="field"><span>Check Serial Number against the label</span><input id="cameraSerialValue" type="text" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="TYPE OR CORRECT SERIAL NUMBER"></label>
+                <div id="cameraSerialCandidates" class="camera-serial-candidates"></div>
+                <small>Check each character, especially 0/O, 1/I and 8/B.</small>
+            </div>
             <div class="camera-scan-tips">Keep one phone box label clear and sharp. Repeated copies of the same IMEI pair are accepted; different phone labels are blocked.</div>
         </div>
         <div class="modal-actions camera-scan-actions">
@@ -286,6 +299,7 @@ foreach ($accessories as $accessory) {
             <button class="btn btn-outline camera-gallery-btn hidden" type="button" id="cameraGalleryBtn">Use Existing Photo</button>
             <button class="btn btn-outline hidden" type="button" id="cameraSkipSecondaryBtn">No IMEI 2</button>
             <button class="btn btn-outline" type="button" id="cameraRetryBtn">Take Photo</button>
+            <button class="btn btn-primary hidden" type="button" id="cameraUseSerialBtn">Use Serial Number</button>
         </div>
     </div>
 </div>
@@ -337,6 +351,7 @@ foreach ($accessories as $accessory) {
 <script src="assets/js/imei-reader.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/imei-reader.js') ?>"></script>
 <script src="assets/vendor/legacy-scanner/zxing.min.js"></script>
 <script src="assets/vendor/legacy-scanner/tesseract.min.js"></script>
+<script src="assets/js/serial-label-reader.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/serial-label-reader.js') ?>"></script>
 <script>
 (() => {
 const items = <?= json_encode($itemPayload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
@@ -642,7 +657,20 @@ let cameraBusy=false;
 let cameraSession=0;
 let cameraLastFrame=0;
 let cameraSingleValue='';
+let serialSelecting=false,serialSelectionStart=null,serialSelectionPointer=null,serialIgnoreClickUntil=0;
 const cameraUseSingleBtn=$('cameraUseSingleBtn');
+
+function resetSerialSelection(){
+  serialSelecting=false;serialSelectionStart=null;serialSelectionPointer=null;
+  $('cameraSerialSelection').hidden=true;
+  $('cameraSelectSerialBtn').textContent='Select Serial Text';
+  cameraCapturedPreview.style.touchAction='manipulation';
+}
+function showSerialCrop(image,session){
+  if(session!==cameraSession || cameraModal.hidden)return;
+  $('cameraSerialCropImage').src=image.toDataURL('image/png');
+  $('cameraSerialCrop').hidden=false;
+}
 
 function cameraFieldLabel(input){
   if(input?.dataset.identifierSecondary==='1')return 'IMEI 2';
@@ -651,6 +679,14 @@ function cameraFieldLabel(input){
 }
 function cameraStop(){
   cameraSession++;
+  resetSerialSelection();
+  $('cameraSelectSerialBtn').classList.add('hidden');
+  $('cameraSerialCrop').hidden=true;
+  $('cameraSerialCropImage').removeAttribute('src');
+  $('cameraSerialReview').classList.add('hidden');
+  $('cameraUseSerialBtn').classList.add('hidden');
+  $('cameraSerialCandidates').replaceChildren();
+  $('cameraSerialValue').value='';
   cameraSingleValue='';
   cameraUseSingleBtn?.classList.add('hidden');
   if(cameraFrameHandle)cancelAnimationFrame(cameraFrameHandle);
@@ -679,6 +715,13 @@ function showCapturedPhoto(file){
   cameraCapturedPreview.hidden=false;
   if(cameraVideo)cameraVideo.hidden=true;
   if(cameraScanGuide)cameraScanGuide.classList.add('is-photo-tap');
+  if(identifierKind()==='serial'){
+    $('cameraSelectSerialBtn').classList.remove('hidden');
+    cameraCapturedPreview.alt='Captured Serial Number label; tap the printed Serial No. row';
+    if(cameraRetryBtn)cameraRetryBtn.textContent='Take Another Photo';
+    if(cameraGalleryBtn)cameraGalleryBtn.textContent='Use Different Photo';
+    return;
+  }
   const slot=guidedImeiStep===2?2:1;
   cameraState.textContent='Reading both IMEIs…';
   cameraShowMessage('If this photo clearly contains both valid IMEIs, both fields will fill automatically in top-to-bottom order. Otherwise the first accepted IMEI fills the current step.',false,'Reading device IMEIs');
@@ -835,7 +878,7 @@ async function autoReadCapturedImeiPair(file){
     if(session===cameraSession)cameraBusy=false;
   }
 }
-function previewNormalizedPoint(event){
+function previewNormalizedPoint(event,clamped=false){
   const img=cameraCapturedPreview;
   if(!img || img.hidden || !img.naturalWidth || !img.naturalHeight)return null;
   const rect=img.getBoundingClientRect();
@@ -843,8 +886,8 @@ function previewNormalizedPoint(event){
   const shownW=img.naturalWidth*scale,shownH=img.naturalHeight*scale;
   const left=rect.left+(rect.width-shownW)/2,top=rect.top+(rect.height-shownH)/2;
   const x=event.clientX-left,y=event.clientY-top;
-  if(x<0||y<0||x>shownW||y>shownH)return null;
-  return {x:x/shownW,y:y/shownH};
+  if(!clamped && (x<0||y<0||x>shownW||y>shownH))return null;
+  return {x:Math.max(0,Math.min(1,x/shownW)),y:Math.max(0,Math.min(1,y/shownH))};
 }
 
 function resetGuidedImeiScanner(){
@@ -950,6 +993,7 @@ async function cameraAcceptValue(raw){
   document.body.classList.remove('modal-open');
   cameraTargetInput=null;
   focusNextIdentifier(completed);
+  clearCapturedPhoto();
   return true;
 }
 async function cameraDetectLoop(timestamp=0){
@@ -2016,25 +2060,83 @@ async function decodeSingleImeiBarcodePhoto(file,slot=1){
   }catch(err){}
   return {value:'',unique:[],ambiguous:false,pair:null};
 }
+function showSerialReview(value,message,candidates=[]){
+  $('cameraSerialValue').value=value;
+  $('cameraSerialReview').classList.remove('hidden');
+  $('cameraUseSerialBtn').classList.remove('hidden');
+  const choices=$('cameraSerialCandidates');
+  choices.replaceChildren();
+  if(candidates.length>1){
+    for(const candidate of candidates.slice(0,6)){
+      const button=document.createElement('button');
+      button.type='button';button.className='btn btn-outline';button.textContent=candidate;
+      button.addEventListener('click',()=>{$('cameraSerialValue').value=candidate;});
+      choices.appendChild(button);
+    }
+  }
+  cameraShowMessage(message,false,value?'Check Serial Number':'Tap Serial No. or type below');
+}
+$('cameraUseSerialBtn').addEventListener('click',async()=>{
+  if(cameraBusy || !cameraTargetInput || identifierKind()!=='serial')return;
+  const value=$('cameraSerialValue').value.trim().toUpperCase();
+  if(!MalbcoffImeiReader.validSerial(value)){
+    cameraShowMessage('Enter the letters and numbers printed beside Serial No. An IMEI is not a serial number.');
+    return;
+  }
+  await cameraAcceptValue(value);
+});
+async function readTappedSerial(point,region=null){
+  const session=cameraSession;
+  const file=cameraCapturedFile;
+  cameraBusy=true;
+  $('cameraSerialReview').classList.add('hidden');
+  $('cameraUseSerialBtn').classList.add('hidden');
+  cameraMessage.classList.add('hidden');
+  try{
+    const base=await fileToPairBaseCanvas(file,4096);
+    if(session!==cameraSession)return;
+    const result=await MalbcoffSerialOcr.read(base.canvas,{
+      point,region,cancelled:()=>session!==cameraSession,
+      preview:image=>showSerialCrop(image,session),
+      progress:text=>{if(session===cameraSession)cameraState.textContent=text;}
+    });
+    if(session!==cameraSession || cameraModal.hidden)return;
+    showSerialReview(result.values.length===1?result.values[0]:'',result.values.length===1
+      ? 'Check this reading against the printed Serial No., correct any character, then tap Use Serial Number.'
+      : (result.values.length>1?'Choose the reading that matches the printed Serial No., or correct it below.':'Select Serial Text and draw a box around just the printed letters and numbers. Check the cropped area below, or enter the serial.'),result.values);
+  }catch(err){
+    if(session===cameraSession)showSerialReview('',err?.message || 'Printed reading could not finish. You can type the serial while keeping the label visible.');
+  }finally{
+    if(session===cameraSession)cameraBusy=false;
+  }
+}
 async function decodeLocalPhoto(file){
   if(!file || !cameraTargetInput)return;
   if(identifierKind()==='serial'){
-    cameraStop();
+    showCapturedPhoto(file);
     const session=cameraSession;
     cameraBusy=true;
     cameraState.textContent='Reading Serial Number…';
     cameraMessage.classList.add('hidden');
     try{
-      const base=await fileToPairBaseCanvas(file,2400);
+      const base=await fileToPairBaseCanvas(file,4096);
       if(session!==cameraSession)return;
-      const result=await MalbcoffImeiReader.readSerial(base.canvas,{cancelled:()=>session!==cameraSession});
+      let result={values:[]};
+      try{result=await MalbcoffImeiReader.readSerial(base.canvas,{cancelled:()=>session!==cameraSession});}catch(err){/* Printed-label fallback remains available. */}
       if(session!==cameraSession || cameraModal.hidden)return;
-      if(result.values.length===1){if(await cameraAcceptValue(result.values[0]))return;}
-      else cameraShowMessage(result.values.length>1
-        ? 'Several serial-like codes were found. Take a closer photo of only the Serial Number / S/N barcode.'
-        : 'Serial Number not found. Photograph the barcode beside Serial Number / S/N, or type the printed serial number.');
+      if(result.values.length===1){showSerialReview(result.values[0],'Barcode read. Check the value against the printed Serial No. before using it.');return;}
+      const printed=await MalbcoffSerialOcr.read(base.canvas,{
+        cancelled:()=>session!==cameraSession,
+        preview:image=>showSerialCrop(image,session),
+        progress:text=>{if(session===cameraSession)cameraState.textContent=text;}
+      });
+      if(session!==cameraSession || cameraModal.hidden)return;
+      if(printed.values.length===1)showSerialReview(printed.values[0],'Printed Serial No. read. Check or correct every character, then tap Use Serial Number.');
+      else showSerialReview('',printed.values.length>1
+        ? 'Choose the reading that matches the printed Serial No., or correct it below.'
+        : 'Tap the printed serial value, or choose Select Serial Text and draw a box around the letters and numbers.',printed.values);
     }catch(err){
-      if(session===cameraSession)cameraShowMessage('Serial reader could not run. Refresh and try again, or enter the Serial Number manually.');
+      if(session===cameraSession)showSerialReview('',err?.message || 'The reader could not finish. Keep this photo open and type the printed serial below, or retake a closer photo.');
     }finally{
       if(session===cameraSession)cameraBusy=false;
       cameraPhotoInput.value='';cameraGalleryInput.value='';
@@ -2243,7 +2345,59 @@ cameraGalleryInput?.addEventListener('change',()=>{
   decodeLocalPhoto(file);
 });
 
+$('cameraSelectSerialBtn').addEventListener('click',()=>{
+  if(identifierKind()!=='serial' || !cameraCapturedFile)return;
+  if(serialSelecting){resetSerialSelection();cameraShowMessage('Tap the serial value, or enter it below.',false);return;}
+  // Retire the previous read immediately; its late result must not replace a
+  // newer selection. The OCR queue finishes only its current bounded operation.
+  cameraSession++;cameraBusy=false;
+  showSerialReview($('cameraSerialValue').value,'Drag a box around the printed serial, or enter it below.');
+  serialSelecting=true;
+  cameraCapturedPreview.style.touchAction='none';
+  $('cameraSelectSerialBtn').textContent='Cancel Selection';
+  cameraShowMessage('Drag a box around only the printed serial letters and numbers. Release to read that area.',false,'Select serial text');
+  $('cameraScanStage').scrollIntoView({block:'nearest'});
+});
+function drawSerialSelection(start,end){
+  const img=cameraCapturedPreview,rect=img.getBoundingClientRect(),stage=$('cameraScanStage').getBoundingClientRect();
+  const scale=Math.min(rect.width/img.naturalWidth,rect.height/img.naturalHeight);
+  const width=img.naturalWidth*scale,height=img.naturalHeight*scale;
+  const region={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),w:Math.abs(end.x-start.x),h:Math.abs(end.y-start.y)};
+  const box=$('cameraSerialSelection');box.hidden=false;
+  box.style.left=`${rect.left-stage.left+(rect.width-width)/2+region.x*width}px`;
+  box.style.top=`${rect.top-stage.top+(rect.height-height)/2+region.y*height}px`;
+  box.style.width=`${region.w*width}px`;box.style.height=`${region.h*height}px`;
+  return region;
+}
+cameraCapturedPreview?.addEventListener('pointerdown',e=>{
+  if(!serialSelecting || !e.isPrimary)return;
+  const point=previewNormalizedPoint(e);if(!point)return;
+  e.preventDefault();serialSelectionStart=point;serialSelectionPointer=e.pointerId;
+  cameraCapturedPreview.setPointerCapture(e.pointerId);drawSerialSelection(point,point);
+});
+cameraCapturedPreview?.addEventListener('pointermove',e=>{
+  if(!serialSelecting || !serialSelectionStart || e.pointerId!==serialSelectionPointer)return;
+  e.preventDefault();const point=previewNormalizedPoint(e,true);
+  if(point)drawSerialSelection(serialSelectionStart,point);
+});
+cameraCapturedPreview?.addEventListener('pointerup',e=>{
+  if(!serialSelecting || !serialSelectionStart || e.pointerId!==serialSelectionPointer)return;
+  e.preventDefault();const point=previewNormalizedPoint(e,true);
+  const region=point?drawSerialSelection(serialSelectionStart,point):null;
+  serialIgnoreClickUntil=performance.now()+600;resetSerialSelection();
+  if(!region || region.w*cameraCapturedPreview.naturalWidth<12 || region.h*cameraCapturedPreview.naturalHeight<6){
+    cameraShowMessage('Choose Select Serial Text, then drag a box around the entire serial value.',false);return;
+  }
+  readTappedSerial(null,region);
+});
+cameraCapturedPreview?.addEventListener('pointercancel',()=>{resetSerialSelection();});
 cameraCapturedPreview?.addEventListener('click',async e=>{
+  if(serialSelecting || performance.now()<serialIgnoreClickUntil)return;
+  if(identifierKind()==='serial' && cameraCapturedFile && !cameraBusy){
+    const point=previewNormalizedPoint(e);
+    if(point)readTappedSerial(point);
+    return;
+  }
   if(!guidedImeiRow || !cameraCapturedFile || cameraBusy)return;
   const point=previewNormalizedPoint(e);
   if(!point)return;
