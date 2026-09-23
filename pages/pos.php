@@ -62,6 +62,7 @@ function pos_payment_label(string $method): string {
         <div class="card pos-search-card">
             <div class="pos-section-heading"><div><span class="eyebrow">ADD TO CART</span><h2>Find an item</h2><p>Scan an IMEI, Serial Number or barcode, or search by brand and model.</p></div><div class="pos-search-hint"><?= icon('barcode') ?><span>Scanner ready</span></div></div>
             <label class="pos-search-input"><?= icon('search') ?><input type="search" autocomplete="off" data-pos-search placeholder="Scan or search product…"><kbd>Enter</kbd></label>
+            <button class="btn btn-outline shared-scan-launch" type="button" data-device-scan data-scan-target="[data-pos-search]" data-scan-mode="auto" data-scan-label="Scan Item">Scan with Camera</button>
             <div class="pos-search-status" data-pos-search-status>Start typing or scan an item to search this branch.</div>
             <div class="pos-results" data-pos-results></div>
         </div>

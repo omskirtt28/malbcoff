@@ -898,6 +898,18 @@
 .identifier-pair-scan-card strong{font-size:13px;color:#162033}
 .identifier-pair-scan-card span{font-size:11px;line-height:1.45;color:var(--muted)}
 .identifier-pair-scan-btn{flex:0 0 auto;min-width:150px;white-space:nowrap}
+.shared-scan-launch{margin-top:10px}
+.shared-device-scanner[hidden],.shared-device-scanner [hidden]{display:none!important}
+.shared-device-scanner .modal-body>.field{margin:12px 0}
+.shared-device-scanner [data-photo]{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#101826;cursor:crosshair;touch-action:manipulation}
+.shared-device-scanner [data-selection]{position:absolute;z-index:2;border:2px solid #1670ea;background:rgba(22,112,234,.12);pointer-events:none}
+.shared-device-scanner [data-select]{margin:10px 0}
+.shared-device-scanner [data-value]{font-family:monospace;font-size:18px}
+.shared-scanner-crop{padding:10px;margin:10px 0;border:1px solid #cbdcf8;border-radius:12px;background:#fff}
+.shared-scanner-crop small{color:var(--muted)}
+.shared-scanner-crop img{display:block;max-width:100%;max-height:100px;margin:8px auto;object-fit:contain}
+.shared-device-scanner .camera-scan-actions{flex-wrap:wrap}
+.shared-device-scanner .camera-scan-actions .btn{min-height:44px;white-space:normal}
 @media(max-width:700px){
   .identifier-pair-scan-card{display:grid;gap:12px;padding:14px}
   .identifier-pair-scan-btn{width:100%;min-height:48px}

@@ -206,13 +206,13 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
             ? ($ownerScope ? 'View stock currently assigned to the selected branch.' : 'View available stock across all branches.')
             : 'View available stock across all branches. Your branch is highlighted.' ?></p>
     </div>
-    <?php if($canReceiveStock): ?><a class="btn btn-primary" href="<?= e($receiveHref) ?>"><?= icon('stock') ?> Receive Stock</a><?php endif; ?>
+    <div class="form-action-group"><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#inventoryScanSearch" data-scan-mode="auto" data-scan-label="Scan Inventory Item" data-scan-submit>Scan Search</button><?php if($canReceiveStock): ?><a class="btn btn-primary" href="<?= e($receiveHref) ?>"><?= icon('stock') ?> Receive Stock</a><?php endif; ?></div>
 </section>
 
 <form class="filter-card inventory-filter-card" method="get">
     <input type="hidden" name="page" value="inventory">
     <?php if ($ownerScope): ?><input type="hidden" name="branch" value="<?= (int)$ownerScope ?>"><?php endif; ?>
-    <label class="search-box inventory-search"><?= icon('search') ?><input type="search" name="q" value="<?= e($search) ?>" placeholder="Search product, model, IMEI, serial, barcode…"></label>
+    <label class="search-box inventory-search"><?= icon('search') ?><input id="inventoryScanSearch" type="search" name="q" value="<?= e($search) ?>" placeholder="Search product, model, IMEI, serial, barcode…"></label>
     <label><span>Brand</span><select name="brand"><option value="">All Brands</option><?php foreach ($brands as $brandRow): ?><option value="<?= (int)$brandRow['id'] ?>" <?= $brand===(int)$brandRow['id']?'selected':'' ?>><?= e($brandRow['name']) ?></option><?php endforeach; ?></select></label>
     <label><span>Item Type</span><select name="type"><option value="">All Types</option><option value="phone" <?= $type==='phone'?'selected':'' ?>>Phone</option><option value="tablet" <?= $type==='tablet'?'selected':'' ?>>Tablet</option><option value="accessory" <?= $type==='accessory'?'selected':'' ?>>Accessory</option></select></label>
     <label><span>Branch</span><select name="stock_branch" <?= $ownerScope ? 'disabled' : '' ?>><option value="">All Branches</option><?php foreach ($branches as $branchRow): ?><option value="<?= (int)$branchRow['id'] ?>" <?= $branchFilter===(int)$branchRow['id']?'selected':'' ?>><?= e($branchRow['name']) ?></option><?php endforeach; ?></select><?php if($ownerScope): ?><input type="hidden" name="stock_branch" value="<?= (int)$ownerScope ?>"><?php endif; ?></label>

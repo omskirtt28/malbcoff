@@ -42,6 +42,34 @@
     return [...found];
   }
 
+  function extractImei(text) {
+    const values = new Set();
+    // Keep complete numeric runs. Do not take a 15-digit substring from EID,
+    // join separate rows, or substitute letters to manufacture a valid IMEI.
+    for (const line of String(text || '').toUpperCase().split(/\r?\n/)) {
+      const content = line.replace(/\bIMEI(?:\s*[12](?!\d))?\s*[:#]?/g, ' ');
+      for (const match of content.matchAll(/\d(?:[\t -]*\d)*/g)) {
+        const value = match[0].replace(/[\t -]/g, '');
+        const before = content[match.index - 1] || '';
+        const after = content[match.index + match[0].length] || '';
+        if (/[A-Z]/.test(before + after)) continue;
+        if (window.MalbcoffImeiReader?.valid(value)) values.add(value);
+      }
+    }
+    return [...values];
+  }
+
+  function extractBarcode(text, selected) {
+    const values = new Set();
+    for (const line of String(text || '').split(/\r?\n/)) {
+      const label = /\b(?:BARCODE|UPC|EAN)\s*[:#]?\s*/i.exec(line);
+      if (!selected && !label) continue;
+      const tail = label ? line.slice(label.index + label[0].length) : line;
+      for (const token of tail.match(/[A-Za-z0-9][A-Za-z0-9._\/-]{3,119}/g) || []) values.add(token);
+    }
+    return [...values];
+  }
+
   function canvas(width, height) {
     const out = document.createElement('canvas');
     out.width = Math.max(1, Math.ceil(width)); out.height = Math.max(1, Math.ceil(height));
@@ -219,20 +247,24 @@
     return workerPromise;
   }
 
-  function read(source, { point = null, region = null, cancelled = () => false,
+  function read(source, { type = 'serial', point = null, region = null, cancelled = () => false,
     progress = () => {}, preview = () => {} } = {}) {
     const task = async () => {
       if (cancelled()) return { values: [] };
-      progress('Preparing Serial Number reader…');
+      const label = type === 'imei' ? 'IMEI' : type === 'barcode' ? 'Barcode' : 'Serial Number';
+      const labelMarker = type === 'imei' ? /\bIMEI(?:\s*[12])?\b/ : type === 'barcode' ? /\b(?:BARCODE|UPC|EAN)\b/ : marker;
+      const parse = (text, selected = false) => type === 'imei' ? extractImei(text)
+        : type === 'barcode' ? extractBarcode(text, selected) : extract(text, selected);
+      progress(`Preparing ${label} reader…`);
       const engine = await worker();
       const recognize = async (image, mode, word = false) => {
         if (cancelled()) return null;
         preview(image);
         try {
           const result = await deadline(engine.recognize(image, {
-            tessedit_pageseg_mode: String(mode), tessedit_char_whitelist: word ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' : '',
+            tessedit_pageseg_mode: String(mode), tessedit_char_whitelist: word && type !== 'barcode' ? (type === 'imei' ? '0123456789' : 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') : '',
             preserve_interword_spaces: '1', user_defined_dpi: '300'
-          }, { text: true, blocks: true, hocr: false, tsv: false }), 20000, 'Serial reading took too long. Select a smaller area around the printed serial.');
+          }, { text: true, blocks: true, hocr: false, tsv: false }), 20000, `${label} reading took too long. Select a smaller area around the printed value.`);
           record('ocr-result', { mode, text: result.data?.text || '', confidence: result.data?.confidence });
           return cancelled() ? null : result.data;
         } catch (error) {
@@ -244,7 +276,7 @@
         for (const pass of [{ image, mode: word ? 8 : 7 }, { image: binaryCopy(image), mode: 13 }]) {
           const data = await recognize(pass.image, pass.mode, word);
           if (!data) break;
-          for (const value of extract(data.text, selected)) values.add(value);
+          for (const value of parse(data.text, selected)) values.add(value);
         }
         return [...values];
       };
@@ -254,7 +286,7 @@
           w: region.w * source.width, h: region.h * source.height }, 3200);
       }
       if (cancelled()) return { values: [] };
-      progress(point || region ? 'Isolating the selected serial text…' : 'Finding Serial No. on the label…');
+      progress(point || region ? `Isolating the selected ${label} text…` : `Finding ${label} on the label…`);
       const rows = textRows(working);
       record('rows', { count: rows.length, selected: !!(point || region) });
       if (point || region) {
@@ -295,9 +327,9 @@
       const page = crop(source, { x: 0, y: 0, w: source.width, h: source.height }, 2400);
       const data = await recognize(page, 11);
       if (!data) return { values: [] };
-      const direct = extract(data.text);
+      const direct = parse(data.text);
       if (direct.length) return { values: direct };
-      const labelLines = (data.lines || []).filter(line => line.bbox && marker.test(String(line.text || '').toUpperCase()));
+      const labelLines = (data.lines || []).filter(line => line.bbox && labelMarker.test(String(line.text || '').toUpperCase()));
       const pageScale = source.width / page.width;
       const proximity = row => labelLines.length ? Math.min(...labelLines.map(line =>
         Math.abs(row.y - (line.bbox.y0 + line.bbox.y1) / 2 * pageScale))) : 0;
@@ -308,9 +340,9 @@
         const row = rows[i], image = rowImage(source, row);
         const reading = await recognize(image, 7);
         if (!reading) return { values: [] };
-        const values = extract(reading.text);
+        const values = parse(reading.text);
         if (values.length) return { values };
-        if (marker.test(String(reading.text || '').toUpperCase())) {
+        if (labelMarker.test(String(reading.text || '').toUpperCase())) {
           const found = new Set(await lineRead(image, false));
           // The label may be legible even when the value was rejected as a word.
           // Read only trailing groups on this identified row as serial words.

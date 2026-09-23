@@ -131,5 +131,26 @@
     return summarize(hits);
   }
 
-  window.MalbcoffImeiReader = { read, valid, summarize, readSerial, validSerial };
+  async function readCodes(source, { live = false, cancelled = () => false } = {}) {
+    configure();
+    const values = new Set();
+    for (const angle of (live ? [0] : [0, -4, 4])) {
+      if (cancelled()) return { values: [] };
+      const { canvas } = canvasFrom(source, angle, live ? 1600 : 4096);
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      // Empty formats selects all formats supported by the bundled decoder.
+      const codes = await window.ZXingWASM.readBarcodes(pixels, {
+        formats: [], tryHarder: true, tryRotate: true, tryDownscale: !live, maxNumberOfSymbols: 64
+      });
+      if (cancelled()) return { values: [] };
+      for (const code of codes) {
+        const value = String(code.text || '').trim();
+        if (!code.error && value.length > 0 && value.length <= 120 && !/[\x00-\x1f\x7f]/.test(value)) values.add(value);
+      }
+      if (values.size) break;
+    }
+    return { values: [...values] };
+  }
+
+  window.MalbcoffImeiReader = { read, valid, summarize, readSerial, validSerial, readCodes };
 })();

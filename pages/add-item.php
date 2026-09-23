@@ -100,7 +100,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
         <div class="form-grid two">
             <label class="field"><span>Category <b>*</b></span><select name="category_id" required><option value="">Select category</option><?php foreach($categories as $category): ?><option value="<?= (int)$category['id'] ?>"><?= e($category['name']) ?></option><?php endforeach; ?></select></label>
             <label class="field"><span>Product Name <b>*</b></span><input name="product_name" data-uppercase placeholder="E.G. 20W USB-C CHARGER" required></label>
-            <label class="field span-2"><span>Barcode</span><input name="barcode" placeholder="Scan barcode or enter manually"><small>Optional if the accessory has no barcode yet.</small></label>
+            <div class="field span-2"><label for="accessoryBarcode">Barcode</label><div class="identifier-input-row"><input id="accessoryBarcode" name="barcode" maxlength="120" placeholder="Scan barcode or enter manually"><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#accessoryBarcode" data-scan-mode="barcode" data-scan-label="Scan Accessory Barcode">Scan Barcode</button></div><small>Optional if the accessory has no barcode yet.</small></div>
         </div>
     </section>
     <section class="form-section">
