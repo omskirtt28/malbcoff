@@ -3,7 +3,13 @@
   const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
   const sidebar = qs('#sidebar');
-  qs('[data-sidebar-toggle]')?.addEventListener('click', () => sidebar?.classList.toggle('open'));
+  const openSidebar = () => { sidebar?.classList.add('open'); document.body.classList.add('nav-open'); };
+  const closeSidebar = () => { sidebar?.classList.remove('open'); document.body.classList.remove('nav-open'); };
+  qs('[data-sidebar-toggle]')?.addEventListener('click', () => sidebar?.classList.contains('open') ? closeSidebar() : openSidebar());
+  qs('[data-sidebar-close]')?.addEventListener('click', closeSidebar);
+  qsa('.sidebar .nav-link').forEach(link => link.addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 1100px)').matches) closeSidebar();
+  }));
 
   const typeInputs = qsa('input[name="product_type"]');
   function syncProductType() {
@@ -28,7 +34,11 @@
 
   qsa('[data-global-search]').forEach(input => input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && input.value.trim()) {
-      window.location = 'index.php?page=inventory&q=' + encodeURIComponent(input.value.trim());
+      const params = new URLSearchParams({page:'inventory', q:input.value.trim()});
+      const current = new URL(window.location.href);
+      const branch = current.searchParams.get('branch');
+      if (branch) params.set('branch', branch);
+      window.location = 'index.php?' + params.toString();
     }
   }));
 
@@ -57,6 +67,41 @@
   }
   qsa('[data-unit-modal]').forEach(btn => btn.addEventListener('click', () => openUnits(btn)));
   qsa('[data-modal-close]').forEach(btn => btn.addEventListener('click', () => { if(modal){ modal.hidden=true; document.body.classList.remove('modal-open'); }}));
+
+  // Responsive navigation sheet used on tablets and phones.
+  const mobileMore = qs('[data-mobile-more]');
+  const openMobileMore = () => {
+    if (!mobileMore) return;
+    mobileMore.hidden = false;
+    requestAnimationFrame(() => mobileMore.classList.add('open'));
+    document.body.classList.add('mobile-sheet-open');
+  };
+  const closeMobileMore = () => {
+    if (!mobileMore) return;
+    mobileMore.classList.remove('open');
+    document.body.classList.remove('mobile-sheet-open');
+    window.setTimeout(() => { if (!mobileMore.classList.contains('open')) mobileMore.hidden = true; }, 180);
+  };
+  qs('[data-mobile-more-open]')?.addEventListener('click', openMobileMore);
+  qsa('[data-mobile-more-close]').forEach(button => button.addEventListener('click', closeMobileMore));
+
+  // Convert wide data tables into readable labelled cards on phones without touching backend markup.
+  qsa('table.data-table').forEach(table => {
+    const headers = qsa('thead th', table).map(th => th.textContent.trim());
+    if (!headers.length) return;
+    table.classList.add('is-responsive-table');
+    qsa('tbody tr', table).forEach(row => {
+      qsa(':scope > td', row).forEach((cell, index) => {
+        if (!cell.hasAttribute('colspan') && !cell.dataset.label) cell.dataset.label = headers[index] || '';
+      });
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    closeSidebar();
+    closeMobileMore();
+  });
 
   function escapeHtml(v='') { return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
   function capitalize(v='') { return String(v).replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); }
@@ -488,4 +533,262 @@
     }
   });
   document.querySelectorAll(selector).forEach(toUpper);
+})();
+/* P2-026 — Branch inventory forwarding (approved modal UI) */
+(() => {
+  /* Dedicated inventory-forward.js owns this feature on Inventory pages. */
+  if (window.__malbcoffInventoryForwardDedicated) return;
+  const modal = document.getElementById('forwardInventoryModal');
+  const form = document.getElementById('forwardInventoryForm');
+  if (!modal || !form) return;
+
+  const q = (selector, root = modal) => root.querySelector(selector);
+  const qa = (selector, root = modal) => [...root.querySelectorAll(selector)];
+  let current = null;
+
+  const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[char]));
+
+  const setInlineError = (selector, message = '') => {
+    const box = q(selector);
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = !message;
+  };
+
+  const clearErrors = () => {
+    setInlineError('[data-forward-destination-error]');
+    setInlineError('[data-forward-quantity-error]');
+    setInlineError('[data-forward-units-error]');
+    const generic = q('[data-forward-error]');
+    if (generic) {
+      generic.textContent = '';
+      generic.hidden = true;
+    }
+    qa('.forward-field input, .forward-field select').forEach(control => control.classList.remove('input-error'));
+  };
+
+  const showGeneralError = (message = '') => {
+    const box = q('[data-forward-error]');
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = !message;
+  };
+
+  const selectedUnits = () => qa('input[name="unit_ids[]"]:checked');
+
+  const syncSelectedQuantity = () => {
+    if (!current || current.productType === 'accessory') return;
+    const qty = q('input[name="quantity"]');
+    if (qty) qty.value = String(selectedUnits().length);
+    const selectAll = q('[data-forward-select-all]');
+    const checks = qa('input[name="unit_ids[]"]');
+    if (selectAll) {
+      const allChecked = checks.length > 0 && checks.every(input => input.checked);
+      selectAll.textContent = allChecked ? 'Clear All' : 'Select All';
+    }
+    setInlineError('[data-forward-units-error]');
+  };
+
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    form.reset();
+    const units = q('[data-forward-units]');
+    if (units) units.innerHTML = '';
+    clearErrors();
+    current = null;
+  };
+
+  const formatCondition = row => row.condition_type === 'preloved' ? 'Pre-Loved' : 'Brand New';
+
+  const unitLine = (row, index) => {
+    const identifierType = escapeHtml(row.identifier_type || 'Device ID');
+    const identifier = escapeHtml(row.identifier || row.serial_no || row.imei || '—');
+    const imei2 = row.imei2 ? `<span class="forward-unit-segment"><b>IMEI 2:</b> ${escapeHtml(row.imei2)}</span>` : '';
+    const brand = current.brand ? `<span class="forward-unit-segment"><b>Brand:</b> ${escapeHtml(current.brand)}</span>` : '';
+    const model = current.model ? `<span class="forward-unit-segment"><b>Model:</b> ${escapeHtml(current.model)}</span>` : '';
+    const specs = current.specs && current.specs !== '—' ? `<span class="forward-unit-segment"><b>Unit:</b> ${escapeHtml(current.specs)}</span>` : '';
+    return `
+      <label class="forward-unit-option" title="Unit ${index + 1}">
+        <input type="checkbox" name="unit_ids[]" value="${Number(row.unit_id || 0)}">
+        <span class="forward-unit-check" aria-hidden="true"></span>
+        <span class="forward-unit-line">
+          <span class="forward-unit-segment forward-unit-identifier"><b>${identifierType}:</b> ${identifier}</span>
+          ${imei2}${brand}${model}${specs}
+          <span class="forward-unit-condition">${escapeHtml(formatCondition(row))}</span>
+        </span>
+      </label>`;
+  };
+
+  async function loadUnits() {
+    const list = q('[data-forward-units]');
+    list.innerHTML = '<div class="loading-state">Loading available units…</div>';
+    try {
+      const url = 'actions/product_units.php?product_id=' + encodeURIComponent(current.productId) + '&branch_id=' + encodeURIComponent(current.sourceBranchId);
+      const response = await fetch(url, { headers: { 'Accept':'application/json' } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to load units.');
+      const rows = data.rows || [];
+      if (!rows.length) {
+        list.innerHTML = '<div class="empty-state small"><strong>No available units</strong><span>Refresh the inventory and try again.</span></div>';
+        return;
+      }
+      list.innerHTML = rows.map(unitLine).join('');
+      qa('input[name="unit_ids[]"]').forEach(input => input.addEventListener('change', syncSelectedQuantity));
+      if (rows.length === 1) {
+        const only = q('input[name="unit_ids[]"]');
+        if (only) only.checked = true;
+      }
+      syncSelectedQuantity();
+    } catch (error) {
+      list.innerHTML = '<div class="alert alert-error">' + escapeHtml(error.message) + '</div>';
+    }
+  }
+
+  const openForwardModal = async (button) => {
+    if (!button || button.disabled) return;
+
+    current = {
+      productId: Number(button.dataset.productId || 0),
+      productType: button.dataset.productType || '',
+      sourceBranchId: Number(button.dataset.sourceBranchId || 0),
+      sourceBranch: button.dataset.sourceBranch || '',
+      available: Number(button.dataset.available || 0),
+      product: button.dataset.product || 'Product',
+      productName: button.dataset.productName || button.dataset.product || 'Product',
+      brand: button.dataset.brand || '',
+      model: button.dataset.model || '',
+      specs: button.dataset.specs || '—'
+    };
+
+    form.reset();
+    clearErrors();
+
+    const productIdField = q('input[name="product_id"]');
+    const productName = q('[data-forward-product-name]');
+    const productSpecs = q('[data-forward-product-specs]');
+    const source = q('[data-forward-source]');
+    const available = q('[data-forward-available]');
+    const qty = q('input[name="quantity"]');
+    const unitsWrap = q('[data-forward-units-wrap]');
+
+    if (!productIdField || !productName || !productSpecs || !source || !available || !qty || !unitsWrap) {
+      console.error('Forward Inventory modal is missing a required UI element.');
+      return;
+    }
+
+    productIdField.value = String(current.productId);
+    productName.textContent = current.productName;
+    productSpecs.textContent = [current.brand, current.specs].filter(Boolean).join(' • ') || current.product;
+    source.textContent = current.sourceBranch;
+    available.textContent = current.available + ' available in ' + current.sourceBranch;
+
+    qty.max = String(Math.max(1, current.available));
+    qty.readOnly = current.productType !== 'accessory';
+    qty.value = current.productType === 'accessory' ? '1' : '0';
+    qty.classList.toggle('forward-quantity-readonly', current.productType !== 'accessory');
+    unitsWrap.hidden = current.productType === 'accessory';
+
+    modal.hidden = false;
+    modal.removeAttribute('aria-hidden');
+    document.body.classList.add('modal-open');
+
+    requestAnimationFrame(() => q('select[name="destination_branch_id"]')?.focus());
+    if (current.productType !== 'accessory') await loadUnits();
+  };
+
+  /* Delegated handler keeps Forward working after responsive/table DOM changes. */
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-forward-inventory]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openForwardModal(button).catch(error => {
+      console.error('Unable to open Forward Inventory modal:', error);
+      showGeneralError('Unable to open Forward Inventory. Please refresh and try again.');
+    });
+  });
+
+  qa('[data-forward-close]').forEach(button => button.addEventListener('click', close));
+
+  q('[data-forward-select-all]')?.addEventListener('click', () => {
+    const checks = qa('input[name="unit_ids[]"]');
+    const allChecked = checks.length > 0 && checks.every(input => input.checked);
+    checks.forEach(input => { input.checked = !allChecked; });
+    syncSelectedQuantity();
+  });
+
+  q('select[name="destination_branch_id"]')?.addEventListener('change', () => {
+    setInlineError('[data-forward-destination-error]');
+    q('select[name="destination_branch_id"]')?.classList.remove('input-error');
+  });
+
+  q('input[name="quantity"]')?.addEventListener('input', () => {
+    setInlineError('[data-forward-quantity-error]');
+    q('input[name="quantity"]')?.classList.remove('input-error');
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!current) return;
+    clearErrors();
+
+    const destinationControl = q('select[name="destination_branch_id"]');
+    const quantityControl = q('input[name="quantity"]');
+    const destination = destinationControl.value;
+    const unitIds = selectedUnits().map(input => Number(input.value));
+    const quantity = current.productType === 'accessory' ? Number(quantityControl.value || 0) : unitIds.length;
+    let invalid = false;
+
+    if (!destination) {
+      setInlineError('[data-forward-destination-error]', 'Select the destination branch.');
+      destinationControl.classList.add('input-error');
+      invalid = true;
+    }
+
+    if (current.productType === 'accessory') {
+      if (quantity < 1 || quantity > current.available) {
+        setInlineError('[data-forward-quantity-error]', 'Enter a quantity from 1 to ' + current.available + '.');
+        quantityControl.classList.add('input-error');
+        invalid = true;
+      }
+    } else if (!unitIds.length) {
+      setInlineError('[data-forward-units-error]', 'Select at least one available unit to forward.');
+      invalid = true;
+    }
+
+    if (invalid) return;
+
+    const payload = {
+      _csrf: q('input[name="_csrf"]').value,
+      product_id: current.productId,
+      destination_branch_id: Number(destination),
+      notes: q('textarea[name="notes"]').value.trim(),
+      quantity,
+      unit_ids: unitIds
+    };
+
+    const submit = q('[data-forward-submit]');
+    const originalText = submit.textContent;
+    submit.disabled = true;
+    submit.textContent = 'Forwarding…';
+
+    try {
+      const response = await fetch('actions/forward_inventory.php', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+        body:JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to forward inventory.');
+      submit.textContent = 'Forwarded';
+      setTimeout(() => window.location.reload(), 450);
+    } catch (error) {
+      showGeneralError(error.message);
+      submit.disabled = false;
+      submit.textContent = originalText;
+    }
+  });
 })();

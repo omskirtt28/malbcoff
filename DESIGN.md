@@ -1,7 +1,27 @@
 # Malbcoff Trading POS & Inventory System — UI/UX Design System
 
-**Design source:** current `assets/css/app.css` plus approved owner/branch references in `design-reference/`  
-**Style direction:** clean, business-focused, desktop-first, lightweight, non-technical user friendly
+> **APPROVED PRODUCTION MASTER DESIGN — September 2026**  
+> `design-reference/approved_responsive_ui_reference.png` is the official visual reference for Desktop/Laptop, Tablet, and Phone. It is no longer a concept. Every current and future module must use the same design language, responsive shell, component styling, navigation behavior, forms, tables, modals, buttons, status states, and spacing system.
+
+## Non-Negotiable UI/UX Rule
+
+**One system → one design language → one responsive experience.**
+
+- Desktop keeps the fixed left sidebar and compact top bar.
+- Tablet removes the permanent sidebar and uses the compact header + bottom navigation.
+- Phone uses a true single-column touch interface; wide tables become labelled record cards instead of forcing horizontal desktop layouts.
+- POS responsive order is **Find Item → Cart → Payment → Complete Sale → Recent Sales**.
+- Touch controls on tablet/phone target at least ~44px.
+- Primary blue, white surfaces, light blue-gray background, dark navy text, subtle borders/shadows, rounded cards, and outline icons are the official visual language.
+- Existing POS, sales, inventory, barcode/IMEI/serial, payment, receiving, stock movement, permissions, and database logic must not be changed solely for visual redesign.
+- Shared partials and centralized tokens/components must be reused instead of styling every page independently.
+
+**Master reference file:** `design-reference/approved_responsive_ui_reference.png`
+
+---
+
+**Design source:** `design-reference/approved_responsive_ui_reference.png` + centralized tokens in `assets/css/app.css`  
+**Style direction:** clean, business-focused, responsive-first for desktop/laptop, tablet, and phone
 
 ---
 
@@ -29,10 +49,10 @@ These values reflect the current CSS baseline and should remain the default unle
 
 | Token | Value | Use |
 |---|---|---|
-| Background | `#f6f8fc` | App page background |
+| Background | `#f5f7fb` | App page background |
 | Surface | `#ffffff` | Cards, sidebar, top bar |
 | Surface soft | `#f9fbff` | Secondary surfaces |
-| Text | `#111827` | Main text |
+| Text | `#101828` | Main text |
 | Muted | `#667085` | Supporting text |
 | Muted 2 | `#98a2b3` | Low-emphasis text |
 | Border | `#e4e9f2` | Dividers, cards, inputs |
@@ -58,7 +78,7 @@ Use the existing system stack:
 
 Rules:
 
-- Page title: approximately 30px, bold, compact line height.
+- Page title: approximately 24–28px depending on viewport, bold, compact line height.
 - Card title: 16px, bold.
 - Body: 14px.
 - Supporting labels: 11–13px.
@@ -67,8 +87,8 @@ Rules:
 
 ### Radius and elevation
 
-- Main card radius: `16px`
-- Compact card/input group: `10–12px`
+- Main card radius: `14px`
+- Compact card/input group: `9–12px`
 - Pills/chips: full/999px radius
 - Use subtle shadows only; avoid heavy floating panels.
 
@@ -79,26 +99,27 @@ Rules:
 ### Sidebar
 
 - Fixed left sidebar on desktop.
-- Current width: `228px`.
+- Desktop width: `236px`.
 - Brand block at the top.
 - Navigation links use icon + English label.
 - Active item uses soft blue background and primary blue icon/text.
-- Sign Out and phase indicator belong at the bottom.
+- Branch/user context and Sign Out belong at the bottom.
 - Only show navigation items the current role can actually access.
 
 Current primary navigation:
 
 1. Dashboard
-2. POS — only Owner, Branch Manager, Cashier
-3. Products
-4. Inventory
-5. Receive Stock
-6. Stock Movement — Owner, Branch Manager, Inventory Staff
-7. Users — Owner and Branch Manager
+2. Sales Records — Owner, Branch Manager, Cashier
+3. Inventory
+4. POS — branch-side selling roles only
+5. Products — branch-side operations
+6. Receive Stock — branch-side operations
+7. Stock Movement — Owner, Branch Manager, Inventory Staff
+8. Users — Owner and Branch Manager
 
 ### Top bar
 
-- Current height: `76px`.
+- Desktop height: `72px`; compact responsive height: `66px`.
 - Owner sees a branch scope selector.
 - Non-owner sees a non-editable assigned branch chip.
 - User name and role remain visible on the right.
@@ -106,8 +127,8 @@ Current primary navigation:
 
 ### Main content
 
-- Desktop content max width: approximately `1500px`.
-- Default page padding: `30px`.
+- Desktop content max width: approximately `1480px`.
+- Desktop page padding: approximately `26–28px`, reduced progressively on tablet/phone.
 - Use a page heading with eyebrow, title, description, and at most one strong primary action.
 
 ---
@@ -163,7 +184,7 @@ Never rely on color alone; always include status text.
 - Actions appear at the right edge.
 - Use empty states instead of blank tables.
 - For unit-level inventory, show identifiers in a readable format and allow View Units details rather than overloading the summary table.
-- Avoid horizontal overflow where practical; on narrow screens, allow safe scrolling rather than breaking columns.
+- Desktop tables stay compact and stable. On phones, `data-table` rows become labelled cards when necessary; avoid forcing wide desktop tables or horizontal scrolling.
 
 ### Forms
 

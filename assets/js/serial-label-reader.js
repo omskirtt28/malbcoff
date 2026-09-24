@@ -4,6 +4,7 @@
   'use strict';
   const assets = new URL('../vendor/serial-ocr/', document.currentScript.src).href;
   const marker = /S[E3]R[I1L][A4]L\s*(?:NUMBER|N[O0][.:]?)?|S\s*\/\s*N/;
+  const barcodeMarker = /\b(?:BARCODE|UPC|EAN|SERIAL\s*(?:NUMBER|N[O0]\.?)?|S\s*\/\s*N|SN|MAC(?:\s*ADDRESS)?)(?:\s*[:#]\s*|\s+)/i;
   const excluded = new Set(['SERIALNUMBER', 'SERIALNO', 'IPHONEPROMAX', 'MADEINCHINA',
     'PRODUCTOFCHINA', 'SERIAL', 'NUMBER', 'CALIFORNIA', 'ASSEMBLED', 'TRADEMARKS']);
   const diagnostics = [];
@@ -62,10 +63,17 @@
   function extractBarcode(text, selected) {
     const values = new Set();
     for (const line of String(text || '').split(/\r?\n/)) {
-      const label = /\b(?:BARCODE|UPC|EAN)\s*[:#]?\s*/i.exec(line);
-      if (!selected && !label) continue;
-      const tail = label ? line.slice(label.index + label[0].length) : line;
-      for (const token of tail.match(/[A-Za-z0-9][A-Za-z0-9._\/-]{3,119}/g) || []) values.add(token);
+      const labels = [...line.matchAll(new RegExp(barcodeMarker.source, 'gi'))];
+      if (!selected && !labels.length) continue;
+      const parts = labels.length ? labels.map((label, index) =>
+        line.slice(label.index + label[0].length, labels[index + 1]?.index ?? line.length)) : [line];
+      for (const part of parts) {
+        // S/N and MAC are labels, not part of the identifier. Preserve leading
+        // zeros and punctuation in the actual code; never turn it into a number.
+        for (const token of part.match(/[A-Za-z0-9][A-Za-z0-9._\/:-]*/g) || []) {
+          if (token.length <= 120 && !excluded.has(token.toUpperCase())) values.add(token);
+        }
+      }
     }
     return [...values];
   }
@@ -252,7 +260,7 @@
     const task = async () => {
       if (cancelled()) return { values: [] };
       const label = type === 'imei' ? 'IMEI' : type === 'barcode' ? 'Barcode' : 'Serial Number';
-      const labelMarker = type === 'imei' ? /\bIMEI(?:\s*[12])?\b/ : type === 'barcode' ? /\b(?:BARCODE|UPC|EAN)\b/ : marker;
+      const labelMarker = type === 'imei' ? /\bIMEI(?:\s*[12])?\b/ : type === 'barcode' ? barcodeMarker : marker;
       const parse = (text, selected = false) => type === 'imei' ? extractImei(text)
         : type === 'barcode' ? extractBarcode(text, selected) : extract(text, selected);
       progress(`Preparing ${label} reader…`);

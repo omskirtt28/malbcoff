@@ -7,6 +7,7 @@ if (!Auth::check()) {
 $allowedPages = [
     'dashboard' => 'Dashboard',
     'pos' => 'Point of Sale',
+    'sales-records' => 'Sales Records',
     'products' => 'Products',
     'add-item' => 'Add New Item',
     'inventory' => 'Inventory',
@@ -23,6 +24,11 @@ if (!isset($allowedPages[$page])) {
 if ($page === 'pos' && !pos_role_allowed()) {
     $page = 'dashboard';
     flash('error', 'You do not have access to Point of Sale.');
+}
+
+if ($page === 'sales-records' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'cashier'], true)) {
+    $page = 'dashboard';
+    flash('error', 'You do not have access to Sales Records.');
 }
 
 if ($page === 'stock-movement' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'inventory'], true)) {
@@ -42,4 +48,5 @@ require __DIR__ . '/partials/sidebar.php';
         <?php require __DIR__ . '/pages/' . $page . '.php'; ?>
     </div>
 </main>
+<?php require __DIR__ . '/partials/mobile-nav.php'; ?>
 <?php require __DIR__ . '/partials/footer.php'; ?>

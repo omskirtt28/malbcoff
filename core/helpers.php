@@ -78,6 +78,11 @@ function icon(string $name, string $class = ''): string
         'logout' => '<path d="M10 5H4v14h6"/><path d="m14 8 4 4-4 4"/><path d="M8 12h10"/>',
         'shield' => '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11"/><path d="m9 12 2 2 4-4"/>',
         'alert' => '<path d="M12 3 2.5 20h19z"/><path d="M12 9v4M12 17h.01"/>',
+
+        'menu' => '<path d="M4 7h16M4 12h16M4 17h16"/>',
+        'bell' => '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
+        'more' => '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+        'close' => '<path d="m6 6 12 12M18 6 6 18"/>',
     ];
     $body = $icons[$name] ?? $icons['dashboard'];
     return '<svg class="icon ' . e($class) . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $body . '</svg>';

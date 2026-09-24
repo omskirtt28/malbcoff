@@ -7,6 +7,8 @@ $activeBranch = null;
 $recentSales = [];
 $saleSuccessRaw = flash('sale_success');
 $saleSuccess = $saleSuccessRaw ? json_decode($saleSuccessRaw, true) : null;
+$posReady = false;
+$posMissing = [];
 
 try {
     $branches = Database::query('SELECT id,name,code FROM branches WHERE is_active=1 ORDER BY id')->fetchAll();
@@ -14,7 +16,18 @@ try {
     if ($branchId) {
         $activeBranch = Database::query('SELECT id,name,code FROM branches WHERE id=? AND is_active=1 LIMIT 1', [$branchId])->fetch();
     }
-    if ($activeBranch && Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn()) {
+    $schemaChecks = [
+        'sales table' => (bool)Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn(),
+        'sale_items table' => (bool)Database::query("SHOW TABLES LIKE 'sale_items'")->fetchColumn(),
+        'branch pricing' => branch_pricing_ready(),
+        'inventory condition' => (bool)Database::query("SHOW COLUMNS FROM inventory_units LIKE 'condition_type'")->fetch(),
+        'inventory acquisition cost' => (bool)Database::query("SHOW COLUMNS FROM inventory_units LIKE 'acquisition_cost'")->fetch(),
+        'stock movement pricing snapshots' => (bool)Database::query("SHOW COLUMNS FROM stock_movements LIKE 'unit_cost'")->fetch(),
+    ];
+    foreach ($schemaChecks as $label => $ready) if (!$ready) $posMissing[] = $label;
+    $posReady = !$posMissing;
+
+    if ($activeBranch && $schemaChecks['sales table']) {
         $recentSales = Database::query(
             "SELECT s.sale_no,s.total,s.payment_method,s.created_at,u.name cashier_name
              FROM sales s JOIN users u ON u.id=s.created_by
@@ -25,6 +38,8 @@ try {
     }
 } catch (Throwable $e) {
     $recentSales = [];
+    $posReady = false;
+    $posMissing = ['database schema check'];
 }
 
 function pos_payment_label(string $method): string {
@@ -47,6 +62,22 @@ function pos_payment_label(string $method): string {
     <div class="pos-branch-picker-copy"><span class="eyebrow">CHOOSE SELLING BRANCH</span><h2>Where is this sale happening?</h2><p>Inventory is deducted only from the selected branch. You can switch branches anytime from the top bar.</p></div>
     <div class="pos-branch-grid"><?php foreach($branches as $branch): ?><a class="pos-branch-card" href="index.php?page=pos&branch=<?= (int)$branch['id'] ?>"><div class="pos-branch-icon"><?= icon('branch') ?></div><div><strong><?= e($branch['name']) ?></strong><span>Open POS</span></div><b>→</b></a><?php endforeach; ?></div>
 </section>
+<?php elseif(!$activeBranch): ?>
+<div class="card pos-blocked-state"><div class="empty-icon"><?= icon('branch') ?></div><strong>No active selling branch is assigned</strong><span>Ask the Owner/System Administrator to assign this account to an active branch.</span></div>
+<?php elseif(!$posReady): ?>
+<section class="card pos-setup-state">
+    <div class="empty-icon"><?= icon('alert') ?></div>
+    <div>
+        <span class="eyebrow">POS SETUP REQUIRED</span>
+        <h2>Point of Sale database setup is incomplete</h2>
+        <?php if(Auth::isOwner()): ?>
+            <p>Run <code>database/P2_001_brand_new_pos.sql</code> then <code>database/P2_004_pricing_variant_serial_ux.sql</code> in phpMyAdmin. This preserves the current database and adds the required POS tables/fields.</p>
+            <small>Missing: <?= e(implode(', ', $posMissing)) ?></small>
+        <?php else: ?>
+            <p>Please contact the Owner/System Administrator to finish the POS database setup before processing sales.</p>
+        <?php endif; ?>
+    </div>
+</section>
 <?php else: ?>
 
 <?php if($saleSuccess): ?>
@@ -68,13 +99,13 @@ function pos_payment_label(string $method): string {
         </div>
 
         <div class="card pos-recent-card">
-            <div class="pos-section-heading compact"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent Sales</h2></div><span class="mini-chip"><?= count($recentSales) ?> shown</span></div>
+            <div class="pos-section-heading compact"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent Sales</h2></div><?php if(Auth::isOwner() || in_array($role, ['branch_manager','cashier'], true)): ?><a class="btn btn-ghost btn-sm" href="index.php?page=sales-records<?= Auth::isOwner() && $activeBranch ? '&branch='.(int)$activeBranch['id'] : '' ?>">View All</a><?php else: ?><span class="mini-chip"><?= count($recentSales) ?> shown</span><?php endif; ?></div>
             <?php if(!$recentSales): ?><div class="pos-recent-empty">No completed sales yet for this branch.</div><?php else: ?><div class="pos-recent-list"><?php foreach($recentSales as $sale): ?><div class="pos-recent-row"><div class="pos-recent-icon"><?= icon('receipt') ?></div><div><strong><?= e($sale['sale_no']) ?></strong><span><?= e(date('M d, Y • h:i A', strtotime($sale['created_at']))) ?> • <?= e($sale['cashier_name']) ?></span></div><div><strong><?= peso($sale['total']) ?></strong><span><?= e(pos_payment_label($sale['payment_method'])) ?></span></div></div><?php endforeach; ?></div><?php endif; ?>
         </div>
     </section>
 
     <aside class="card pos-checkout-card">
-        <div class="pos-checkout-header"><div><span class="eyebrow">CURRENT SALE</span><h2>Cart</h2></div><span class="pos-cart-count" data-cart-count>0 items</span></div>
+        <div class="pos-checkout-header"><div><span class="eyebrow">CURRENT SALE</span><h2>Cart</h2></div><div class="pos-cart-header-actions"><button type="button" class="pos-clear-cart" data-clear-cart disabled>Clear</button><span class="pos-cart-count" data-cart-count>0 items</span></div></div>
         <div class="pos-cart-lines" data-cart-lines>
             <div class="pos-cart-empty" data-cart-empty><div class="empty-icon"><?= icon('cart') ?></div><strong>Your cart is empty</strong><span>Search or scan a product to start the sale.</span></div>
         </div>

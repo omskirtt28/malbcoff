@@ -56,6 +56,12 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
                 echo json_encode($response,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
                 exit;
             }
+            $requestedType=(string)($_GET['identifier_type']??'');
+            if(($requestedType==='barcode' && $matchedField!=='serial') || ($requestedType==='imei' && $matchedField==='serial')){
+                $response['message']='Choose the identifier type originally used for this unit before restoring it.';
+                echo json_encode($response,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                exit;
+            }
             $lastAdjustment=Database::query(
                 "SELECT notes,reference_no,quantity FROM stock_movements
                  WHERE unit_id=? AND movement_type='adjustment' AND quantity<0
@@ -136,26 +142,35 @@ try{
 
         $primaryRaw=(array)($_POST['identifiers']??[]);
         $secondaryRaw=(array)($_POST['secondary_identifiers']??[]);
-        $identifiers=[];$secondaryIdentifiers=[];
+        $typeRaw=(array)($_POST['identifier_types']??[]);
+        $identifiers=[];$secondaryIdentifiers=[];$barcodeIdentifiers=[];
         for($i=0;$i<$quantity;$i++){
+            $identifierType=(string)($typeRaw[$i]??'');
+            if(!in_array($identifierType,['','imei','serial','barcode'],true))throw new RuntimeException('Choose a valid identifier type.');
+            // Apple stays serial-only. Other devices explicitly opt into a barcode;
+            // the default path retains its IMEI length and checksum validation.
+            $isBarcode=!$isApple && $identifierType==='barcode';
             $primary=normalize_stock_identifier($primaryRaw[$i]??'');
             $secondary=$dualImeiPhone?normalize_stock_identifier($secondaryRaw[$i]??''):'';
-            if($primary==='') throw new RuntimeException('Please provide IMEI 1 / Serial Number for every device unit.');
+            if($primary==='') throw new RuntimeException('Please provide an IMEI, Serial Number or Barcode for every device unit.');
+            if($isBarcode && !preg_match('/^[\x21-\x7e]{1,120}$/D',$primary))throw new RuntimeException('Barcode values must contain 1 to 120 printable characters without spaces.');
+            if($isBarcode && $secondary!=='')throw new RuntimeException('A unit received by Serial / Barcode must have an empty IMEI 2 field.');
             if($isApple && (!preg_match('/^[A-Z0-9]{1,80}$/',$primary) || !preg_match('/[A-Z]/',$primary))) {
                 throw new RuntimeException('Apple devices require the alphanumeric Serial Number (S/N), not the IMEI or retail barcode.');
             }
-            if($requiresImei && !preg_match('/^\d{15}$/',$primary)) throw new RuntimeException('IMEI 1 must be exactly 15 digits.');
-            if($requiresImei && !stock_valid_imei($primary)) throw new RuntimeException('IMEI 1 is not valid. Scan the IMEI barcode again.');
+            if(!$isBarcode && $requiresImei && !preg_match('/^\d{15}$/',$primary)) throw new RuntimeException('IMEI 1 must be exactly 15 digits. For a device without IMEI, choose Serial / Barcode.');
+            if(!$isBarcode && $requiresImei && !stock_valid_imei($primary)) throw new RuntimeException('IMEI 1 is not valid. Scan the IMEI barcode again.');
             if($dualImeiPhone && $secondary!=='' && !preg_match('/^\d{15}$/',$secondary)) throw new RuntimeException('IMEI 2 must be exactly 15 digits when provided.');
             if($dualImeiPhone && $secondary!=='' && !stock_valid_imei($secondary)) throw new RuntimeException('IMEI 2 is not valid. Scan the IMEI barcode again.');
             if($secondary!=='' && $secondary===$primary) throw new RuntimeException('IMEI 1 and IMEI 2 cannot be the same for the same unit.');
             $identifiers[]=$primary;
             $secondaryIdentifiers[]=$secondary;
+            $barcodeIdentifiers[]=$isBarcode;
         }
 
         $allIdentifiers=$identifiers;
         foreach($secondaryIdentifiers as $secondary)if($secondary!=='')$allIdentifiers[]=$secondary;
-        if(count(array_unique($allIdentifiers))!==count($allIdentifiers))throw new RuntimeException('Duplicate IMEI / Serial Number values were found in this receiving list.');
+        if(count(array_unique($allIdentifiers))!==count($allIdentifiers))throw new RuntimeException('Duplicate IMEI / Serial Number / Barcode values were found in this receiving list.');
 
         $placeholders=implode(',',array_fill(0,count($allIdentifiers),'?'));
         $params=array_merge($allIdentifiers,$allIdentifiers,$allIdentifiers);
@@ -178,6 +193,8 @@ try{
         $conditionGrade=null;$battery=null;
         $newUnitIds=[];$restoredUnitIds=[];
         foreach($identifiers as $index=>$identifier){
+            $isBarcode=$barcodeIdentifiers[$index];
+            $unitUsesDualImei=$dualImeiPhone && !$isBarcode;
             $secondaryIdentifier=$secondaryIdentifiers[$index]??'';
             $existing=$existingByIdentifier[$identifier]??null;
             $secondaryExisting=$secondaryIdentifier!==''?($existingByIdentifier[$secondaryIdentifier]??null):null;
@@ -188,10 +205,13 @@ try{
 
             if($existing){
                 if(($existing['status']??'')!=='adjusted_out') throw new RuntimeException('Identifier '.$identifier.' is already registered.');
-                if($dualImeiPhone && normalize_stock_identifier($existing['imei']??'')!==$identifier){
-                    throw new RuntimeException('Use IMEI 1 to restore this Android phone. IMEI 2 is only the secondary identifier.');
+                if($isBarcode && normalize_stock_identifier($existing['serial_no']??'')!==$identifier){
+                    throw new RuntimeException('This unit was registered by IMEI. Choose its original identifier type to restore it.');
                 }
-                if($dualImeiPhone && $secondaryIdentifier!=='' && !empty($existing['imei2']) && normalize_stock_identifier($existing['imei2'])!==$secondaryIdentifier){
+                if(!$isBarcode && $requiresImei && normalize_stock_identifier($existing['imei']??'')!==$identifier){
+                    throw new RuntimeException('Use the original IMEI 1 to restore this unit, or choose Serial / Barcode if it was registered that way.');
+                }
+                if($unitUsesDualImei && $secondaryIdentifier!=='' && !empty($existing['imei2']) && normalize_stock_identifier($existing['imei2'])!==$secondaryIdentifier){
                     throw new RuntimeException('IMEI 2 does not match the previously registered unit.');
                 }
 
@@ -210,7 +230,7 @@ try{
                     throw new RuntimeException('Identifier '.$identifier.' was removed from another branch. Restore it to its original branch first.');
                 }
 
-                $imei2ForRestore=$dualImeiPhone
+                $imei2ForRestore=$unitUsesDualImei
                     ? ($secondaryIdentifier!==''?$secondaryIdentifier:($existing['imei2']??null))
                     : ($existing['imei2']??null);
                 $updated=Database::query(
@@ -230,8 +250,8 @@ try{
                 continue;
             }
 
-            [$imei,$serial]=stock_identifier_columns($type,$product['connectivity']??null,$identifier,$isApple);
-            $imei2=$dualImeiPhone && $secondaryIdentifier!==''?$secondaryIdentifier:null;
+            [$imei,$serial]=$isBarcode?[null,$identifier]:stock_identifier_columns($type,$product['connectivity']??null,$identifier,$isApple);
+            $imei2=$unitUsesDualImei && $secondaryIdentifier!==''?$secondaryIdentifier:null;
             Database::query(
                 'INSERT INTO inventory_units (product_id,branch_id,imei,imei2,serial_no,condition_type,condition_grade,battery_health,acquisition_cost,selling_price_snapshot,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                 [$productId,$branchId,$imei,$imei2,$serial,$conditionType,$conditionGrade,$battery,$cost,$selling,'available',$userId]

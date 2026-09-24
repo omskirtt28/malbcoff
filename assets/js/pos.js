@@ -11,6 +11,7 @@
   const cartLines = root.querySelector('[data-cart-lines]');
   const cartEmpty = root.querySelector('[data-cart-empty]');
   const cartCount = root.querySelector('[data-cart-count]');
+  const clearCartButton = root.querySelector('[data-clear-cart]');
   const cartJson = root.querySelector('[data-cart-json]');
   const subtotalEl = root.querySelector('[data-subtotal]');
   const totalEl = root.querySelector('[data-total]');
@@ -63,6 +64,7 @@
     totalEl.textContent = money(total);
     completeTotal.textContent = money(total);
     completeButton.disabled = cart.length === 0;
+    if (clearCartButton) clearCartButton.disabled = cart.length === 0;
     cartEmpty.hidden = cart.length !== 0;
 
     cartLines.querySelectorAll('[data-cart-line]').forEach(el => el.remove());
@@ -96,7 +98,15 @@
     if (existingIndex >= 0) {
       if (item.kind === 'accessory') {
         const next = Number(cart[existingIndex].quantity || 1) + 1;
-        if (next <= Number(item.available_qty || 0)) cart[existingIndex].quantity = next;
+        if (next <= Number(item.available_qty || 0)) {
+          cart[existingIndex].quantity = next;
+        } else {
+          searchStatus.textContent = `Maximum available stock reached (${Number(item.available_qty || 0)}).`;
+          return;
+        }
+      } else {
+        searchStatus.textContent = 'That exact serialized unit is already in the cart.';
+        return;
       }
     } else {
       cart.push({...item, quantity: 1});
@@ -140,7 +150,9 @@
     searchStatus.textContent = 'Searching available stock…';
     try {
       const response = await fetch(`${searchUrl}?branch_id=${encodeURIComponent(branchId)}&q=${encodeURIComponent(trimmed)}`, {headers:{Accept:'application/json'}});
-      const data = await response.json();
+      let data;
+      try { data = await response.json(); }
+      catch (_) { throw new Error('POS search returned an invalid response. Please refresh and try again.'); }
       if (searchId !== latestSearch) return;
       if (!response.ok || !data.ok) throw new Error(data.message || 'Unable to search inventory.');
       renderResults(data.items || []);
@@ -160,6 +172,15 @@
     event.preventDefault();
     clearTimeout(searchTimer);
     runSearch(searchInput.value, true);
+  });
+
+  clearCartButton?.addEventListener('click', () => {
+    if (!cart.length) return;
+    if (!window.confirm('Clear all items from the current cart?')) return;
+    cart = [];
+    renderCart();
+    searchStatus.textContent = 'Cart cleared. Scan or search a product to start a new sale.';
+    searchInput?.focus();
   });
 
   cartLines?.addEventListener('click', event => {

@@ -25,7 +25,7 @@ if ($branchId > 0) {
 
 try {
     $rows = Database::query(
-        "SELECT COALESCE(NULLIF(iu.serial_no,''),NULLIF(iu.imei,'')) identifier,
+        "SELECT iu.id unit_id,COALESCE(NULLIF(iu.serial_no,''),NULLIF(iu.imei,'')) identifier,
                 CASE WHEN iu.serial_no IS NOT NULL AND iu.serial_no<>'' THEN 'Serial Number' ELSE 'IMEI 1' END identifier_type,
                 iu.imei,iu.imei2,iu.serial_no,iu.status,iu.condition_type,iu.condition_grade,iu.battery_health,
                 b.id branch_id,b.name branch_name,iu.created_at

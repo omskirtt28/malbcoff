@@ -1,6 +1,7 @@
 <?php
 $inventoryRole = Auth::user()['role'] ?? '';
 $canReceiveStock = in_array($inventoryRole, ['owner','branch_manager','inventory'], true);
+$canForwardStock = in_array($inventoryRole, ['branch_manager','inventory'], true) && (Auth::branchId() ?: 0) > 0;
 $userBranchId = Auth::branchId() ?: null;
 $ownerScope = Auth::isOwner() ? current_branch_scope() : null;
 
@@ -255,7 +256,7 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
 <td><div class="inventory-stock-count"><strong><?= number_format($qty) ?></strong></div></td>
 <td><div class="inventory-location-cell"><strong><?= e($row['branch_name']) ?></strong><?php if($isOwnBranch): ?><span>Your Branch</span><?php endif; ?></div></td>
 <td><span class="status-pill <?= $low?'low':'available' ?>"><?= $low?'Low Stock':'In Stock' ?></span></td>
-<td><button type="button" class="btn btn-outline btn-sm inventory-view-btn" data-unit-modal data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>"><?= icon('eye') ?> View Units</button></td>
+<td><div class="inventory-row-actions"><button type="button" class="btn btn-outline btn-sm inventory-view-btn" data-unit-modal data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>"><?= icon('eye') ?> View Units</button><?php if($canForwardStock && $isOwnBranch): ?><button type="button" class="btn btn-primary btn-sm inventory-forward-btn" data-forward-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-name="<?= e($mainName) ?>" data-brand="<?= e($brandName) ?>" data-model="<?= e($row['product_type']==='accessory' ? $mainName : (string)$row['model_name']) ?>" data-specs="<?= e(inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e($row['product_type']) ?>" data-source-branch-id="<?= (int)$row['branch_id'] ?>" data-source-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Forward</button><?php endif; ?></div></td>
 </tr>
 <?php endforeach; endif; ?>
 </tbody></table></div>
@@ -300,5 +301,83 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
 </div>
 <?php endif; ?>
 </section>
+
+
+
+<?php if($canForwardStock): ?>
+<div class="modal forward-inventory-modal" id="forwardInventoryModal" hidden>
+    <div class="modal-backdrop" data-forward-close></div>
+    <div class="modal-dialog forward-inventory-dialog" role="dialog" aria-modal="true" aria-labelledby="forwardInventoryTitle">
+        <form id="forwardInventoryForm" novalidate>
+            <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
+            <input type="hidden" name="product_id" value="">
+
+            <div class="modal-header forward-modal-header">
+                <div>
+                    <span class="eyebrow">BRANCH TRANSFER</span>
+                    <h2 id="forwardInventoryTitle">Forward Inventory</h2>
+                </div>
+                <button type="button" class="icon-button forward-close-button" data-forward-close aria-label="Close">×</button>
+            </div>
+
+            <div class="modal-body forward-modal-body">
+                <div class="forward-product-summary">
+                    <div class="forward-product-summary-main">
+                        <strong data-forward-product-name>—</strong>
+                        <span data-forward-product-specs>—</span>
+                    </div>
+                    <div class="forward-product-source">Current Location: <b data-forward-source>—</b></div>
+                </div>
+
+                <div class="forward-grid">
+                    <label class="field forward-field" data-forward-destination-field>
+                        <span>Forward To <b>*</b></span>
+                        <select name="destination_branch_id" required>
+                            <option value="">Select destination branch</option>
+                            <?php foreach($branches as $branchRow): if((int)$branchRow['id']===(int)$userBranchId) continue; ?>
+                                <option value="<?= (int)$branchRow['id'] ?>"><?= e($branchRow['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="forward-field-error" data-forward-destination-error hidden></small>
+                    </label>
+
+                    <label class="field forward-field" data-forward-quantity-field>
+                        <span>Quantity <b>*</b></span>
+                        <input type="number" name="quantity" min="1" value="1" inputmode="numeric">
+                        <small class="forward-helper" data-forward-available></small>
+                        <small class="forward-field-error" data-forward-quantity-error hidden></small>
+                    </label>
+                </div>
+
+                <div class="forward-units-section" data-forward-units-wrap hidden>
+                    <div class="forward-unit-heading">
+                        <div>
+                            <strong>Select Unit(s) <b>*</b></strong>
+                            <span>Choose the exact IMEI/serial units to move.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm forward-select-all" data-forward-select-all>Select All</button>
+                    </div>
+                    <div class="forward-unit-list" data-forward-units>
+                        <div class="loading-state">Loading available units…</div>
+                    </div>
+                    <small class="forward-field-error forward-unit-error" data-forward-units-error hidden></small>
+                </div>
+
+                <label class="field forward-notes">
+                    <span>Notes <small>(Optional)</small></span>
+                    <textarea name="notes" maxlength="180" rows="2" placeholder="Example: Initial allocation for Branch 2"></textarea>
+                </label>
+
+                <div class="alert alert-error forward-general-error" data-forward-error hidden></div>
+            </div>
+
+            <div class="modal-actions forward-modal-actions">
+                <button type="button" class="btn btn-secondary" data-forward-close>Cancel</button>
+                <button type="submit" class="btn btn-primary" data-forward-submit>Forward Inventory</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="modal" id="unitModal" hidden><div class="modal-backdrop" data-modal-close></div><div class="modal-dialog"><div class="modal-header"><div><span class="eyebrow">AVAILABLE UNITS</span><h2 data-modal-title>Product Units</h2></div><button type="button" class="icon-button" data-modal-close>×</button></div><div class="modal-body" data-modal-body><div class="loading-state">Select a product to view units.</div></div></div></div>
