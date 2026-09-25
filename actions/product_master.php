@@ -47,13 +47,17 @@ try {
     $pdo = Database::connection();
     $pdo->beginTransaction();
 
+    $createdModelId = null;
     if ($entity === 'brand') handle_brand($action, $id);
-    elseif ($entity === 'model') handle_model($action, $id);
+    elseif ($entity === 'model') $createdModelId = handle_model($action, $id);
     elseif ($entity === 'category') handle_category($action, $id);
     else handle_configuration($action, $id);
 
     $pdo->commit();
     flash('success', success_message($entity, $action));
+    if ($entity === 'model' && $action === 'add' && $createdModelId) {
+        $returnUrl = '../index.php?page=products&view=devices&model='.(int)$createdModelId.'&setup=1#variants';
+    }
 } catch (PDOException $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     if ((string)$e->getCode() === '23000') flash('error', 'That name already exists in Product Master.');
@@ -93,7 +97,7 @@ function handle_brand(string $action, ?int $id): void {
     }
 }
 
-function handle_model(string $action, ?int $id): void {
+function handle_model(string $action, ?int $id): ?int {
     if ($action === 'add') {
         $brandId = filter_var($_POST['brand_id'] ?? null, FILTER_VALIDATE_INT);
         $name = clean_master_name($_POST['name'] ?? '', 150);
@@ -107,7 +111,7 @@ function handle_model(string $action, ?int $id): void {
             throw new RuntimeException('This model already exists under the selected brand.');
         }
         Database::query('INSERT INTO product_models (brand_id,name,device_type,is_active) VALUES (?,?,?,1)', [$brandId,$name,$type]);
-        return;
+        return (int)Database::connection()->lastInsertId();
     }
 
     $model = require_model($id);
@@ -142,6 +146,7 @@ function handle_model(string $action, ?int $id): void {
         if ($used) throw new RuntimeException('This model is already used by inventory. Archive it instead.');
         Database::query('DELETE FROM product_models WHERE id=?', [$model['id']]);
     }
+    return null;
 }
 
 function handle_category(string $action, ?int $id): void {

@@ -52,6 +52,13 @@ if ($destinationBranchId === $sourceBranchId) {
 
 $pdo = Database::connection();
 try {
+    // Explicit setup check so an old database produces a useful message instead of a raw SQL error.
+    $transferTableReady = (bool)Database::query("SHOW TABLES LIKE 'inventory_transfers'")->fetchColumn();
+    $transferUnitsReady = (bool)Database::query("SHOW TABLES LIKE 'inventory_transfer_units'")->fetchColumn();
+    if (!$transferTableReady || !$transferUnitsReady) {
+        throw new RuntimeException('Run database/P2_005_branch_transfer_receiving.sql before forwarding inventory.');
+    }
+
     $pdo->beginTransaction();
 
     $sourceBranch = Database::query('SELECT id,name,code FROM branches WHERE id=? AND is_active=1 LIMIT 1 FOR UPDATE', [$sourceBranchId])->fetch();
@@ -66,7 +73,7 @@ try {
 
     $userId = (int)($user['id'] ?? 0);
     $reference = 'TRF-' . date('Ymd-His') . '-' . strtoupper((string)$sourceBranch['code']) . '-' . strtoupper((string)$destinationBranch['code']) . '-' . strtoupper(bin2hex(random_bytes(2)));
-    $baseNote = 'Forwarded from ' . $sourceBranch['name'] . ' to ' . $destinationBranch['name'];
+    $baseNote = 'Forwarded from ' . $sourceBranch['name'] . ' to ' . $destinationBranch['name'] . ' — Pending receipt';
     $movementNote = $baseNote . ($notes !== '' ? ' — ' . $notes : '');
     $moved = 0;
 
@@ -81,22 +88,11 @@ try {
             throw new RuntimeException('Not enough available stock in your branch. Refresh and try again.');
         }
 
-        Database::query(
+        $updated = Database::query(
             'UPDATE inventory_balances SET quantity=quantity-? WHERE product_id=? AND branch_id=? AND quantity>=?',
             [$quantity, $productId, $sourceBranchId, $quantity]
         );
-        Database::query(
-            'INSERT INTO inventory_balances (product_id,branch_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)',
-            [$productId, $destinationBranchId, $quantity]
-        );
-        Database::query(
-            'INSERT INTO stock_movements (product_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?)',
-            [$productId, $sourceBranchId, 'transfer_out', -$quantity, $reference, $movementNote, $userId]
-        );
-        Database::query(
-            'INSERT INTO stock_movements (product_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?)',
-            [$productId, $destinationBranchId, 'transfer_in', $quantity, $reference, $movementNote, $userId]
-        );
+        if ($updated->rowCount() !== 1) throw new RuntimeException('Inventory changed while forwarding. Refresh and try again.');
         $moved = $quantity;
     } else {
         if (!$unitIds || count($unitIds) > 100) throw new RuntimeException('Select at least one available unit to forward.');
@@ -115,30 +111,53 @@ try {
         foreach ($units as $unit) {
             $unitId = (int)$unit['id'];
             $updated = Database::query(
-                "UPDATE inventory_units SET branch_id=? WHERE id=? AND product_id=? AND branch_id=? AND status='available'",
-                [$destinationBranchId, $unitId, $productId, $sourceBranchId]
+                "UPDATE inventory_units SET status='transferred' WHERE id=? AND product_id=? AND branch_id=? AND status='available'",
+                [$unitId, $productId, $sourceBranchId]
             );
             if ($updated->rowCount() !== 1) throw new RuntimeException('Inventory changed while forwarding. Refresh and try again.');
+        }
+        $moved = count($units);
+    }
 
+    Database::query(
+        'INSERT INTO inventory_transfers (reference_no,product_id,source_branch_id,destination_branch_id,quantity,status,notes,forwarded_by,forwarded_at) VALUES (?,?,?,?,?,\'pending\',?,?,NOW())',
+        [$reference, $productId, $sourceBranchId, $destinationBranchId, $moved, $notes !== '' ? $notes : null, $userId]
+    );
+    $transferId = (int)$pdo->lastInsertId();
+
+    if (($product['product_type'] ?? '') !== 'accessory') {
+        foreach ($unitIds as $unitId) {
+            Database::query(
+                'INSERT INTO inventory_transfer_units (transfer_id,unit_id) VALUES (?,?)',
+                [$transferId, $unitId]
+            );
+        }
+    }
+
+    // Source movement is recorded when custody leaves the source branch.
+    if (($product['product_type'] ?? '') === 'accessory') {
+        Database::query(
+            'INSERT INTO stock_movements (product_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?)',
+            [$productId, $sourceBranchId, 'transfer_out', -$moved, $reference, $movementNote, $userId]
+        );
+    } else {
+        foreach ($unitIds as $unitId) {
             Database::query(
                 'INSERT INTO stock_movements (product_id,unit_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?,?)',
                 [$productId, $unitId, $sourceBranchId, 'transfer_out', -1, $reference, $movementNote, $userId]
             );
-            Database::query(
-                'INSERT INTO stock_movements (product_id,unit_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?,?)',
-                [$productId, $unitId, $destinationBranchId, 'transfer_in', 1, $reference, $movementNote, $userId]
-            );
         }
-        $moved = count($units);
     }
 
     $pdo->commit();
     echo json_encode([
         'success' => true,
-        'message' => $moved . ' unit' . ($moved === 1 ? '' : 's') . ' forwarded to ' . $destinationBranch['name'] . '.',
+        'message' => $moved . ' unit' . ($moved === 1 ? '' : 's') . ' forwarded to ' . $destinationBranch['name'] . '. Pending receiving confirmation.',
         'reference_no' => $reference,
+        'transfer_id' => $transferId,
         'destination_branch' => $destinationBranch['name'],
         'quantity' => $moved,
+        'status' => 'pending',
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

@@ -11,6 +11,7 @@ $allowedPages = [
     'products' => 'Products',
     'add-item' => 'Add New Item',
     'inventory' => 'Inventory',
+    'branch-transfers' => 'Branch Transfers',
     'stock-in' => 'Stock In',
     'stock-movement' => 'Stock Movement',
     'users' => 'Users',
@@ -29,6 +30,11 @@ if ($page === 'pos' && !pos_role_allowed()) {
 if ($page === 'sales-records' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'cashier'], true)) {
     $page = 'dashboard';
     flash('error', 'You do not have access to Sales Records.');
+}
+
+if ($page === 'branch-transfers' && !Auth::isOwner() && !in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true)) {
+    $page = 'dashboard';
+    flash('error', 'You do not have access to Branch Transfers.');
 }
 
 if ($page === 'stock-movement' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'inventory'], true)) {

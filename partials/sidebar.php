@@ -15,6 +15,11 @@ if (!Auth::isOwner()) {
     $navItems[] = ['products', 'products', 'Products'];
 }
 $navItems[] = ['inventory', 'inventory', 'Inventory'];
+// Owner-only shortcut to the existing Product Archive view.
+// The archive backend already enforces owner-only archive mode; this only improves navigation.
+if (Auth::isOwner() || in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true)) {
+    $navItems[] = ['branch-transfers', 'movement', 'Branch Transfers'];
+}
 if (!Auth::isOwner()) {
     $navItems[] = ['stock-in', 'stock', 'Receive Stock'];
 }
@@ -28,6 +33,20 @@ if (Auth::isOwner() || Auth::user()['role'] === 'branch_manager') {
 <?php
 $sidebarUser = Auth::user();
 $sidebarContext = Auth::isOwner() ? 'All Branches' : ($sidebarUser['branch_name'] ?? 'Assigned Branch');
+
+$pendingTransferCount = 0;
+if (!Auth::isOwner() && in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true) && (Auth::branchId() ?: 0) > 0) {
+    try {
+        if (Database::query("SHOW TABLES LIKE 'inventory_transfers'")->fetchColumn()) {
+            $pendingTransferCount = (int)Database::query(
+                "SELECT COUNT(*) FROM inventory_transfers WHERE destination_branch_id=? AND status='pending'",
+                [Auth::branchId()]
+            )->fetchColumn();
+        }
+    } catch (Throwable $e) {
+        $pendingTransferCount = 0;
+    }
+}
 ?>
 <aside class="sidebar" id="sidebar">
 
@@ -41,9 +60,15 @@ $sidebarContext = Auth::isOwner() ? 'All Branches' : ($sidebarUser['branch_name'
     <nav class="sidebar-nav" aria-label="Main navigation">
         <?php foreach ($navItems as [$slug, $iconName, $label]): ?>
             <a href="index.php?page=<?= e($slug) ?>" class="nav-link <?= ($page === $slug || ($slug === 'products' && $page === 'add-item')) ? 'active' : '' ?>">
-                <?= icon($iconName) ?><span><?= e($label) ?></span>
+                <?= icon($iconName) ?><span><?= e($label) ?></span><?php if ($slug === 'branch-transfers' && $pendingTransferCount > 0): ?><b class="nav-count"><?= $pendingTransferCount > 99 ? '99+' : (int)$pendingTransferCount ?></b><?php endif; ?>
             </a>
         <?php endforeach; ?>
+        <?php if (Auth::isOwner()): ?>
+            <a href="index.php?page=products&amp;status=archived"
+               class="nav-link <?= ($page === 'products' && (($_GET['status'] ?? '') === 'archived')) ? 'active' : '' ?>">
+                <?= icon('archive') ?><span>Archive</span>
+            </a>
+        <?php endif; ?>
     </nav>
     <div class="sidebar-footer">
         <div class="sidebar-context">

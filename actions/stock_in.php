@@ -1,7 +1,16 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
+$ajaxAction = (string)($_POST['ajax_action'] ?? '');
+$isQuickReceive = $_SERVER['REQUEST_METHOD'] === 'POST' && $ajaxAction === 'receive_stock';
+
 if (!Auth::check()) {
+    if ($isQuickReceive) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok'=>false,'error'=>'Your session expired. Please sign in again.']);
+        exit;
+    }
     if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
         http_response_code(401); header('Content-Type: application/json; charset=utf-8'); echo json_encode(['exists'=>false,'error'=>'Unauthenticated']); exit;
     }
@@ -94,15 +103,25 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
     exit;
 }
 
-if(!$canStockIn){flash('error','Your account does not have permission to receive stock.');redirect('../index.php?page=inventory');}
+if(!$canStockIn){
+    if($isQuickReceive){http_response_code(403);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your account does not have permission to receive stock.']);exit;}
+    flash('error','Your account does not have permission to receive stock.');redirect('../index.php?page=inventory');
+}
 if($_SERVER['REQUEST_METHOD']!=='POST')redirect('../index.php?page=stock-in');
-if(!Csrf::verify($_POST['_csrf']??null)){flash('error','Your session expired. Please submit the Receive Stock form again.');redirect('../index.php?page=stock-in');}
+if(!Csrf::verify($_POST['_csrf']??null)){
+    if($isQuickReceive){http_response_code(419);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your session expired. Refresh the page and try again.']);exit;}
+    flash('error','Your session expired. Please submit the Receive Stock form again.');redirect('../index.php?page=stock-in');
+}
 
 $productId=filter_var($_POST['product_id']??null,FILTER_VALIDATE_INT)?:0;
 $requestedBranch=filter_var($_POST['branch_id']??null,FILTER_VALIDATE_INT)?:0;
 $branchId=Auth::isOwner()?$requestedBranch:(Auth::branchId()?:0);
 $returnUrl='../index.php?page=stock-in'.($productId?'&product_id='.$productId:'').(Auth::isOwner()&&$branchId?'&branch='.$branchId:'');
-if(!$productId||!$branchId){flash('error',!$productId?'Please choose a product variant first.':'Please select a valid stock location.');redirect($returnUrl);}
+if(!$productId||!$branchId){
+    $message=!$productId?'Please choose a product variant first.':'Please select a valid stock location.';
+    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
+    flash('error',$message);redirect($returnUrl);
+}
 
 try{
     ensure_stock_in_schema_p1004();
@@ -269,14 +288,26 @@ try{
     }
 
     $pdo->commit();
-    flash('stock_in_success',json_encode(['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+    $successPayload=['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId];
+    if($isQuickReceive){
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok'=>true,'stock'=>$successPayload],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    flash('stock_in_success',json_encode($successPayload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     redirect($returnUrl);
 }catch(PDOException $e){
     if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
-    if((string)$e->getCode()==='23000')flash('error','A duplicate IMEI 1, IMEI 2, Serial Number, or unique inventory record was detected. Nothing was added.');
-    else flash('error','Unable to receive stock. Please check the item details and try again.');
-    redirect($returnUrl);
-}catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();flash('error',$e->getMessage());redirect($returnUrl);}
+    $message=(string)$e->getCode()==='23000'
+        ? 'A duplicate IMEI 1, IMEI 2, Serial Number, or unique inventory record was detected. Nothing was added.'
+        : 'Unable to receive stock. Please check the item details and try again.';
+    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
+    flash('error',$message);redirect($returnUrl);
+}catch(Throwable $e){
+    if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
+    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$e->getMessage()]);exit;}
+    flash('error',$e->getMessage());redirect($returnUrl);
+}
 
 function restore_adjustment_label(string $notes):string{
     $notes=trim($notes);
@@ -347,7 +378,7 @@ function create_receive_variant(array $input):array{
     $isApple=strcasecmp(trim((string)$model['brand_name']),'Apple')===0;
     $storage=normalize_receive_capacity($input['storage']??'');
     $ram=$isApple?null:normalize_receive_capacity($input['ram']??'');
-    $color=($type==='phone'&&$isApple)?clean_receive_text($input['color']??'',80,true):null;
+    $color=clean_receive_text($input['color']??'',80,true);
     $connectivity=$type==='tablet'?clean_receive_text($input['connectivity']??'',40,false):null;
     $selling=max(0,(float)($input['selling_price']??0));
     $requestedBranch=filter_var($input['branch_id']??null,FILTER_VALIDATE_INT)?:0;
@@ -355,7 +386,7 @@ function create_receive_variant(array $input):array{
 
     if($storage==='') throw new RuntimeException('Select the storage.');
     if(!$isApple&&$ram==='') throw new RuntimeException('Select the RAM.');
-    if($type==='phone'&&$isApple&&$color==='') throw new RuntimeException('Enter the color.');
+    if($color==='') throw new RuntimeException('Enter the color.');
     if($type==='tablet'&&!in_array($connectivity,['Wi-Fi','Wi-Fi + Cellular'],true)) throw new RuntimeException('Select the tablet connectivity.');
     if($selling<=0) throw new RuntimeException('Enter a valid selling price.');
 

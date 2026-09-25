@@ -89,7 +89,11 @@
   qsa('table.data-table').forEach(table => {
     const headers = qsa('thead th', table).map(th => th.textContent.trim());
     if (!headers.length) return;
-    table.classList.add('is-responsive-table');
+
+    // Product Models has its own tablet/mobile list treatment so it does not inherit
+    // the generic stacked-card table UI on phones. Other data tables keep the shared behavior.
+    if (!table.classList.contains('master-model-table')) table.classList.add('is-responsive-table');
+
     qsa('tbody tr', table).forEach(row => {
       qsa(':scope > td', row).forEach((cell, index) => {
         if (!cell.hasAttribute('colspan') && !cell.dataset.label) cell.dataset.label = headers[index] || '';
@@ -118,6 +122,112 @@
 
   const capitalize = (value='') => String(value).charAt(0).toUpperCase() + String(value).slice(1);
 
+  function clearSetupErrors(modal) {
+    if (!modal) return;
+    modal.querySelectorAll('[data-field-error]').forEach(error => {
+      error.hidden = true;
+      error.textContent = '';
+    });
+    modal.querySelectorAll('.field.has-error').forEach(field => field.classList.remove('has-error'));
+  }
+
+  function showFieldError(field, message) {
+    if (!field) return;
+    const wrapper = field.closest('.field');
+    wrapper?.classList.add('has-error');
+    const error = wrapper?.querySelector(`[data-field-error="${field.name}"]`);
+    if (error) {
+      error.textContent = message;
+      error.hidden = false;
+    }
+  }
+
+  function setModelStep(modal, step) {
+    if (!modal) return;
+    const normalized = step === 2 ? 2 : 1;
+    modal.dataset.modelStep = String(normalized);
+    modal.querySelectorAll('[data-model-step-panel]').forEach(panel => {
+      panel.hidden = Number(panel.dataset.modelStepPanel || 0) !== normalized;
+    });
+    modal.querySelectorAll('[data-model-step-indicator]').forEach(indicator => {
+      const index = Number(indicator.dataset.modelStepIndicator || 0);
+      indicator.classList.toggle('active', index === normalized);
+      indicator.classList.toggle('complete', index < normalized);
+    });
+  }
+
+  function setModelType(modal, value = 'phone', locked = false) {
+    if (!modal) return;
+    const normalized = value === 'tablet' ? 'tablet' : 'phone';
+    const typeField = modal.querySelector('[data-type-field]');
+    if (typeField) typeField.value = normalized;
+    modal.querySelectorAll('[data-model-type]').forEach(button => {
+      const active = button.dataset.modelType === normalized;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.disabled = !!locked;
+    });
+  }
+
+  function syncModelReview(modal) {
+    if (!modal) return;
+    const brandField = modal.querySelector('[data-brand-field]');
+    const nameField = modal.querySelector('[data-name-field]');
+    const typeField = modal.querySelector('[data-type-field]');
+    const brandName = brandField?.selectedOptions?.[0]?.textContent?.trim() || '—';
+    const modelName = nameField?.value?.trim() || '—';
+    const type = typeField?.value === 'tablet' ? 'tablet' : 'phone';
+    const typeLabel = type === 'tablet' ? 'Tablet' : 'Phone';
+    const mark = (brandName === '—' ? 'BR' : brandName.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()) || 'BR';
+
+    modal.querySelectorAll('[data-review-brand]').forEach(el => { el.textContent = brandName; });
+    modal.querySelectorAll('[data-review-brand-row]').forEach(el => { el.textContent = brandName; });
+    modal.querySelectorAll('[data-review-name]').forEach(el => { el.textContent = modelName; });
+    modal.querySelectorAll('[data-review-name-row]').forEach(el => { el.textContent = modelName; });
+    modal.querySelectorAll('[data-review-type]').forEach(el => { el.textContent = typeLabel; });
+    modal.querySelectorAll('[data-review-type-row]').forEach(el => { el.textContent = typeLabel; });
+    modal.querySelectorAll('[data-review-mark]').forEach(el => { el.textContent = mark; });
+    const chip = modal.querySelector('[data-review-type-chip]');
+    if (chip) {
+      chip.classList.toggle('phone', type === 'phone');
+      chip.classList.toggle('tablet', type === 'tablet');
+    }
+  }
+
+  function validateModelDetails(modal) {
+    if (!modal) return false;
+    clearSetupErrors(modal);
+    const brandField = modal.querySelector('[data-brand-field]');
+    const nameField = modal.querySelector('[data-name-field]');
+    let valid = true;
+
+    if (!brandField?.value) {
+      showFieldError(brandField, 'Please select a brand.');
+      valid = false;
+    }
+    if (!nameField?.value?.trim()) {
+      showFieldError(nameField, 'Please enter the model name.');
+      valid = false;
+    }
+    if (!valid) {
+      (modal.querySelector('.field.has-error input, .field.has-error select'))?.focus();
+      return false;
+    }
+    syncModelReview(modal);
+    return true;
+  }
+
+  function updateBrandPreview(modal) {
+    if (!modal) return;
+    const name = modal.querySelector('[data-name-field]')?.value?.trim() || '';
+    const clean = name.replace(/[^A-Za-z0-9]/g, '');
+    const initials = clean.slice(0, 2).toUpperCase() || 'BR';
+    const previewName = modal.querySelector('[data-brand-preview-name]');
+    const previewInitials = modal.querySelector('[data-brand-preview-initials]');
+    if (previewName) previewName.textContent = name || 'New Brand';
+    if (previewInitials) previewInitials.textContent = initials;
+  }
+
   function openModal(button) {
     const entity = button.dataset.masterOpen;
     const modal = modalMap[entity];
@@ -132,6 +242,9 @@
     const nameField = form.querySelector('[data-name-field]');
 
     form.reset();
+    form.dataset.mode = mode;
+    modal.dataset.mode = mode;
+    clearSetupErrors(modal);
     form.querySelectorAll('[data-master-mirror]').forEach(el => el.remove());
 
     if (title) title.textContent = (mode === 'edit' ? 'Edit ' : 'Add ') + capitalize(entity);
@@ -205,20 +318,44 @@
       }
     }
 
+    if (entity === 'brand') {
+      const eyebrow = modal.querySelector('[data-master-eyebrow]');
+      const subtitle = modal.querySelector('[data-master-subtitle]');
+      const submitLabel = modal.querySelector('[data-submit-label]');
+      if (mode === 'edit') {
+        if (eyebrow) eyebrow.textContent = 'EDIT BRAND';
+        if (title) title.textContent = 'Edit Brand';
+        if (subtitle) subtitle.textContent = 'Update the global brand name used by Product Setup.';
+        if (submitLabel) submitLabel.textContent = 'Save Changes';
+      } else {
+        if (eyebrow) eyebrow.textContent = 'ADD BRAND';
+        if (title) title.textContent = 'Create New Brand';
+        if (subtitle) subtitle.textContent = 'Add a reusable device brand for Product Setup.';
+        if (submitLabel) submitLabel.textContent = 'Create Brand';
+      }
+      updateBrandPreview(modal);
+    }
+
     if (entity === 'model') {
       const brandField = form.querySelector('[data-brand-field]');
       const typeField = form.querySelector('[data-type-field]');
       const note = form.querySelector('[data-model-edit-note]');
+      const eyebrow = modal.querySelector('[data-master-eyebrow]');
+      const subtitle = modal.querySelector('[data-master-subtitle]');
+      const stepper = modal.querySelector('[data-model-stepper]');
+      const nextButton = modal.querySelector('[data-model-next]');
+      const editSubmit = modal.querySelector('[data-model-edit-submit]');
       const preferredBrand = button.dataset.brandId || '';
-
-      if (brandField) brandField.value = mode === 'edit' ? preferredBrand : preferredBrand;
-      if (typeField) typeField.value = mode === 'edit' ? (button.dataset.deviceType || 'phone') : 'phone';
-
       const used = Number(button.dataset.used || 0);
-      if (brandField) brandField.disabled = mode === 'edit' && used > 0;
-      if (typeField) typeField.disabled = mode === 'edit' && used > 0;
+      const locked = mode === 'edit' && used > 0;
 
-      if (mode === 'edit' && used > 0) {
+      if (brandField) brandField.value = preferredBrand;
+      setModelType(modal, mode === 'edit' ? (button.dataset.deviceType || 'phone') : 'phone', locked);
+
+      if (brandField) brandField.disabled = locked;
+      if (typeField) typeField.disabled = locked;
+
+      if (locked) {
         [brandField, typeField].forEach(field => {
           if (!field) return;
           const hidden = document.createElement('input');
@@ -230,8 +367,29 @@
         });
         if (note) note.textContent = 'This model is already used by inventory. You can rename it, but Brand and Device Type are locked.';
       } else if (note) {
-        note.textContent = 'Choose whether the model is a Phone or Tablet.';
+        note.textContent = mode === 'add'
+          ? 'Use the official model name. You can add storage, RAM, color and connectivity as variants next.'
+          : 'Update the model details before saving.';
       }
+
+      if (mode === 'edit') {
+        if (eyebrow) eyebrow.textContent = 'EDIT MODEL';
+        if (title) title.textContent = 'Edit Model';
+        if (subtitle) subtitle.textContent = 'Update this model without changing its existing inventory history.';
+        if (stepper) stepper.hidden = true;
+        setModelStep(modal, 1);
+        if (nextButton) nextButton.hidden = true;
+        if (editSubmit) editSubmit.hidden = false;
+      } else {
+        if (eyebrow) eyebrow.textContent = 'ADD MODEL';
+        if (title) title.textContent = 'Create New Model';
+        if (subtitle) subtitle.textContent = 'Add the basic model first, then manage its variants.';
+        if (stepper) stepper.hidden = false;
+        if (nextButton) nextButton.hidden = false;
+        if (editSubmit) editSubmit.hidden = true;
+        setModelStep(modal, 1);
+      }
+      syncModelReview(modal);
     }
 
     modal.hidden = false;
@@ -246,6 +404,38 @@
   }
 
   document.addEventListener('click', event => {
+    const typeButton = event.target.closest('[data-model-type]');
+    if (typeButton) {
+      const modal = typeButton.closest('#masterModelModal');
+      if (modal && !typeButton.disabled) {
+        event.preventDefault();
+        setModelType(modal, typeButton.dataset.modelType || 'phone', false);
+        syncModelReview(modal);
+      }
+      return;
+    }
+
+    const nextButton = event.target.closest('[data-model-next]');
+    if (nextButton) {
+      const modal = nextButton.closest('#masterModelModal');
+      if (modal) {
+        event.preventDefault();
+        if (validateModelDetails(modal)) setModelStep(modal, 2);
+      }
+      return;
+    }
+
+    const backButton = event.target.closest('[data-model-back]');
+    if (backButton) {
+      const modal = backButton.closest('#masterModelModal');
+      if (modal) {
+        event.preventDefault();
+        setModelStep(modal, 1);
+        modal.querySelector('[data-name-field]')?.focus();
+      }
+      return;
+    }
+
     const openButton = event.target.closest('[data-master-open]');
     if (openButton) {
       event.preventDefault();
@@ -261,10 +451,74 @@
   });
 
   document.addEventListener('submit', event => {
+    const modelForm = event.target.closest('#masterModelModal form');
+    if (modelForm) {
+      const modal = modelForm.closest('#masterModelModal');
+      if (modal?.dataset.mode === 'add' && modal.dataset.modelStep !== '2') {
+        event.preventDefault();
+        if (validateModelDetails(modal)) setModelStep(modal, 2);
+        return;
+      }
+      if (!validateModelDetails(modal)) {
+        event.preventDefault();
+        setModelStep(modal, 1);
+        return;
+      }
+      const submit = modelForm.querySelector('[data-model-create]:not([hidden]), [data-model-edit-submit]:not([hidden])');
+      if (submit) {
+        submit.disabled = true;
+        submit.dataset.originalText = submit.textContent;
+        submit.textContent = modal?.dataset.mode === 'edit' ? 'Saving…' : 'Creating…';
+      }
+    }
+
+    const brandForm = event.target.closest('#masterBrandModal form');
+    if (brandForm) {
+      const modal = brandForm.closest('#masterBrandModal');
+      const nameField = brandForm.querySelector('[data-name-field]');
+      clearSetupErrors(modal);
+      if (!nameField?.value?.trim()) {
+        event.preventDefault();
+        showFieldError(nameField, 'Please enter the brand name.');
+        nameField?.focus();
+        return;
+      }
+      const submit = brandForm.querySelector('[data-submit-label]');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = modal?.dataset.mode === 'edit' ? 'Saving…' : 'Creating…';
+      }
+    }
+
     const form = event.target.closest('form[data-confirm]');
     if (!form) return;
     const message = form.dataset.confirm || 'Continue?';
     if (!window.confirm(message)) event.preventDefault();
+  });
+
+  document.addEventListener('input', event => {
+    const brandModal = event.target.closest('#masterBrandModal');
+    if (brandModal && event.target.matches('[data-name-field]')) {
+      window.setTimeout(() => updateBrandPreview(brandModal), 0);
+    }
+    const modelModal = event.target.closest('#masterModelModal');
+    if (modelModal && event.target.matches('[data-name-field]')) {
+      event.target.closest('.field')?.classList.remove('has-error');
+      const error = event.target.closest('.field')?.querySelector('[data-field-error="name"]');
+      if (error) error.hidden = true;
+      syncModelReview(modelModal);
+    }
+  });
+
+  document.addEventListener('change', event => {
+    const modelModal = event.target.closest('#masterModelModal');
+    if (!modelModal) return;
+    if (event.target.matches('[data-brand-field]')) {
+      event.target.closest('.field')?.classList.remove('has-error');
+      const error = event.target.closest('.field')?.querySelector('[data-field-error="brand_id"]');
+      if (error) error.hidden = true;
+      syncModelReview(modelModal);
+    }
   });
 
   document.addEventListener('keydown', event => {

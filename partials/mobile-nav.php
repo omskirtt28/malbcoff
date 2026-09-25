@@ -13,6 +13,9 @@ if (!Auth::isOwner()) {
     $mobileItems[] = ['products', 'products', 'Products'];
 }
 $mobileItems[] = ['inventory', 'inventory', 'Inventory'];
+if (Auth::isOwner() || in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) {
+    $mobileItems[] = ['branch-transfers', 'movement', 'Transfers'];
+}
 if (!Auth::isOwner()) {
     $mobileItems[] = ['stock-in', 'stock', 'Receive Stock'];
 }
@@ -34,6 +37,19 @@ foreach ($mobileItems as $item) {
     else $secondary[] = $item;
 }
 $mobileContext = Auth::isOwner() ? 'Owner View' : ($mobileUser['branch_name'] ?? 'Assigned Branch');
+$mobilePendingTransferCount = 0;
+if (!Auth::isOwner() && in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true) && (Auth::branchId() ?: 0) > 0) {
+    try {
+        if (Database::query("SHOW TABLES LIKE 'inventory_transfers'")->fetchColumn()) {
+            $mobilePendingTransferCount = (int)Database::query(
+                "SELECT COUNT(*) FROM inventory_transfers WHERE destination_branch_id=? AND status='pending'",
+                [Auth::branchId()]
+            )->fetchColumn();
+        }
+    } catch (Throwable $e) {
+        $mobilePendingTransferCount = 0;
+    }
+}
 ?>
 <nav class="mobile-bottom-nav" aria-label="Mobile primary navigation">
     <?php foreach ($primary as [$slug, $iconName, $label]): ?>
@@ -57,7 +73,7 @@ $mobileContext = Auth::isOwner() ? 'Owner View' : ($mobileUser['branch_name'] ??
         <div class="mobile-more-links">
             <?php foreach ($secondary as [$slug, $iconName, $label]): ?>
                 <?php $active = $page === $slug || ($slug === 'products' && $page === 'add-item'); ?>
-                <a href="index.php?page=<?= e($slug) ?>" class="<?= $active ? 'active' : '' ?>"><?= icon($iconName) ?><span><?= e($label) ?></span><?= icon('chevron') ?></a>
+                <a href="index.php?page=<?= e($slug) ?>" class="<?= $active ? 'active' : '' ?>"><?= icon($iconName) ?><span><?= e($label) ?></span><?php if ($slug === 'branch-transfers' && $mobilePendingTransferCount > 0): ?><b class="nav-count"><?= $mobilePendingTransferCount > 99 ? '99+' : (int)$mobilePendingTransferCount ?></b><?php endif; ?><?= icon('chevron') ?></a>
             <?php endforeach; ?>
         </div>
         <a class="mobile-more-signout" href="logout.php"><?= icon('logout') ?><span>Sign Out</span></a>
