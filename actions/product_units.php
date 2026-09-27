@@ -24,17 +24,53 @@ if ($branchId > 0) {
 }
 
 try {
+    $transferTablesReady = (bool)Database::query("SHOW TABLES LIKE 'inventory_transfers'")->fetchColumn()
+        && (bool)Database::query("SHOW TABLES LIKE 'inventory_transfer_units'")->fetchColumn();
+
+    $transferSelect = $transferTablesReady
+        ? ",\n                (SELECT t.received_at\n                 FROM inventory_transfer_units itu\n                 JOIN inventory_transfers t ON t.id=itu.transfer_id\n                 WHERE itu.unit_id=iu.id\n                   AND t.destination_branch_id=iu.branch_id\n                   AND t.status='received'\n                 ORDER BY t.received_at DESC,t.id DESC LIMIT 1) received_at,\n                (SELECT t.receiver_name\n                 FROM inventory_transfer_units itu\n                 JOIN inventory_transfers t ON t.id=itu.transfer_id\n                 WHERE itu.unit_id=iu.id\n                   AND t.destination_branch_id=iu.branch_id\n                   AND t.status='received'\n                 ORDER BY t.received_at DESC,t.id DESC LIMIT 1) receiver_name,\n                (SELECT t.reference_no\n                 FROM inventory_transfer_units itu\n                 JOIN inventory_transfers t ON t.id=itu.transfer_id\n                 WHERE itu.unit_id=iu.id\n                   AND t.destination_branch_id=iu.branch_id\n                   AND t.status='received'\n                 ORDER BY t.received_at DESC,t.id DESC LIMIT 1) transfer_reference"
+        : ", NULL received_at, NULL receiver_name, NULL transfer_reference";
+
     $rows = Database::query(
         "SELECT iu.id unit_id,COALESCE(NULLIF(iu.serial_no,''),NULLIF(iu.imei,'')) identifier,
                 CASE WHEN iu.serial_no IS NOT NULL AND iu.serial_no<>'' THEN 'Serial Number' ELSE 'IMEI 1' END identifier_type,
                 iu.imei,iu.imei2,iu.serial_no,iu.status,iu.condition_type,iu.condition_grade,iu.battery_health,
-                b.id branch_id,b.name branch_name,iu.created_at
+                b.id branch_id,b.name branch_name,iu.created_at,
+                COALESCE(
+                    (SELECT MIN(sm_origin.created_at)
+                     FROM stock_movements sm_origin
+                     WHERE sm_origin.unit_id=iu.id
+                       AND sm_origin.movement_type='stock_in'
+                       AND sm_origin.quantity>0),
+                    iu.created_at
+                ) original_stock_in,
+                COALESCE(
+                    (SELECT MAX(sm_branch.created_at)
+                     FROM stock_movements sm_branch
+                     WHERE sm_branch.unit_id=iu.id
+                       AND sm_branch.branch_id=iu.branch_id
+                       AND sm_branch.movement_type IN ('stock_in','transfer_in')
+                       AND sm_branch.quantity>0),
+                    iu.created_at
+                ) branch_stocked_in_at
+                {$transferSelect}
          FROM inventory_units iu
          JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
          WHERE {$where}
-         ORDER BY b.id,iu.created_at DESC,iu.id DESC",
+         ORDER BY b.id,branch_stocked_in_at DESC,iu.id DESC",
         $params
     )->fetchAll();
+
+    foreach ($rows as &$row) {
+        foreach (['original_stock_in','branch_stocked_in_at','received_at'] as $key) {
+            $value = trim((string)($row[$key] ?? ''));
+            $row[$key.'_display'] = $value !== '' && strtotime($value) !== false
+                ? date('M d, Y • h:i A', strtotime($value))
+                : '—';
+        }
+    }
+    unset($row);
+
     echo json_encode(['rows'=>$rows], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

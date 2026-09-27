@@ -49,18 +49,40 @@
     document.body.classList.add('modal-open');
     qs('[data-modal-title]', modal).textContent = button.dataset.product || 'Product Units';
     const body = qs('[data-modal-body]', modal);
-    body.innerHTML = '<div class="loading-state">Loading units…</div>';
+    body.innerHTML = '<div class="loading-state">Loading unit history…</div>';
     try {
-      const response = await fetch('actions/product_units.php?product_id=' + encodeURIComponent(button.dataset.productId), {headers:{'Accept':'application/json'}});
+      const params = new URLSearchParams({product_id: button.dataset.productId || ''});
+      if (button.dataset.branchId) params.set('branch_id', button.dataset.branchId);
+      const response = await fetch('actions/product_units.php?' + params.toString(), {headers:{'Accept':'application/json'}});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Unable to load units');
       if (!data.rows?.length) {
-        body.innerHTML = '<div class="empty-state small"><strong>No available units</strong><span>There are no available units for this product right now.</span></div>';
+        body.innerHTML = '<div class="empty-state small"><strong>No available units</strong><span>There are no available serialized units for this product in the selected branch right now.</span></div>';
         return;
       }
-      body.innerHTML = '<div class="unit-list">' + data.rows.map(row => `
-        <div class="unit-row"><div><strong>${escapeHtml(row.identifier_type || 'Device ID')}: ${escapeHtml(row.identifier || row.serial_no || row.imei || '—')}</strong>${row.imei2 ? `<small>IMEI 2: ${escapeHtml(row.imei2)}</small>` : ''}<span>${escapeHtml(row.branch_name || '')}${row.condition_type==='preloved' ? ' • Pre-Loved' : ''}${row.condition_grade ? ' • '+escapeHtml(row.condition_grade) : ''}</span></div><div><span class="status-pill ${row.status==='available'?'available':'low'}">${escapeHtml(capitalize(row.status))}</span>${row.battery_health ? `<small>${row.battery_health}% battery</small>` : ''}</div></div>
-      `).join('') + '</div>';
+      body.innerHTML = '<div class="inventory-unit-history">' + data.rows.map((row, index) => {
+        const receivedAt = row.received_at_display && row.received_at_display !== '—' ? row.received_at_display : 'Direct stock in';
+        const receiver = row.receiver_name || '—';
+        return `
+          <article class="inventory-unit-history-row">
+            <div class="inventory-unit-history-head">
+              <div>
+                <span class="inventory-unit-index">${index + 1}</span>
+                <div>
+                  <strong>${escapeHtml(row.identifier_type || 'Device ID')}: ${escapeHtml(row.identifier || row.serial_no || row.imei || '—')}</strong>
+                  ${row.imei2 ? `<small>IMEI 2: ${escapeHtml(row.imei2)}</small>` : ''}
+                </div>
+              </div>
+              <span class="status-pill ${row.status==='available'?'available':'low'}">${escapeHtml(capitalize(row.status))}</span>
+            </div>
+            <div class="inventory-unit-history-grid">
+              <div><span>Original Stock In</span><strong>${escapeHtml(row.original_stock_in_display || '—')}</strong></div>
+              <div><span>Current Branch</span><strong>${escapeHtml(row.branch_name || '—')}</strong><small>${escapeHtml(row.branch_stocked_in_at_display || '—')}</small></div>
+              <div><span>Received at Branch</span><strong>${escapeHtml(receivedAt)}</strong>${row.transfer_reference ? `<small>${escapeHtml(row.transfer_reference)}</small>` : ''}</div>
+              <div><span>Receiver Name</span><strong>${escapeHtml(receiver)}</strong>${row.condition_type==='preloved' || row.condition_grade ? `<small>${row.condition_type==='preloved' ? 'Pre-Loved' : 'Brand New'}${row.condition_grade ? ' • '+escapeHtml(row.condition_grade) : ''}</small>` : ''}</div>
+            </div>
+          </article>`;
+      }).join('') + '</div>';
     } catch (err) {
       body.innerHTML = '<div class="alert alert-error">' + escapeHtml(err.message) + '</div>';
     }

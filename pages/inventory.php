@@ -11,6 +11,8 @@ $search = trim((string)($_GET['q'] ?? ''));
 $branchFilter = filter_input(INPUT_GET, 'stock_branch', FILTER_VALIDATE_INT) ?: null;
 $statusFilter = (string)($_GET['status'] ?? '');
 $statusFilter = in_array($statusFilter, ['available','low'], true) ? $statusFilter : '';
+$dateFrom = inventory_valid_date_filter((string)($_GET['date_from'] ?? ''));
+$dateTo = inventory_valid_date_filter((string)($_GET['date_to'] ?? ''));
 $perPage = (int)($_GET['per_page'] ?? 20);
 $perPage = in_array($perPage, [20,50,100], true) ? $perPage : 20;
 $currentPage = max(1, (int)($_GET['p'] ?? 1));
@@ -82,7 +84,15 @@ try {
         $deviceStocks = Database::query(
             "SELECT iu.product_id,iu.branch_id,b.name branch_name,
                     COUNT(*) available_units,
-                    SUM(CASE WHEN iu.condition_type='preloved' THEN 1 ELSE 0 END) preloved_units
+                    SUM(CASE WHEN iu.condition_type='preloved' THEN 1 ELSE 0 END) preloved_units,
+                    MAX(COALESCE((
+                        SELECT MAX(sm_entry.created_at)
+                        FROM stock_movements sm_entry
+                        WHERE sm_entry.unit_id=iu.id
+                          AND sm_entry.branch_id=iu.branch_id
+                          AND sm_entry.movement_type IN ('stock_in','transfer_in')
+                          AND sm_entry.quantity>0
+                    ), iu.created_at)) last_stock_in
              FROM inventory_units iu
              JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
              WHERE iu.product_id IN ($marks) AND iu.status='available'{$unitBranchFilter}
@@ -100,6 +110,7 @@ try {
                 'branch_name' => (string)$stock['branch_name'],
                 'available_units' => (int)$stock['available_units'],
                 'preloved_units' => (int)$stock['preloved_units'],
+                'last_stock_in' => $stock['last_stock_in'] ?: null,
             ]);
         }
 
@@ -111,7 +122,14 @@ try {
             $balanceParams[] = (int)$ownerScope;
         }
         $accessoryStocks = Database::query(
-            "SELECT ib.product_id,ib.branch_id,b.name branch_name,ib.quantity available_units
+            "SELECT ib.product_id,ib.branch_id,b.name branch_name,ib.quantity available_units,
+                    (SELECT MAX(sm_entry.created_at)
+                     FROM stock_movements sm_entry
+                     WHERE sm_entry.product_id=ib.product_id
+                       AND sm_entry.branch_id=ib.branch_id
+                       AND sm_entry.unit_id IS NULL
+                       AND sm_entry.movement_type IN ('stock_in','transfer_in')
+                       AND sm_entry.quantity>0) last_stock_in
              FROM inventory_balances ib
              JOIN branches b ON b.id=ib.branch_id AND b.is_active=1
              WHERE ib.product_id IN ($marks) AND ib.quantity>0{$balanceBranchFilter}",
@@ -128,11 +146,22 @@ try {
                 'branch_name' => (string)$stock['branch_name'],
                 'available_units' => (int)$stock['available_units'],
                 'preloved_units' => 0,
+                'last_stock_in' => $stock['last_stock_in'] ?: null,
             ]);
         }
 
         if ($branchFilter) {
             $rows = array_values(array_filter($rows, fn(array $row): bool => (int)$row['branch_id'] === (int)$branchFilter));
+        }
+        if ($dateFrom !== '' || $dateTo !== '') {
+            $rows = array_values(array_filter($rows, function(array $row) use ($dateFrom, $dateTo): bool {
+                $stockedAt = trim((string)($row['last_stock_in'] ?? ''));
+                if ($stockedAt === '') return false;
+                $stockDate = substr($stockedAt, 0, 10);
+                if ($dateFrom !== '' && $stockDate < $dateFrom) return false;
+                if ($dateTo !== '' && $stockDate > $dateTo) return false;
+                return true;
+            }));
         }
         if ($statusFilter !== '') {
             $rows = array_values(array_filter($rows, function(array $row) use ($statusFilter): bool {
@@ -159,6 +188,19 @@ try {
     $rows = [];
 }
 
+function inventory_valid_date_filter(string $value): string {
+    $value = trim($value);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) return '';
+    [$year,$month,$day] = array_map('intval', explode('-', $value));
+    return checkdate($month, $day, $year) ? $value : '';
+}
+function inventory_stock_date_parts(?string $value): array {
+    $value = trim((string)$value);
+    if ($value === '') return ['date'=>'—','time'=>'No stock-in record'];
+    $timestamp = strtotime($value);
+    if ($timestamp === false) return ['date'=>'—','time'=>'No stock-in record'];
+    return ['date'=>date('M d, Y', $timestamp), 'time'=>date('h:i A', $timestamp)];
+}
 function inventory_specs(array $row): string {
     if (($row['product_type'] ?? '') === 'accessory') return $row['category_name'] ?: 'Barcode / Quantity';
     $parts = [];
@@ -171,13 +213,15 @@ function inventory_type_label(string $type): string {
     return match($type){'tablet'=>'Tablet','accessory'=>'Accessory',default=>'Phone'};
 }
 function inventory_page_url(array $changes = []): string {
-    global $search,$brand,$type,$branchFilter,$statusFilter,$perPage,$ownerScope;
+    global $search,$brand,$type,$branchFilter,$statusFilter,$dateFrom,$dateTo,$perPage,$ownerScope;
     $params = ['page' => 'inventory'];
     if ($search !== '') $params['q'] = $search;
     if ($brand) $params['brand'] = $brand;
     if ($type !== '') $params['type'] = $type;
     if ($branchFilter) $params['stock_branch'] = $branchFilter;
     if ($statusFilter !== '') $params['status'] = $statusFilter;
+    if ($dateFrom !== '') $params['date_from'] = $dateFrom;
+    if ($dateTo !== '') $params['date_to'] = $dateTo;
     if ($perPage !== 20) $params['per_page'] = $perPage;
     if (Auth::isOwner() && $ownerScope) $params['branch'] = $ownerScope;
     foreach ($changes as $key => $value) {
@@ -205,7 +249,7 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
         <h1>Inventory</h1>
         <p><?= Auth::isOwner()
             ? ($ownerScope ? 'View stock currently assigned to the selected branch.' : 'View available stock across all branches.')
-            : 'View available stock across all branches. Your branch is highlighted.' ?></p>
+            : 'View available stock and stock-in dates across all branches. Your branch is highlighted.' ?></p>
     </div>
     <div class="form-action-group"><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#inventoryScanSearch" data-scan-mode="auto" data-scan-label="Scan Inventory Item" data-scan-submit>Scan Search</button><?php if($canReceiveStock): ?><a class="btn btn-primary" href="<?= e($receiveHref) ?>"><?= icon('stock') ?> Receive Stock</a><?php endif; ?></div>
 </section>
@@ -218,14 +262,16 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
     <label><span>Item Type</span><select name="type"><option value="">All Types</option><option value="phone" <?= $type==='phone'?'selected':'' ?>>Phone</option><option value="tablet" <?= $type==='tablet'?'selected':'' ?>>Tablet</option><option value="accessory" <?= $type==='accessory'?'selected':'' ?>>Accessory</option></select></label>
     <label><span>Branch</span><select name="stock_branch" <?= $ownerScope ? 'disabled' : '' ?>><option value="">All Branches</option><?php foreach ($branches as $branchRow): ?><option value="<?= (int)$branchRow['id'] ?>" <?= $branchFilter===(int)$branchRow['id']?'selected':'' ?>><?= e($branchRow['name']) ?></option><?php endforeach; ?></select><?php if($ownerScope): ?><input type="hidden" name="stock_branch" value="<?= (int)$ownerScope ?>"><?php endif; ?></label>
     <label><span>Status</span><select name="status"><option value="">All Status</option><option value="available" <?= $statusFilter==='available'?'selected':'' ?>>In Stock</option><option value="low" <?= $statusFilter==='low'?'selected':'' ?>>Low Stock</option></select></label>
+    <label class="inventory-date-filter"><span>Date From</span><input type="date" name="date_from" value="<?= e($dateFrom) ?>" max="<?= e($dateTo ?: date('Y-m-d')) ?>"></label>
+    <label class="inventory-date-filter"><span>Date To</span><input type="date" name="date_to" value="<?= e($dateTo) ?>" min="<?= e($dateFrom) ?>" max="<?= e(date('Y-m-d')) ?>"></label>
     <button class="btn btn-primary inventory-apply" type="submit">Apply</button>
     <a class="btn btn-ghost inventory-reset" href="<?= e($resetHref) ?>">Reset</a>
 </form>
 
 <section class="card table-card inventory-table-card">
-<div class="table-wrap inventory-table-wrap"><table class="data-table inventory-table"><colgroup><col class="col-product"><col class="col-specs"><col class="col-stock"><col class="col-location"><col class="col-status"><col class="col-action"></colgroup><thead><tr><th>Product</th><th>Specs</th><th>Available Units</th><th>Stock Location</th><th>Status</th><th>Action</th></tr></thead><tbody>
+<div class="table-wrap inventory-table-wrap"><table class="data-table inventory-table"><colgroup><col class="col-product"><col class="col-specs"><col class="col-stock"><col class="col-location"><col class="col-date"><col class="col-status"><col class="col-action"></colgroup><thead><tr><th>Product</th><th>Specs</th><th>Available Units</th><th>Stock Location</th><th>Last Stock In</th><th>Status</th><th>Action</th></tr></thead><tbody>
 <?php if(!$visibleRows): ?>
-<tr><td colspan="6"><div class="empty-state"><div class="empty-icon"><?= icon('inventory') ?></div><strong>No available stock found</strong><span>Try changing the filters or use Receive Stock when physical items arrive.</span><?php if($canReceiveStock): ?><div class="empty-actions"><a class="btn btn-primary btn-sm" href="<?= e($receiveHref) ?>">Receive Stock</a></div><?php endif; ?></div></td></tr>
+<tr><td colspan="7"><div class="empty-state"><div class="empty-icon"><?= icon('inventory') ?></div><strong>No available stock found</strong><span>Try changing the filters or use Receive Stock when physical items arrive.</span><?php if($canReceiveStock): ?><div class="empty-actions"><a class="btn btn-primary btn-sm" href="<?= e($receiveHref) ?>">Receive Stock</a></div><?php endif; ?></div></td></tr>
 <?php else: foreach($visibleRows as $row):
     $mainName = $row['product_type']==='accessory' ? (string)$row['product_name'] : (string)$row['model_name'];
     $brandName = $row['product_type']==='accessory' ? ((string)$row['category_name'] ?: 'ACCESSORY') : (string)$row['brand_name'];
@@ -255,6 +301,8 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
 <td><span class="inventory-specs-text"><?= e(inventory_specs($row)) ?></span></td>
 <td><div class="inventory-stock-count"><strong><?= number_format($qty) ?></strong></div></td>
 <td><div class="inventory-location-cell"><strong><?= e($row['branch_name']) ?></strong><?php if($isOwnBranch): ?><span>Your Branch</span><?php endif; ?></div></td>
+<?php $stockDateParts = inventory_stock_date_parts($row['last_stock_in'] ?? null); ?>
+<td><div class="inventory-date-cell"><strong><?= e($stockDateParts['date']) ?></strong><span><?= e($stockDateParts['time']) ?></span></div></td>
 <td><span class="status-pill <?= $low?'low':'available' ?>"><?= $low?'Low Stock':'In Stock' ?></span></td>
 <td><div class="inventory-row-actions"><button type="button" class="btn btn-outline btn-sm inventory-view-btn" data-unit-modal data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>"><?= icon('eye') ?> View Units</button><?php if($canForwardStock && $isOwnBranch): ?><button type="button" class="btn btn-primary btn-sm inventory-forward-btn" data-forward-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-name="<?= e($mainName) ?>" data-brand="<?= e($brandName) ?>" data-model="<?= e($row['product_type']==='accessory' ? $mainName : (string)$row['model_name']) ?>" data-specs="<?= e(inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e($row['product_type']) ?>" data-source-branch-id="<?= (int)$row['branch_id'] ?>" data-source-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Forward</button><?php endif; ?></div></td>
 </tr>
@@ -272,6 +320,8 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
             <?php if ($type !== ''): ?><input type="hidden" name="type" value="<?= e($type) ?>"><?php endif; ?>
             <?php if ($branchFilter): ?><input type="hidden" name="stock_branch" value="<?= (int)$branchFilter ?>"><?php endif; ?>
             <?php if ($statusFilter !== ''): ?><input type="hidden" name="status" value="<?= e($statusFilter) ?>"><?php endif; ?>
+            <?php if ($dateFrom !== ''): ?><input type="hidden" name="date_from" value="<?= e($dateFrom) ?>"><?php endif; ?>
+            <?php if ($dateTo !== ''): ?><input type="hidden" name="date_to" value="<?= e($dateTo) ?>"><?php endif; ?>
             <?php if (Auth::isOwner() && $ownerScope): ?><input type="hidden" name="branch" value="<?= (int)$ownerScope ?>"><?php endif; ?>
             <label>Rows per page:
                 <select name="per_page" onchange="this.form.submit()">
@@ -380,4 +430,4 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
 </div>
 <?php endif; ?>
 
-<div class="modal" id="unitModal" hidden><div class="modal-backdrop" data-modal-close></div><div class="modal-dialog"><div class="modal-header"><div><span class="eyebrow">AVAILABLE UNITS</span><h2 data-modal-title>Product Units</h2></div><button type="button" class="icon-button" data-modal-close>×</button></div><div class="modal-body" data-modal-body><div class="loading-state">Select a product to view units.</div></div></div></div>
+<div class="modal" id="unitModal" hidden><div class="modal-backdrop" data-modal-close></div><div class="modal-dialog inventory-unit-modal-dialog"><div class="modal-header"><div><span class="eyebrow">UNIT DETAILS</span><h2 data-modal-title>Product Units</h2></div><button type="button" class="icon-button" data-modal-close>×</button></div><div class="modal-body" data-modal-body><div class="loading-state">Select a product to view units.</div></div></div></div>
