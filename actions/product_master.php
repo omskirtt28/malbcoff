@@ -54,6 +54,8 @@ try {
     else handle_configuration($action, $id);
 
     $pdo->commit();
+    $auditEntityId = $createdModelId ?: $id;
+    Security::audit('catalog.' . $entity . '.' . $action, $entity, $auditEntityId);
     flash('success', success_message($entity, $action));
     if ($entity === 'model' && $action === 'add' && $createdModelId) {
         $returnUrl = '../index.php?page=products&view=devices&model='.(int)$createdModelId.'&setup=1#variants';
@@ -61,10 +63,10 @@ try {
 } catch (PDOException $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     if ((string)$e->getCode() === '23000') flash('error', 'That name already exists in Product Master.');
-    else flash('error', 'Unable to update Products. Please verify the required database migrations.');
+    else { Security::reportException($e, 'product_master'); flash('error', 'Unable to update Products right now. Please try again.'); }
 } catch (Throwable $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-    flash('error', $e->getMessage());
+    flash('error', safe_exception_message($e, 'Unable to update Products right now. Please try again.'));
 }
 redirect($returnUrl);
 
@@ -344,7 +346,7 @@ function valid_device_type(mixed $value): string {
 }
 function ensure_product_master_schema(): void {
     if (!Database::query("SHOW COLUMNS FROM product_models LIKE 'device_type'")->fetch()) {
-        throw new RuntimeException('P1-006 database migration is required before managing models.');
+        throw new RuntimeException('Product setup is incomplete. Contact the system administrator.');
     }
 }
 function success_message(string $entity, string $action): string {

@@ -9,7 +9,18 @@ if (!Auth::check()) {
 }
 
 $productId = filter_input(INPUT_GET, 'product_id', FILTER_VALIDATE_INT) ?: 0;
-$branchId = filter_input(INPUT_GET, 'branch_id', FILTER_VALIDATE_INT) ?: 0;
+$requestedBranchId = filter_input(INPUT_GET, 'branch_id', FILTER_VALIDATE_INT) ?: 0;
+$branchId = $requestedBranchId;
+if (!Auth::isOwner()) {
+    $ownBranchId = Auth::branchId() ?: 0;
+    if ($requestedBranchId > 0 && $requestedBranchId !== $ownBranchId) {
+        Security::audit('inventory.unit_details_denied', 'product', $productId, ['requested_branch_id' => $requestedBranchId]);
+        http_response_code(403);
+        echo json_encode(['error'=>'Detailed unit identifiers are only available for your assigned branch.']);
+        exit;
+    }
+    $branchId = $ownBranchId;
+}
 if ($productId <= 0) {
     http_response_code(422);
     echo json_encode(['error'=>'Invalid product.']);

@@ -27,10 +27,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['ajax_action'] ?? '') === 'cr
     if(!Csrf::verify($_POST['_csrf']??null)){http_response_code(419);echo json_encode(['ok'=>false,'error'=>'Your session expired. Refresh the page and try again.']);exit;}
     try {
         $variant=create_receive_variant($_POST);
+        Security::audit('catalog.variant_created', 'product', (int)($variant['id'] ?? 0), ['source' => 'quick_setup']);
         echo json_encode(['ok'=>true,'variant'=>$variant],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     } catch (Throwable $e) {
         http_response_code(422);
-        echo json_encode(['ok'=>false,'error'=>$e->getMessage()],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        echo json_encode(['ok'=>false,'error'=>safe_exception_message($e,'Unable to create the variant right now.')],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     }
     exit;
 }
@@ -59,6 +60,15 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
 
         $matchedField=normalize_stock_identifier($unit['serial_no']??'')===$value?'serial':(normalize_stock_identifier($unit['imei']??'')===$value?'imei1':'imei2');
         $response=['exists'=>true,'status'=>$unit['status']??'','restorable'=>false,'unit_id'=>(int)$unit['id'],'branch_name'=>$unit['branch_name']??'','matched_field'=>$matchedField];
+        if (!Auth::isOwner() && (int)$unit['branch_id'] !== (int)(Auth::branchId() ?: 0)) {
+            echo json_encode([
+                'exists' => true,
+                'status' => 'registered',
+                'restorable' => false,
+                'message' => 'This identifier is already registered in inventory.',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
         if(($unit['status']??'')==='adjusted_out'){
             if($matchedField==='imei2'){
                 $response['message']='This is IMEI 2 of a previously removed phone. Enter its IMEI 1 to restore the unit.';
@@ -288,6 +298,7 @@ try{
     }
 
     $pdo->commit();
+    Security::audit('inventory.stock_in', 'product', $productId, ['reference_no' => $reference, 'branch_id' => $branchId, 'quantity' => $quantity]);
     $successPayload=['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId];
     if($isQuickReceive){
         header('Content-Type: application/json; charset=utf-8');
@@ -305,8 +316,8 @@ try{
     flash('error',$message);redirect($returnUrl);
 }catch(Throwable $e){
     if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
-    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$e->getMessage()]);exit;}
-    flash('error',$e->getMessage());redirect($returnUrl);
+    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>safe_exception_message($e,'Unable to receive stock right now. Please try again.')]);exit;}
+    flash('error',safe_exception_message($e,'Unable to receive stock right now. Please try again.'));redirect($returnUrl);
 }
 
 function restore_adjustment_label(string $notes):string{
@@ -340,7 +351,7 @@ function ensure_stock_in_schema_p1004():void{
     $movementCost=Database::query("SHOW COLUMNS FROM stock_movements LIKE 'unit_cost'")->fetch();
     $imei2=Database::query("SHOW COLUMNS FROM inventory_units LIKE 'imei2'")->fetch();
     if(!$unitCost||!$condition||!$connectivity||!$movementCost)throw new RuntimeException('Required inventory setup is missing before using Receive Stock.');
-    if(!$imei2)throw new RuntimeException('Run database/P2_023_dual_imei_support.sql before receiving Android phones.');
+    if(!$imei2)throw new RuntimeException('Dual-IMEI receiving setup is incomplete. Contact the system administrator.');
 }
 function stock_identifier_columns(string $type,?string $connectivity,string $identifier,bool $isApple):array{
     if($isApple)return[null,$identifier];

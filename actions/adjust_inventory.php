@@ -69,7 +69,7 @@ $pdo = Database::connection();
 try {
     $statusColumn = Database::query("SHOW COLUMNS FROM inventory_units LIKE 'status'")->fetch();
     if (!$statusColumn || !str_contains((string)$statusColumn['Type'], "'adjusted_out'")) {
-        throw new RuntimeException('Run database/P2_007_owner_inventory_adjustment.sql before using inventory adjustments.');
+        throw new RuntimeException('Inventory adjustment setup is incomplete. Contact the system administrator.');
     }
 
     $pdo->beginTransaction();
@@ -132,6 +132,7 @@ try {
     )->fetchColumn();
 
     $pdo->commit();
+    Security::audit('inventory.adjusted', 'product', $productId, ['reference_no' => $reference, 'branch_id' => $branchId, 'quantity' => count($unitIds), 'reason' => $reason]);
     echo json_encode([
         'success' => true,
         'message' => count($rows) . ' unit' . (count($rows) === 1 ? '' : 's') . ' removed from available stock.',

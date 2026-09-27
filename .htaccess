@@ -1,0 +1,30 @@
+# Malbcoff Trading - public web root protection
+# Apache 2.4+ / common shared-hosting safe rules.
+
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Internal application/source folders must never be requested directly.
+    RewriteRule ^(?:config|core|database|pages|partials|design-reference|\.git)(?:/|$) - [F,L,NC]
+
+    # Development artifacts / backups / documentation are not public assets.
+    RewriteRule ^(?:preview\.html|.*\.(?:md|sql|zip|bak|backup|log|ini|dist))$ - [F,L,NC]
+</IfModule>
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(?:\.env(?:\..*)?|\.gitignore|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml.*|bootstrap\.php)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always unset X-Powered-By
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-Permitted-Cross-Domain-Policies "none"
+</IfModule>

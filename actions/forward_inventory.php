@@ -56,7 +56,7 @@ try {
     $transferTableReady = (bool)Database::query("SHOW TABLES LIKE 'inventory_transfers'")->fetchColumn();
     $transferUnitsReady = (bool)Database::query("SHOW TABLES LIKE 'inventory_transfer_units'")->fetchColumn();
     if (!$transferTableReady || !$transferUnitsReady) {
-        throw new RuntimeException('Run database/P2_005_branch_transfer_receiving.sql before forwarding inventory.');
+        throw new RuntimeException('Branch transfer setup is incomplete. Contact the system administrator.');
     }
 
     $pdo->beginTransaction();
@@ -150,6 +150,7 @@ try {
     }
 
     $pdo->commit();
+    Security::audit('inventory.transfer_forwarded', 'transfer', $transferId, ['reference_no' => $reference, 'source_branch_id' => $sourceBranchId, 'destination_branch_id' => $destinationBranchId, 'product_id' => $productId, 'quantity' => $moved]);
     echo json_encode([
         'success' => true,
         'message' => $moved . ' unit' . ($moved === 1 ? '' : 's') . ' forwarded to ' . $destinationBranch['name'] . '. Pending receiving confirmation.',

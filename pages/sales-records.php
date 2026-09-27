@@ -201,7 +201,8 @@ try {
         }
     }
 } catch (Throwable $e) {
-    $dbError = $e->getMessage();
+    Security::reportException($e, 'sales_records');
+    $dbError = 'Unable to load sales records right now. Please try again.';
     $totalPages = 1;
 }
 

@@ -11,7 +11,7 @@ try {
 <article class="role-card"><span class="role-icon owner">O</span><div><strong>Owner</strong><p>All branches, inventory overview, cost/profit visibility and controls.</p></div></article>
 <article class="role-card"><span class="role-icon manager">M</span><div><strong>Branch Manager</strong><p>Own branch inventory, stock activity and branch users.</p></div></article>
 <article class="role-card"><span class="role-icon inventory">I</span><div><strong>Inventory Staff</strong><p>Products, Stock In, inventory and stock movement.</p></div></article>
-<article class="role-card"><span class="role-icon cashier">C</span><div><strong>Cashier</strong><p>POS access will be activated in Phase 2.</p></div></article>
+<article class="role-card"><span class="role-icon cashier">C</span><div><strong>Cashier</strong><p>Processes POS sales and views permitted branch sales records.</p></div></article>
 </div>
 <section class="card table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Branch</th><th>Status</th></tr></thead><tbody>
 <?php foreach($rows as $row): ?><tr><td><strong><?= e($row['name']) ?></strong></td><td><?= e($row['email']) ?></td><td><?= e(role_label($row['role'])) ?></td><td><?= e($row['branch_name'] ?: 'All Branches') ?></td><td><span class="status-pill <?= $row['is_active']?'available':'low' ?>"><?= $row['is_active']?'Active':'Inactive' ?></span></td></tr><?php endforeach; ?>

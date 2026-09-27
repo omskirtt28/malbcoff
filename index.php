@@ -16,30 +16,30 @@ $allowedPages = [
     'stock-movement' => 'Stock Movement',
     'users' => 'Users',
 ];
-$page = $_GET['page'] ?? 'dashboard';
+
+$page = (string)($_GET['page'] ?? 'dashboard');
 if (!isset($allowedPages[$page])) {
     $page = 'dashboard';
 }
 
+$role = (string)(Auth::user()['role'] ?? '');
+$pageRoles = [
+    'dashboard' => ['owner','branch_manager','cashier','inventory'],
+    'pos' => ['owner','branch_manager','cashier'],
+    'sales-records' => ['owner','branch_manager','cashier'],
+    'products' => ['owner','branch_manager','cashier','inventory'],
+    'add-item' => ['owner','branch_manager','inventory'],
+    'inventory' => ['owner','branch_manager','cashier','inventory'],
+    'branch-transfers' => ['owner','branch_manager','inventory'],
+    'stock-in' => ['owner','branch_manager','inventory'],
+    'stock-movement' => ['owner','branch_manager','inventory'],
+    'users' => ['owner','branch_manager'],
+];
 
-if ($page === 'pos' && !pos_role_allowed()) {
+if (!in_array($role, $pageRoles[$page] ?? [], true)) {
+    Security::audit('auth.page_denied', 'page', $page, ['role' => $role]);
     $page = 'dashboard';
-    flash('error', 'You do not have access to Point of Sale.');
-}
-
-if ($page === 'sales-records' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'cashier'], true)) {
-    $page = 'dashboard';
-    flash('error', 'You do not have access to Sales Records.');
-}
-
-if ($page === 'branch-transfers' && !Auth::isOwner() && !in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true)) {
-    $page = 'dashboard';
-    flash('error', 'You do not have access to Branch Transfers.');
-}
-
-if ($page === 'stock-movement' && !Auth::isOwner() && !in_array(Auth::user()['role'], ['branch_manager', 'inventory'], true)) {
-    $page = 'dashboard';
-    flash('error', 'You do not have access to Stock Movement.');
+    flash('error', 'You do not have access to that page.');
 }
 
 $pageTitle = $allowedPages[$page];

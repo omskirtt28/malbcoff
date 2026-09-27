@@ -109,6 +109,7 @@ try {
     if ($updated->rowCount() !== 1) throw new RuntimeException('This transfer has already been processed.');
 
     $pdo->commit();
+    Security::audit('inventory.transfer_received', 'transfer', $transferId, ['reference_no' => $reference, 'destination_branch_id' => $branchId, 'quantity' => $quantity, 'receiver_name' => $receiverName]);
     echo json_encode([
         'success' => true,
         'message' => 'Inventory received successfully.',

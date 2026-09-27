@@ -1874,9 +1874,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   align-items:flex-end;
   gap:10px;
 }
-.inventory-filter-card .inventory-search{flex:2 1 310px}
-.inventory-filter-card>label:not(.inventory-search){flex:1 1 128px;min-width:118px}
-.inventory-filter-card .inventory-date-filter{flex:0 1 150px}
+.inventory-filter-card .inventory-search{
+  flex:2 1 280px;
+  min-width:240px;
+  width:auto;
+  overflow:hidden;
+}
+.inventory-filter-card .inventory-search input{
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  padding-right:10px;
+}
+.inventory-filter-card>label:not(.inventory-search){flex:1 1 108px;min-width:104px}
+.inventory-filter-card .inventory-date-filter{flex:1 1 126px;min-width:122px}
 .inventory-filter-card .inventory-date-filter input{
   width:100%;
   height:43px;
@@ -1891,14 +1903,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .inventory-filter-card .inventory-date-filter input:focus{border-color:#8cb8ff;box-shadow:0 0 0 3px #edf4ff}
 .inventory-filter-card .inventory-apply,.inventory-filter-card .inventory-reset{flex:0 0 auto;min-width:68px}
 
-.inventory-table{min-width:1220px}
+.inventory-table{
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+}
 .inventory-table .col-product{width:22%}
 .inventory-table .col-specs{width:14%}
 .inventory-table .col-stock{width:9%}
 .inventory-table .col-location{width:12%}
-.inventory-table .col-date{width:15%}
-.inventory-table .col-status{width:10%}
-.inventory-table .col-action{width:18%}
+.inventory-table .col-date{width:14%}
+.inventory-table .col-status{width:9%}
+.inventory-table .col-action{width:20%}
 .inventory-date-cell{min-width:0;line-height:1.2}
 .inventory-date-cell strong,.inventory-date-cell span{display:block}
 .inventory-date-cell strong{font-size:10.8px;font-weight:800;color:#344054;white-space:nowrap}
@@ -1921,8 +1937,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .inventory-unit-history-grid small{margin-top:3px;font-size:9.5px;color:#7b8799;line-height:1.35}
 
 @media(max-width:1180px){
-  .inventory-filter-card>label:not(.inventory-search){flex:1 1 145px}
-  .inventory-filter-card .inventory-date-filter{flex:1 1 145px}
+  .inventory-filter-card .inventory-search{flex:1 0 100%;min-width:0}
+  .inventory-filter-card>label:not(.inventory-search){flex:1 1 150px;min-width:132px}
+  .inventory-filter-card .inventory-date-filter{flex:1 1 150px;min-width:132px}
   .inventory-unit-history-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .inventory-unit-history-grid>div:nth-child(2){border-right:0}
   .inventory-unit-history-grid>div:nth-child(-n+2){border-bottom:1px solid #edf0f5}
@@ -1955,3 +1972,159 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .inventory-filter-card .inventory-apply,.inventory-filter-card .inventory-reset{width:auto}
   .inventory-unit-modal-dialog{width:100%}
 }
+
+
+/* P2-042 — Inventory containment: no horizontal sliding / clean filter sizing */
+@media (min-width: 761px){
+  .inventory-table-wrap{
+    overflow-x:hidden;
+    overflow-y:auto;
+  }
+  .inventory-table{
+    width:100%;
+    min-width:0;
+    table-layout:fixed;
+  }
+  .inventory-table th,
+  .inventory-table td{
+    min-width:0;
+  }
+  .inventory-product-cell,
+  .inventory-product-copy,
+  .inventory-location-cell,
+  .inventory-stock-count{
+    min-width:0;
+  }
+  .inventory-product-copy strong,
+  .inventory-product-copy span,
+  .inventory-specs-text,
+  .inventory-location-cell strong,
+  .inventory-location-cell span{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .inventory-product-copy strong,
+  .inventory-product-copy span,
+  .inventory-specs-text{
+    white-space:nowrap;
+  }
+}
+
+/* On tablet/smaller work areas, use the existing labelled-card table treatment
+   instead of forcing a horizontally scrollable desktop grid. */
+@media (min-width: 761px) and (max-width: 1100px){
+  .inventory-table-wrap{
+    overflow:visible;
+    max-height:none;
+    min-height:0;
+  }
+  .inventory-table.is-responsive-table{
+    display:block;
+    width:100%;
+    min-width:0;
+    background:transparent;
+  }
+  .inventory-table.is-responsive-table thead{display:none}
+  .inventory-table.is-responsive-table tbody{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+    padding:10px;
+    background:var(--app-bg);
+  }
+  .inventory-table.is-responsive-table tbody tr{
+    display:block;
+    min-width:0;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    box-shadow:var(--shadow-sm);
+  }
+  .inventory-table.is-responsive-table tbody td{
+    width:100%!important;
+    display:grid;
+    grid-template-columns:minmax(105px,.42fr) minmax(0,1fr);
+    gap:12px;
+    align-items:center;
+    padding:10px 12px!important;
+    border-bottom:1px solid #eef1f5!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+  }
+  .inventory-table.is-responsive-table tbody td::before{
+    content:attr(data-label);
+    color:#7b8799;
+    font-size:9.5px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.25px;
+  }
+  .inventory-table.is-responsive-table tbody td:first-child{
+    display:block;
+    padding:13px 12px!important;
+  }
+  .inventory-table.is-responsive-table tbody td:first-child::before{display:none}
+  .inventory-table.is-responsive-table tbody td:last-child{border-bottom:0!important}
+  .inventory-table.is-responsive-table .inventory-row-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .inventory-table.is-responsive-table .inventory-row-actions .btn{
+    width:100%;
+    min-height:44px;
+  }
+}
+
+/* P2-040 — Inventory actions: compact one-line desktop controls */
+@media (min-width: 761px){
+  .inventory-table .col-action{width:18%}
+  .inventory-table td:last-child{white-space:nowrap}
+  .inventory-row-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    flex-wrap:nowrap;
+    gap:6px;
+    width:100%;
+    max-width:100%;
+  }
+  .inventory-row-actions .btn{
+    flex:0 0 auto;
+    width:auto;
+    min-width:0;
+    min-height:38px;
+    height:38px;
+    padding:0 11px;
+    white-space:nowrap;
+  }
+  .inventory-row-actions .inventory-view-btn{padding-inline:10px}
+  .inventory-row-actions .inventory-forward-btn{min-width:74px;padding-inline:12px}
+}
+
+/* Tablet/mobile cards keep both actions visible and touch-friendly. */
+@media (max-width: 760px){
+  .inventory-table.is-responsive-table .inventory-row-actions,
+  .inventory-row-actions{
+    width:100%;
+    max-width:none;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:8px;
+  }
+  .inventory-row-actions .btn{
+    width:100%;
+    min-width:0;
+    min-height:44px;
+    white-space:nowrap;
+  }
+}
+
+
+/* PRE-LIVE UI CLEANUP — production login spacing after demo/phase removal */
+.auth-brand-panel .brand-mark{margin-bottom:22px}
+.auth-brand-panel h1{margin-top:0}

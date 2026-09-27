@@ -75,7 +75,7 @@ try {
 
             if (!$row || (int)$row['branch_id'] !== $branchId) throw new RuntimeException('A device in the cart is not assigned to this branch.');
             if ($row['status'] !== 'available') throw new RuntimeException(malbcoff_product_name($row) . ' is no longer available.');
-            if (($row['condition_type'] ?? '') !== 'brand_new') throw new RuntimeException('Pre-Loved units are not included in the current POS phase.');
+            if (($row['condition_type'] ?? '') !== 'brand_new') throw new RuntimeException('Only brand-new units can be sold through this POS workflow.');
             if (!in_array($row['product_type'], ['phone','tablet'], true)) throw new RuntimeException('Invalid serialized item type.');
 
             $unitPrice = max(0, (float)$row['selling_price']);
@@ -172,6 +172,7 @@ try {
     }
 
     $pdo->commit();
+    Security::audit('sale.completed', 'sale', $saleId, ['sale_no' => $saleNo, 'branch_id' => $branchId, 'total' => $total, 'payment_method' => $paymentMethod]);
     flash('sale_success', json_encode([
         'sale_no' => $saleNo,
         'total' => $total,
@@ -182,19 +183,19 @@ try {
     redirect($returnUrl);
 } catch (Throwable $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-    flash('error', $e->getMessage());
+    flash('error', safe_exception_message($e, 'Unable to complete the sale right now. Please try again.'));
     redirect($returnUrl);
 }
 
 function ensure_pos_sale_schema(): void
 {
-    if (!branch_pricing_ready()) throw new RuntimeException('Run database/P2_004_pricing_variant_serial_ux.sql before using POS.');
+    if (!branch_pricing_ready()) throw new RuntimeException('POS pricing setup is incomplete. Contact the system administrator.');
     $sales = Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn();
     $saleItems = Database::query("SHOW TABLES LIKE 'sale_items'")->fetchColumn();
     $movementCost = Database::query("SHOW COLUMNS FROM stock_movements LIKE 'unit_cost'")->fetch();
     $condition = Database::query("SHOW COLUMNS FROM inventory_units LIKE 'condition_type'")->fetch();
     if (!$sales || !$saleItems || !$movementCost || !$condition) {
-        throw new RuntimeException('Run database/P2_001_brand_new_pos.sql before using POS.');
+        throw new RuntimeException('POS database setup is incomplete. Contact the system administrator.');
     }
 }
 

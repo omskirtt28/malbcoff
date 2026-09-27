@@ -20,7 +20,7 @@ $navItems[] = ['inventory', 'inventory', 'Inventory'];
 if (Auth::isOwner() || in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true)) {
     $navItems[] = ['branch-transfers', 'movement', 'Branch Transfers'];
 }
-if (!Auth::isOwner()) {
+if (!Auth::isOwner() && in_array((string)(Auth::user()['role'] ?? ''), ['branch_manager','inventory'], true)) {
     $navItems[] = ['stock-in', 'stock', 'Receive Stock'];
 }
 if (Auth::isOwner() || in_array(Auth::user()['role'], ['branch_manager', 'inventory'], true)) {

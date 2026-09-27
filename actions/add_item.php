@@ -32,6 +32,7 @@ try {
         $productId=(int)$pdo->lastInsertId();
         seed_new_product_branch_prices($productId,$selling);
         $pdo->commit();
+        Security::audit('catalog.product_created', 'product', $productId, ['product_type' => 'accessory']);
         if ($nextAction === 'receive') { flash('success','Accessory saved. Enter the quantity that arrived.'); redirect('../index.php?page=stock-in&product_id='.$productId); }
         flash('success','Accessory product saved to Products.');redirect('../index.php?page=products&view=accessories');
     }
@@ -60,6 +61,7 @@ try {
     $productId=(int)$pdo->lastInsertId();
     seed_new_product_branch_prices($productId,$selling);
     $pdo->commit();
+    Security::audit('catalog.product_created', 'product', $productId, ['product_type' => $type, 'model_id' => $modelId]);
     if ($nextAction === 'receive') {
         flash('success','Variant saved. Enter how many units arrived and add their Serial Numbers / IMEIs.');
         redirect('../index.php?page=stock-in&product_id='.$productId);
@@ -68,7 +70,7 @@ try {
     redirect('../index.php?page=products&view=devices&brand='.$brandId.'&model='.$modelId.'#variants');
 } catch(Throwable $e) {
     if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
-    flash('error',$e->getMessage());
+    flash('error',safe_exception_message($e,'Unable to create the product right now. Please try again.'));
     redirect('../index.php?page=add-item'.(!empty($_POST['model_id'])?'&model_id='.(int)$_POST['model_id']:''));
 }
 
@@ -86,7 +88,7 @@ function seed_new_product_branch_prices(int $productId,float $selling):void{
 
 function ensure_configuration_schema():void{
     if(!Database::query("SHOW COLUMNS FROM products LIKE 'connectivity'")->fetch()||!Database::query("SHOW COLUMNS FROM product_models LIKE 'device_type'")->fetch()) throw new RuntimeException('The device setup is required before creating variants.');
-    if(!branch_pricing_ready()) throw new RuntimeException('Run database/P2_004_pricing_variant_serial_ux.sql before creating variants.');
+    if(!branch_pricing_ready()) throw new RuntimeException('Product pricing setup is incomplete. Contact the system administrator.');
 }
 function clean_config_text(mixed $value,int $max,bool $uppercase=true):string{$value=trim((string)$value);$value=preg_replace('/\s+/',' ',$value)??$value;if($uppercase)$value=function_exists('mb_strtoupper')?mb_strtoupper($value,'UTF-8'):strtoupper($value);return mb_substr($value,0,$max);}
 function normalize_capacity_config(mixed $value):string{$value=strtoupper(preg_replace('/\s+/','',trim((string)$value))??'');if($value==='')return'';if(preg_match('/^\d+(?:\.\d+)?$/',$value))return$value.'GB';if(preg_match('/^(\d+(?:\.\d+)?)G(?:B)?$/',$value,$m))return$m[1].'GB';if(preg_match('/^(\d+(?:\.\d+)?)T(?:B)?$/',$value,$m))return$m[1].'TB';return$value;}

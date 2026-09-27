@@ -1,0 +1,20 @@
+# Production secrets
+config/database.local.php
+.env
+.env.*
+!.env.example
+
+# Backups / exports / logs
+*.sql.gz
+*.zip
+*.bak
+*.backup
+*.log
+logs/
+backups/
+
+# Local OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -9,15 +9,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Csrf::verify($_POST['_csrf'] ?? null)) {
         $error = 'Your session expired. Please try again.';
     } else {
-        $email = trim((string)($_POST['email'] ?? ''));
+        $email = Security::normalizeEmail((string)($_POST['email'] ?? ''));
         $password = (string)($_POST['password'] ?? '');
-        try {
-            if (Auth::attempt($email, $password)) {
-                redirect('index.php');
+        $rate = Security::loginRateStatus($email);
+
+        if (empty($rate['allowed'])) {
+            Security::audit('auth.login_blocked', 'login', null, [
+                'email_hash' => hash('sha256', $email),
+                'retry_after' => (int)($rate['retry_after'] ?? 0),
+                'setup_required' => !empty($rate['setup_required']),
+            ]);
+            $error = !empty($rate['setup_required'])
+                ? 'Sign in is temporarily unavailable. Please contact the system administrator.'
+                : 'Too many sign-in attempts. Please wait a few minutes and try again.';
+        } else {
+            try {
+                if (Auth::attempt($email, $password)) {
+                    Security::recordLoginSuccess($email);
+                    Security::audit('auth.login_success', 'user', (int)(Auth::user()['id'] ?? 0));
+                    redirect('index.php');
+                }
+                Security::recordLoginFailure($email);
+                Security::audit('auth.login_failed', 'login', null, ['email_hash' => hash('sha256', $email)]);
+                usleep(250000);
+                $error = 'Invalid email or password.';
+            } catch (Throwable $e) {
+                Security::reportException($e, 'login');
+                $error = 'Sign in is temporarily unavailable. Please contact the system administrator.';
             }
-            $error = 'Invalid email or password.';
-        } catch (Throwable $e) {
-            $error = 'Database is not ready yet. Import the SQL file first.';
         }
     }
 }
@@ -34,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="auth-shell">
     <section class="auth-brand-panel">
         <div class="brand-mark">M</div>
-        <span class="phase-pill">Phase 1</span>
         <h1>Malbcoff Trading</h1>
         <p>POS & Inventory System</p>
         <div class="auth-feature-list">
@@ -50,23 +68,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <p>Use your assigned Malbcoff Trading account.</p>
         </div>
         <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
-        <form method="post" class="form-stack" autocomplete="off">
+        <form method="post" class="form-stack">
             <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
             <label class="field">
                 <span>Email address</span>
-                <input type="email" name="email" placeholder="name@malbcoff.local" required autofocus>
+                <input type="email" name="email" placeholder="Enter your email address" autocomplete="username" required autofocus>
             </label>
             <label class="field">
                 <span>Password</span>
-                <input type="password" name="password" placeholder="Enter your password" required>
+                <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
             </label>
             <button class="btn btn-primary btn-block" type="submit">Sign In</button>
         </form>
-        <div class="demo-credentials">
-            <strong>Local demo accounts</strong>
-            <span>Owner: owner@malbcoff.local / Owner@123</span>
-            <span>Branch: branch1@malbcoff.local / Branch@123</span>
-        </div>
     </section>
 </div>
 </body>

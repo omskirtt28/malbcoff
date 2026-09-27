@@ -110,7 +110,8 @@ try {
     echo json_encode(['ok' => true, 'items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'message' => 'POS search is unavailable. Run the required POS and P2-004 pricing migrations first.']);
+    Security::reportException($e, 'pos_search');
+    echo json_encode(['ok' => false, 'message' => 'POS search is temporarily unavailable. Please try again.']);
 }
 
 function ensure_pos_schema_dependencies(): void

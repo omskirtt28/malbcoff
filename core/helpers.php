@@ -207,7 +207,7 @@ function stock_uses_apple_serial(string $brand, string $model = ''): bool
 function save_branch_selling_price(int $productId, int $branchId, float $price, ?int $userId = null): void
 {
     if (!branch_pricing_ready()) {
-        throw new RuntimeException('Run database/P2_004_pricing_variant_serial_ux.sql before managing branch selling prices.');
+        throw new RuntimeException('Branch pricing setup is incomplete. Contact the system administrator.');
     }
     if ($productId <= 0 || $branchId <= 0) throw new RuntimeException('A valid product and branch are required.');
     $price = round(max(0, $price), 2);
@@ -216,4 +216,14 @@ function save_branch_selling_price(int $productId, int $branchId, float $price, 
         . 'ON DUPLICATE KEY UPDATE selling_price=VALUES(selling_price),updated_by=VALUES(updated_by),updated_at=CURRENT_TIMESTAMP',
         [$productId, $branchId, $price, $userId]
     );
+}
+
+function safe_exception_message(Throwable $e, string $fallback): string
+{
+    if ($e instanceof RuntimeException && !($e instanceof PDOException)) {
+        $message = trim($e->getMessage());
+        if ($message !== '') return $message;
+    }
+    if (class_exists('Security')) Security::reportException($e, 'user_facing_exception');
+    return $fallback;
 }
