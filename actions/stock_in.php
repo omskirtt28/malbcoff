@@ -18,8 +18,8 @@ if (!Auth::check()) {
 }
 
 $role=Auth::user()['role']??'';
-$canStockIn=in_array($role,['branch_manager','inventory'],true);
-$canEditSelling=in_array($role,['branch_manager'],true);
+$canStockIn=in_array($role,['owner','branch_manager','inventory'],true);
+$canEditSelling=in_array($role,['owner','branch_manager'],true);
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['ajax_action'] ?? '') === 'create_variant') {
     header('Content-Type: application/json; charset=utf-8');

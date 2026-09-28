@@ -11,6 +11,7 @@ $assignedBranchId = Auth::branchId();
 $assignedBranchName = Auth::user()['branch_name'] ?? 'Assigned Branch';
 $requestedBranch = filter_input(INPUT_GET, 'branch', FILTER_VALIDATE_INT) ?: 0;
 $presetProductId = filter_input(INPUT_GET, 'product_id', FILTER_VALIDATE_INT) ?: 0;
+$presetModelId = filter_input(INPUT_GET, 'model_id', FILTER_VALIDATE_INT) ?: 0;
 $successData = null;
 $successRaw = flash('stock_in_success');
 if ($successRaw) {
@@ -109,16 +110,38 @@ foreach ($accessories as $accessory) {
         'type' => 'accessory',
     ];
 }
+
+$successModelId = 0;
+if (!empty($successData['product_id'])) {
+    foreach ($variants as $variant) {
+        if ((int)$variant['id'] === (int)$successData['product_id']) {
+            $successModelId = (int)$variant['model_id'];
+            break;
+        }
+    }
+}
 ?>
 
 <section class="page-heading receive-heading">
     <div>
         <span class="eyebrow">STOCK</span>
         <h1>Receive Stock</h1>
-        <p>Add newly arrived items to your branch inventory.</p>
+        <p>Sort the delivery, select the model and variant, enter the quantity, then scan every Serial / IMEI.</p>
     </div>
     <a class="btn btn-secondary" href="index.php?page=products">Manage Products</a>
 </section>
+
+<div class="receive-workflow-strip" aria-label="Stock receiving workflow">
+    <div><b>1</b><span><strong>Select Model</strong><small>Choose the sorted item.</small></span></div>
+    <i>→</i>
+    <div><b>2</b><span><strong>Select Variant</strong><small>Storage, color and specs.</small></span></div>
+    <i>→</i>
+    <div><b>3</b><span><strong>Enter Quantity</strong><small>Expected units to receive.</small></span></div>
+    <i>→</i>
+    <div><b>4</b><span><strong>Scan Units</strong><small>One Serial / IMEI per unit.</small></span></div>
+    <i>→</i>
+    <div><b>5</b><span><strong>Confirm Stock In</strong><small>Add to branch inventory.</small></span></div>
+</div>
 
 <?php if ($successData): ?>
 <div class="stock-success-card">
@@ -131,7 +154,11 @@ foreach ($accessories as $accessory) {
     </div>
     <div class="stock-success-actions">
         <a class="btn btn-outline btn-sm" href="index.php?page=inventory">View Inventory</a>
+        <?php if ($successModelId > 0): ?>
+        <a class="btn btn-primary btn-sm" href="index.php?page=stock-in&model_id=<?= (int)$successModelId ?>">Receive Another Variant</a>
+        <?php else: ?>
         <a class="btn btn-primary btn-sm" href="index.php?page=stock-in">Receive More</a>
+        <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
@@ -145,8 +172,8 @@ foreach ($accessories as $accessory) {
         <div class="receive-step-number">1</div>
         <div class="receive-step-body">
             <div class="receive-step-title">
-                <h2>Choose Item</h2>
-                <p>Search the model or accessory that arrived.</p>
+                <h2>Select Model / Item</h2>
+                <p>Choose the product that has already been sorted from the physical delivery.</p>
             </div>
             <div class="receive-search-wrap" id="receiveSearchWrap">
                 <label class="field receive-search-field">
@@ -168,7 +195,7 @@ foreach ($accessories as $accessory) {
         <div class="receive-step-number">2</div>
         <div class="receive-step-body">
             <div class="receive-step-title receive-title-row">
-                <div><h2>Choose Variant</h2><p>Select the storage/specs that arrived.</p></div>
+                <div><h2>Select Variant</h2><p>Choose the exact storage, color and specs for this sorted group.</p></div>
                 <button class="btn btn-outline btn-sm" type="button" id="openAddVariant"><?= icon('plus') ?> Add Variant</button>
             </div>
             <div class="receive-variant-grid" id="variantGrid"></div>
@@ -183,7 +210,7 @@ foreach ($accessories as $accessory) {
     <section class="receive-step hidden" id="stockDetailsStep">
         <div class="receive-step-number" id="stockStepNumber">3</div>
         <div class="receive-step-body">
-            <div class="receive-step-title"><h2>Stock Details</h2><p>Enter the quantity received. Cost is protected; your branch selling price stays editable for authorized users.</p></div>
+            <div class="receive-step-title"><h2>Quantity &amp; Scan</h2><p>Enter how many units arrived, then scan each Serial Number / IMEI before confirming the stock-in.</p></div>
             <div class="receive-summary-bar" id="selectedVariantSummary"></div>
             <div class="form-grid two receive-stock-grid">
                 <?php if ($isOwner): ?>
@@ -202,12 +229,20 @@ foreach ($accessories as $accessory) {
             </div>
             <div class="receive-cost-warning hidden" id="costNotReady"><?= icon('alert') ?><div><strong>Cost Price is not set yet.</strong><span>Ask the Owner to set the cost in Products → Variants before receiving this stock.</span></div></div>
 
+            <div class="receive-scan-overview hidden" id="receiveScanOverview">
+                <div class="receive-scan-stat"><span>Expected Units</span><strong id="expectedUnitCount">1</strong></div>
+                <div class="receive-scan-stat"><span>Scanned</span><strong id="scannedUnitCount">0</strong></div>
+                <div class="receive-scan-stat"><span>Remaining</span><strong id="remainingUnitCount">1</strong></div>
+                <div class="receive-scan-progress"><span id="receiveScanProgressBar" style="width:0%"></span></div>
+                <small id="receiveScanProgressText">Scan 1 unit to continue.</small>
+            </div>
+
             <div class="identifier-panel receive-identifiers hidden" id="identifierPanel">
                 <div class="identifier-panel-head">
                     <div><h3 id="identifierPanelTitle">Serial Numbers</h3><p id="identifierPanelHint">Scan or enter one Serial Number for each device.</p></div>
                     <div class="identifier-panel-actions">
                         <span class="scanner-ready-badge" id="scannerReadyBadge"><span></span>Scanner ready</span>
-                        <span class="identifier-progress" id="identifierCountBadge">0 / 0</span>
+                        <span class="identifier-progress" id="identifierCountBadge">0 / 0 scanned</span>
                         <button class="btn btn-outline btn-sm" type="button" id="focusScannerBtn">Focus Scanner</button>
                         <button class="btn btn-outline btn-sm" type="button" id="openPasteIdentifiers">Paste Multiple</button>
                     </div>
@@ -220,7 +255,10 @@ foreach ($accessories as $accessory) {
 
     <div class="receive-form-actions hidden" id="receiveFormActions">
         <a class="btn btn-secondary" href="index.php?page=inventory">Cancel</a>
-        <button class="btn btn-primary" type="submit"><?= icon('stock') ?> Review Stock</button>
+        <div class="receive-submit-group">
+            <span class="receive-ready-note" id="receiveReadyNote">Complete the required fields to continue.</span>
+            <button class="btn btn-primary" id="reviewStockButton" type="submit"><?= icon('stock') ?> Review &amp; Confirm Stock In</button>
+        </div>
     </div>
 </form>
 
@@ -359,6 +397,7 @@ foreach ($accessories as $accessory) {
 const items = <?= json_encode($itemPayload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
 const csrf = <?= json_encode(Csrf::token()) ?>;
 const presetProductId = <?= (int)$presetProductId ?>;
+const presetModelId = <?= (int)$presetModelId ?>;
 const isOwner = <?= $isOwner ? 'true' : 'false' ?>;
 const assignedBranchName = <?= json_encode($assignedBranchName, JSON_UNESCAPED_UNICODE) ?>;
 const assignedBranchId = <?= (int)($assignedBranchId ?: 0) ?>;
@@ -378,6 +417,14 @@ const quantity = $('quantityInput');
 const identifierPanel = $('identifierPanel');
 const identifierRows = $('identifierRows');
 const countBadge = $('identifierCountBadge');
+const scanOverview = $('receiveScanOverview');
+const expectedUnitCount = $('expectedUnitCount');
+const scannedUnitCount = $('scannedUnitCount');
+const remainingUnitCount = $('remainingUnitCount');
+const scanProgressBar = $('receiveScanProgressBar');
+const scanProgressText = $('receiveScanProgressText');
+const reviewStockButton = $('reviewStockButton');
+const receiveReadyNote = $('receiveReadyNote');
 const confirmModal = $('stockConfirmModal');
 const variantModal = $('variantModal');
 const pasteModal = $('pasteIdentifiersModal');
@@ -452,6 +499,7 @@ function selectVariant(v,isAccessory=false){
   $('selectedVariantSummary').innerHTML=`<div><small>${isAccessory?'Selected item':'Selected variant'}</small><strong>${esc(selectedItem.label)}</strong><span>${esc(v.specs||'')}</span></div><div><small>Branch Selling Price</small><strong id="summarySellingPrice">${money(variantSelling(v))}</strong></div>`;
   syncPriceFields();
   configureIdentifiers();
+  syncReceiveProgress();
 }
 
 if(isOwner && $('branchSelect')) $('branchSelect').addEventListener('change',()=>{ if(selectedVariant){ syncPriceFields(); const summary=$('summarySellingPrice'); if(summary)summary.textContent=money(variantSelling(selectedVariant)); document.querySelectorAll('[data-identifier-input]').forEach(input=>{ if(input.value.trim()) checkIdentifier(input); }); } });
@@ -533,8 +581,14 @@ function applyIdentifierType(row,kind){
   return true;
 }
 function configureIdentifiers(){
-  if(!selectedVariant || selectedVariant.type==='accessory'){identifierPanel.classList.add('hidden'); return;}
+  if(!selectedVariant || selectedVariant.type==='accessory'){
+    identifierPanel.classList.add('hidden');
+    scanOverview?.classList.add('hidden');
+    syncReceiveProgress();
+    return;
+  }
   identifierPanel.classList.remove('hidden');
+  scanOverview?.classList.remove('hidden');
   const kind=identifierKind();
   if(usesDualImei()){
     $('identifierPanelHint').textContent='IMEI 1 is required. IMEI 2 is optional for dual-SIM phones.';
@@ -617,7 +671,7 @@ function renderIdentifierRows(){
   updateScannerBadge('ready');
   if(document.activeElement!==quantity) scheduleScannerFocus();
 }
-quantity.addEventListener('input',()=>{if(Number(quantity.value)>100)quantity.value=100;if(Number(quantity.value)<1)quantity.value=1;renderIdentifierRows();});
+quantity.addEventListener('input',()=>{if(Number(quantity.value)>100 && selectedVariant?.type!=='accessory')quantity.value=100;if(Number(quantity.value)<1)quantity.value=1;renderIdentifierRows();syncReceiveProgress();});
 quantity.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusFirstEmptyIdentifier();}});
 quantity.addEventListener('change',()=>setTimeout(focusFirstEmptyIdentifier,60));
 
@@ -2385,10 +2439,36 @@ function bindIdentifierInputs(){
   });
 }
 $('focusScannerBtn')?.addEventListener('click',focusFirstEmptyIdentifier);
+function syncReceiveProgress(){
+  if(!selectedVariant)return;
+  const qty=Math.max(1,Number(quantity.value)||1);
+  const serialized=selectedVariant.type!=='accessory';
+  const required=serialized?[...identifierRows.querySelectorAll('[data-identifier-primary]')]:[];
+  const done=required.filter(input=>input.value.trim()!=='').length;
+  const remaining=Math.max(0,qty-done);
+  const percent=serialized?Math.min(100,Math.round((done/qty)*100)):100;
+
+  if(expectedUnitCount)expectedUnitCount.textContent=String(qty);
+  if(scannedUnitCount)scannedUnitCount.textContent=serialized?String(done):'—';
+  if(remainingUnitCount)remainingUnitCount.textContent=serialized?String(remaining):'—';
+  if(scanProgressBar)scanProgressBar.style.width=percent+'%';
+  if(scanProgressText){
+    scanProgressText.textContent=serialized
+      ? (remaining===0?`${done} / ${qty} scanned — ready to review.`:`${done} / ${qty} scanned • ${remaining} remaining.`)
+      : `${qty} accessory unit${qty===1?'':'s'} ready to review.`;
+  }
+  if(reviewStockButton){
+    const ready=!serialized || (done===qty && qty>0);
+    reviewStockButton.disabled=!ready;
+    reviewStockButton.classList.toggle('is-ready',ready);
+    if(receiveReadyNote)receiveReadyNote.textContent=ready?'Ready for final review.':`Scan ${remaining} more unit${remaining===1?'':'s'} to continue.`;
+  }
+}
 function updateIdentifierCount(){
   const required=[...document.querySelectorAll('[data-identifier-primary]')];
   const done=required.filter(i=>i.value.trim()).length;
-  countBadge.textContent=`${done} / ${required.length}`;
+  countBadge.textContent=`${done} / ${required.length} scanned`;
+  syncReceiveProgress();
 }
 const identifierChecks=new WeakMap();
 async function checkIdentifier(input){
@@ -2613,6 +2693,9 @@ if(presetProductId){
     if(item.kind==='accessory' && Number(item.id)===presetProductId){selectItem(item);break;}
     if(item.kind==='model'){const v=item.variants.find(v=>Number(v.id)===presetProductId);if(v){selectItem(item);selectVariant(v);break;}}
   }
+}else if(presetModelId){
+  const item=items.find(item=>item.kind==='model' && Number(item.id)===presetModelId);
+  if(item)selectItem(item);
 }
 })();
 </script>
