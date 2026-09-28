@@ -1,6 +1,10 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 if (!Auth::check()) redirect('login.php');
+if (Auth::isImpersonating()) {
+    flash('error', 'Return to System Admin before changing a password.');
+    redirect('index.php');
+}
 
 $error = null;
 $success = null;

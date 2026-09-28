@@ -4,7 +4,7 @@ $branches = [];
 $schemaReady = false;
 try {
     $schemaReady = (bool)Database::query("SHOW COLUMNS FROM users LIKE 'must_change_password'")->fetch();
-    $where = Auth::isOwner() ? '1=1' : 'u.branch_id=:branch';
+    $where = Auth::isOwner() ? "u.role<>'system_admin'" : "u.branch_id=:branch AND u.role<>'system_admin'";
     $params = Auth::isOwner() ? [] : ['branch' => Auth::branchId()];
     $selectExtra = $schemaReady
         ? ',u.must_change_password,u.password_changed_at,u.last_login_at,u.created_at'

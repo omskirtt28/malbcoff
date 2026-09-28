@@ -12,5 +12,5 @@
     <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/app.css') ?>">
     <link rel="stylesheet" href="assets/css/branch-transfers.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/branch-transfers.css') ?>">
 </head>
-<body class="app-page page-<?= e($page ?? 'dashboard') ?> role-<?= e(Auth::user()['role'] ?? 'guest') ?>">
+<body class="app-page page-<?= e($page ?? 'dashboard') ?> role-<?= e(Auth::user()['role'] ?? 'guest') ?><?= Auth::isImpersonating() ? ' is-impersonating' : '' ?>">
 <div class="app-shell">

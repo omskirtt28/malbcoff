@@ -138,6 +138,7 @@ function require_managed_user(int $id): array
     if ($id <= 0) throw new RuntimeException('User account not found.');
     $row = Database::query('SELECT id,name,email,role,branch_id,is_active FROM users WHERE id=? LIMIT 1', [$id])->fetch();
     if (!$row) throw new RuntimeException('User account not found.');
+    if (($row['role'] ?? '') === 'system_admin') throw new RuntimeException('System Admin accounts are managed separately.');
     return $row;
 }
 

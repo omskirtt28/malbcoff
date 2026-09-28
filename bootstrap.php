@@ -60,7 +60,7 @@ if (Auth::check()) {
         redirect('change-password.php');
     }
 
-    if (!empty($app['maintenance_mode']) && !Auth::isOwner() && !in_array($scriptName, ['maintenance.php', 'logout.php', 'change-password.php'], true)) {
+    if (!empty($app['maintenance_mode']) && !Auth::isOwner() && !Auth::actorIsSystemAdmin() && !in_array($scriptName, ['maintenance.php', 'logout.php', 'change-password.php'], true)) {
         if ($isActionRequest) {
             http_response_code(503);
             header('Retry-After: 300');

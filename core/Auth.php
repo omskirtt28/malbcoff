@@ -36,12 +36,20 @@ final class Auth
         try {
             Database::query('UPDATE users SET last_login_at=NOW() WHERE id=?', [(int)$user['id']]);
             $user['last_login_at'] = date('Y-m-d H:i:s');
+            if (($user['role'] ?? '') === 'system_admin') {
+                try {
+                    Database::query("UPDATE security_impersonation_sessions SET ended_at=NOW(),ended_reason='new_login' WHERE system_admin_user_id=? AND ended_at IS NULL", [(int)$user['id']]);
+                } catch (Throwable $ignore) {
+                    // Migration may not be installed yet; login must continue safely.
+                }
+            }
         } catch (Throwable $e) {
             if (class_exists('Security')) Security::reportException($e, 'last_login_update');
         }
 
         session_regenerate_id(true);
         unset($user['password_hash']);
+        unset($_SESSION['_impersonation']);
         $_SESSION['user'] = $user;
         Csrf::rotate();
         if (class_exists('Security')) Security::initializeAuthenticatedSession();
@@ -63,15 +71,61 @@ final class Auth
         return (self::user()['role'] ?? null) === 'owner';
     }
 
+    public static function isSystemAdmin(): bool
+    {
+        return (self::user()['role'] ?? null) === 'system_admin';
+    }
+
+    public static function isImpersonating(): bool
+    {
+        $ctx = $_SESSION['_impersonation'] ?? null;
+        return is_array($ctx)
+            && !empty($ctx['actor']['id'])
+            && (($ctx['actor']['role'] ?? null) === 'system_admin')
+            && !empty($ctx['target_user_id']);
+    }
+
+    public static function actorUser(): ?array
+    {
+        if (self::isImpersonating()) {
+            $actor = $_SESSION['_impersonation']['actor'] ?? null;
+            return is_array($actor) ? $actor : null;
+        }
+        return self::user();
+    }
+
+    public static function actorId(): ?int
+    {
+        $id = self::actorUser()['id'] ?? null;
+        return $id ? (int)$id : null;
+    }
+
+    public static function actorIsSystemAdmin(): bool
+    {
+        return (self::actorUser()['role'] ?? null) === 'system_admin';
+    }
+
+    public static function impersonationContext(): ?array
+    {
+        $ctx = $_SESSION['_impersonation'] ?? null;
+        return is_array($ctx) ? $ctx : null;
+    }
+
+    public static function impersonationSessionId(): ?int
+    {
+        $id = self::impersonationContext()['db_session_id'] ?? null;
+        return $id ? (int)$id : null;
+    }
+
     public static function branchId(): ?int
     {
         $branchId = self::user()['branch_id'] ?? null;
         return $branchId ? (int)$branchId : null;
     }
 
-
     public static function requiresPasswordChange(): bool
     {
+        if (self::isImpersonating()) return false;
         return self::check() && (int)(self::user()['must_change_password'] ?? 0) === 1;
     }
 
@@ -80,11 +134,72 @@ final class Auth
         if (!self::check()) return;
         $userId = (int)(self::user()['id'] ?? 0);
         if ($userId <= 0) return;
-        $fresh = Database::query(
+        $fresh = self::fetchUser($userId);
+        if ($fresh) $_SESSION['user'] = $fresh;
+
+        if (self::isImpersonating()) {
+            $actorId = (int)(self::impersonationContext()['actor']['id'] ?? 0);
+            $actor = $actorId > 0 ? self::fetchUser($actorId) : null;
+            if ($actor) $_SESSION['_impersonation']['actor'] = $actor;
+        }
+    }
+
+    public static function fetchUser(int $userId): ?array
+    {
+        if ($userId <= 0) return null;
+        $row = Database::query(
             'SELECT u.id,u.branch_id,u.name,u.email,u.role,u.is_active,u.must_change_password,u.password_changed_at,u.last_login_at,b.name AS branch_name FROM users u LEFT JOIN branches b ON b.id=u.branch_id WHERE u.id=? LIMIT 1',
             [$userId]
         )->fetch();
-        if ($fresh) $_SESSION['user'] = $fresh;
+        return $row ?: null;
+    }
+
+    public static function beginImpersonation(array $target, int $dbSessionId, string $sessionKey): void
+    {
+        if (!self::isSystemAdmin() || self::isImpersonating()) {
+            throw new RuntimeException('Impersonation is not available for this session.');
+        }
+        if (!(int)($target['is_active'] ?? 0)) {
+            throw new RuntimeException('Only active user accounts can be entered.');
+        }
+        if (($target['role'] ?? '') === 'system_admin') {
+            throw new RuntimeException('System Admin accounts cannot be impersonated.');
+        }
+
+        $actor = self::user();
+        if (!$actor || ($actor['role'] ?? '') !== 'system_admin') {
+            throw new RuntimeException('System Admin authentication is required.');
+        }
+
+        unset($target['password_hash']);
+        $_SESSION['_impersonation'] = [
+            'actor' => $actor,
+            'target_user_id' => (int)$target['id'],
+            'db_session_id' => $dbSessionId,
+            'session_key' => $sessionKey,
+            'started_at' => time(),
+        ];
+        $_SESSION['user'] = $target;
+        session_regenerate_id(true);
+        Csrf::rotate();
+        if (class_exists('Security')) Security::initializeAuthenticatedSession();
+    }
+
+    public static function endImpersonation(): ?array
+    {
+        if (!self::isImpersonating()) return null;
+        $ctx = self::impersonationContext();
+        $actor = $ctx['actor'] ?? null;
+        if (!is_array($actor) || empty($actor['id'])) {
+            self::logout();
+            return $ctx;
+        }
+        $_SESSION['user'] = $actor;
+        unset($_SESSION['_impersonation']);
+        session_regenerate_id(true);
+        Csrf::rotate();
+        if (class_exists('Security')) Security::initializeAuthenticatedSession();
+        return $ctx;
     }
 
     public static function logout(): void

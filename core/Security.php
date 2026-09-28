@@ -3,6 +3,7 @@ final class Security
 {
     private static ?array $app = null;
     private static ?bool $securitySchemaReady = null;
+    private static ?bool $impersonationAuditReady = null;
     private static ?string $requestId = null;
 
     public static function configure(array $app): void
@@ -120,12 +121,14 @@ final class Security
 
         if (($now - $lastActivity) > $idleTimeout || ($now - $createdAt) > $absoluteTimeout) {
             self::audit('auth.session_expired', 'session', null, ['reason' => ($now - $lastActivity) > $idleTimeout ? 'idle_timeout' : 'absolute_timeout']);
+            self::closeImpersonationSession('session_expired');
             Auth::logout();
             return;
         }
 
         if ($uaHash !== '' && !hash_equals($uaHash, $currentUaHash)) {
             self::audit('auth.session_rejected', 'session', null, ['reason' => 'user_agent_changed']);
+            self::closeImpersonationSession('user_agent_changed');
             Auth::logout();
             return;
         }
@@ -133,16 +136,27 @@ final class Security
         if (($now - $lastUserRefresh) >= $refreshInterval) {
             try {
                 $userId = (int)(Auth::user()['id'] ?? 0);
-                $fresh = $userId > 0 ? Database::query(
-                    'SELECT u.id,u.branch_id,u.name,u.email,u.role,u.is_active,u.must_change_password,u.password_changed_at,u.last_login_at,b.name AS branch_name FROM users u LEFT JOIN branches b ON b.id=u.branch_id WHERE u.id=? LIMIT 1',
-                    [$userId]
-                )->fetch() : null;
+                $fresh = $userId > 0 ? Auth::fetchUser($userId) : null;
                 if (!$fresh || !(int)$fresh['is_active']) {
-                    self::audit('auth.session_revoked', 'user', $userId ?: null, ['reason' => 'inactive_or_missing_user']);
+                    self::audit('auth.session_revoked', 'user', $userId ?: null, ['reason' => 'inactive_or_missing_effective_user']);
+                    self::closeImpersonationSession('effective_user_revoked');
                     Auth::logout();
                     return;
                 }
                 $_SESSION['user'] = $fresh;
+
+                if (Auth::isImpersonating()) {
+                    $actorId = (int)(Auth::impersonationContext()['actor']['id'] ?? 0);
+                    $actor = $actorId > 0 ? Auth::fetchUser($actorId) : null;
+                    if (!$actor || !(int)$actor['is_active'] || ($actor['role'] ?? '') !== 'system_admin') {
+                        self::audit('auth.session_revoked', 'user', $actorId ?: null, ['reason' => 'invalid_system_admin_actor']);
+                        self::closeImpersonationSession('system_admin_revoked');
+                        Auth::logout();
+                        return;
+                    }
+                    $_SESSION['_impersonation']['actor'] = $actor;
+                }
+
                 $security['last_user_refresh'] = $now;
             } catch (Throwable $e) {
                 self::reportException($e, 'session_user_refresh');
@@ -181,6 +195,21 @@ final class Security
         if (self::$securitySchemaReady !== null) return self::$securitySchemaReady;
         self::$securitySchemaReady = self::tableExists('security_login_throttles') && self::tableExists('security_audit_logs');
         return self::$securitySchemaReady;
+    }
+
+    private static function impersonationAuditReady(): bool
+    {
+        if (self::$impersonationAuditReady !== null) return self::$impersonationAuditReady;
+        if (!self::securitySchemaReady()) return self::$impersonationAuditReady = false;
+        try {
+            $count = (int)Database::query(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='security_audit_logs' AND column_name IN ('actor_user_id','effective_user_id','impersonation_session_id')"
+            )->fetchColumn();
+            self::$impersonationAuditReady = $count === 3;
+        } catch (Throwable $e) {
+            self::$impersonationAuditReady = false;
+        }
+        return self::$impersonationAuditReady;
     }
 
     private static function throttleKey(string $scopeType, string $identifier): string
@@ -304,25 +333,56 @@ final class Security
     {
         if (!self::securitySchemaReady()) return;
         try {
-            $user = Auth::user();
+            $effective = Auth::user();
+            $actor = Auth::actorUser();
             $metadataJson = $metadata ? json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
             if (is_string($metadataJson) && strlen($metadataJson) > 8000) $metadataJson = substr($metadataJson, 0, 8000);
-            Database::query(
-                'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json) VALUES (?,?,?,?,?,?,?,?,?)',
-                [
-                    self::requestId(),
-                    isset($user['id']) ? (int)$user['id'] : null,
-                    isset($user['branch_id']) && $user['branch_id'] !== null ? (int)$user['branch_id'] : null,
-                    mb_substr($eventType, 0, 80),
-                    $entityType !== null ? mb_substr($entityType, 0, 80) : null,
-                    $entityId !== null ? mb_substr((string)$entityId, 0, 120) : null,
-                    self::clientIp(),
-                    self::userAgent(),
-                    $metadataJson,
-                ]
-            );
+
+            $base = [
+                self::requestId(),
+                isset($effective['id']) ? (int)$effective['id'] : null,
+                isset($effective['branch_id']) && $effective['branch_id'] !== null ? (int)$effective['branch_id'] : null,
+                mb_substr($eventType, 0, 80),
+                $entityType !== null ? mb_substr($entityType, 0, 80) : null,
+                $entityId !== null ? mb_substr((string)$entityId, 0, 120) : null,
+                self::clientIp(),
+                self::userAgent(),
+                $metadataJson,
+            ];
+
+            if (self::impersonationAuditReady()) {
+                Database::query(
+                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json,actor_user_id,effective_user_id,impersonation_session_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    array_merge($base, [
+                        isset($actor['id']) ? (int)$actor['id'] : null,
+                        isset($effective['id']) ? (int)$effective['id'] : null,
+                        Auth::impersonationSessionId(),
+                    ])
+                );
+            } else {
+                Database::query(
+                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json) VALUES (?,?,?,?,?,?,?,?,?)',
+                    $base
+                );
+            }
         } catch (Throwable $e) {
             error_log('[Malbcoff security audit failure][' . self::requestId() . '] ' . $e->getMessage());
+        }
+    }
+
+    public static function closeImpersonationSession(string $reason): void
+    {
+        if (!Auth::isImpersonating()) return;
+        $ctx = Auth::impersonationContext();
+        $id = (int)($ctx['db_session_id'] ?? 0);
+        if ($id <= 0 || !self::tableExists('security_impersonation_sessions')) return;
+        try {
+            Database::query(
+                'UPDATE security_impersonation_sessions SET ended_at=COALESCE(ended_at,NOW()),ended_reason=COALESCE(ended_reason,?) WHERE id=?',
+                [mb_substr($reason, 0, 40), $id]
+            );
+        } catch (Throwable $e) {
+            self::reportException($e, 'close_impersonation_session');
         }
     }
 

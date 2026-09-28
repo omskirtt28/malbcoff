@@ -24,6 +24,7 @@ function flash(string $key, ?string $message = null): ?string
 function role_label(string $role): string
 {
     return match ($role) {
+        'system_admin' => 'System Admin',
         'owner' => 'Owner',
         'branch_manager' => 'Branch Manager',
         'cashier' => 'Cashier',

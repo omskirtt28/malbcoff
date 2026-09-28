@@ -1,7 +1,7 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 if (!Auth::check()) redirect('login.php');
-if (Auth::isOwner()) redirect('index.php?page=dashboard');
+if (Auth::isOwner() || Auth::actorIsSystemAdmin()) redirect('index.php');
 if (empty($app['maintenance_mode'])) redirect('index.php?page=dashboard');
 http_response_code(503);
 header('Retry-After: 300');
