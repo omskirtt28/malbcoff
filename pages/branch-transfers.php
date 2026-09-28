@@ -100,8 +100,8 @@ function transfer_product_specs(array $row): string {
 
 <?php if (!$ready): ?>
     <div class="alert alert-info">
-        <strong>Branch receiving setup is not installed yet.</strong><br>
-        Run <code>database/P2_005_branch_transfer_receiving.sql</code> in phpMyAdmin once, then refresh this page.
+        <strong>Branch receiving is temporarily unavailable.</strong><br>
+        Please contact the system administrator.
     </div>
 <?php elseif ($setupError): ?>
     <div class="alert alert-error"><?= e($setupError) ?></div>

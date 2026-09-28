@@ -2125,6 +2125,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 }
 
 
+/* AUTH RESPONSIVE BRAND PATCH — show the Malbcoff mark when the desktop brand panel is hidden */
+.auth-mobile-brand{display:none}
+@media(max-width:900px){
+  .auth-mobile-brand{display:flex;align-items:center;margin:0 0 22px}
+  .auth-mobile-brand .brand-mark{width:48px;height:48px;border-radius:14px;margin:0;flex:0 0 auto;font-size:22px}
+}
+@media(max-width:600px){
+  .auth-mobile-brand{margin-bottom:20px}
+  .auth-mobile-brand .brand-mark{width:46px;height:46px;border-radius:13px;font-size:21px}
+}
+
 /* PRE-LIVE UI CLEANUP — production login spacing after demo/phase removal */
 .auth-brand-panel .brand-mark{margin-bottom:22px}
 .auth-brand-panel h1{margin-top:0}
+
+/* v1.0.0 production readiness — user lifecycle + maintenance */
+.users-page-heading{align-items:center}.user-management-head{align-items:center}.security-note{display:inline-flex;align-items:center;gap:6px;color:#52647b;font-size:11px;font-weight:750}.security-note .icon{width:16px;height:16px;color:var(--blue)}
+.users-table td{vertical-align:middle}.users-table .table-subtext{display:block;margin-top:3px;color:var(--muted);font-size:10.5px}.user-role-pill{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border-radius:999px;background:#f3f6fb;color:#475467;font-size:10.5px;font-weight:800}.user-role-pill.role-owner{background:#eef5ff;color:#1769e8}.user-role-pill.role-branch_manager{background:#f2efff;color:#6b52cf}.user-role-pill.role-inventory{background:#eaf8f0;color:#178a53}.user-role-pill.role-cashier{background:#fff6e5;color:#a76510}.user-password-pending{margin-left:5px;background:#fff7e8!important;color:#a86812!important}.user-last-login{font-size:11.5px;color:#475467}.user-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.user-row-actions form{display:inline-flex}.user-deactivate-btn{color:#b42318}.user-row-actions button:disabled{opacity:.45;cursor:not-allowed}
+.user-account-dialog{width:min(620px,100%)}.user-reset-dialog{width:min(500px,100%)}.user-account-form{padding:18px 20px 20px}.user-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.user-form-full{grid-column:1/-1}.user-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin:18px -20px -20px;padding:14px 20px;border-top:1px solid var(--border);background:#fbfcfe}.user-account-form .field small{display:block;color:var(--muted);font-size:10px;line-height:1.4;margin-top:5px}
+.maintenance-owner-chip{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border:1px solid #f1d49d;border-radius:999px;background:#fff8e8;color:#9a620d;font-size:10.5px;font-weight:800}.maintenance-owner-chip .icon{width:15px;height:15px}.auth-secondary-link{display:block;text-align:center;margin-top:16px;color:var(--muted);font-size:11.5px;font-weight:700}.auth-secondary-link:hover{color:var(--blue)}
+.maintenance-page{padding:24px}.maintenance-shell{width:min(560px,100%);padding:42px 36px;background:#fff;border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow);text-align:center}.maintenance-shell .brand-mark{margin:0 auto 22px}.maintenance-shell h1{font-size:30px;letter-spacing:-.7px;margin:7px 0 10px}.maintenance-shell p{max-width:440px;margin:0 auto;color:var(--muted);line-height:1.65}.maintenance-actions{display:flex;justify-content:center;gap:9px;margin:26px 0 18px}.maintenance-shell>small{color:var(--muted-2);font-size:10.5px}
+@media(max-width:900px){.user-role-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.users-table .user-row-actions{justify-content:flex-start}}
+@media(max-width:680px){.users-page-heading{align-items:stretch}.users-page-heading>.btn{width:100%}.user-role-grid{grid-template-columns:1fr}.user-form-grid{grid-template-columns:1fr}.user-form-full{grid-column:auto}.user-account-form{padding:14px 15px 16px}.user-modal-actions{margin:16px -15px -16px;padding:12px 15px max(12px,env(safe-area-inset-bottom));flex-direction:column-reverse}.user-modal-actions .btn{width:100%}.maintenance-shell{padding:34px 20px}.maintenance-actions{display:grid;grid-template-columns:1fr}.maintenance-actions .btn{width:100%}.maintenance-shell h1{font-size:26px}.maintenance-owner-chip{display:none}}

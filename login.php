@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (Auth::attempt($email, $password)) {
                     Security::recordLoginSuccess($email);
                     Security::audit('auth.login_success', 'user', (int)(Auth::user()['id'] ?? 0));
-                    redirect('index.php');
+                    redirect(Auth::requiresPasswordChange() ? 'change-password.php' : 'index.php');
                 }
                 Security::recordLoginFailure($email);
                 Security::audit('auth.login_failed', 'login', null, ['email_hash' => hash('sha256', $email)]);
@@ -47,7 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login | <?= e($app['name']) ?></title>
-    <link rel="stylesheet" href="assets/css/app.css">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="shortcut icon" href="assets/favicon.svg">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/assets/css/app.css') ?>">
 </head>
 <body class="auth-page">
 <div class="auth-shell">
@@ -62,6 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </section>
     <section class="auth-card">
+        <div class="auth-mobile-brand" aria-hidden="true">
+            <div class="brand-mark">M</div>
+        </div>
         <div class="auth-card-header">
             <span class="eyebrow">WELCOME BACK</span>
             <h2>Sign in to continue</h2>

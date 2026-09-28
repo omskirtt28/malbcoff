@@ -42,3 +42,32 @@ require __DIR__ . '/core/helpers.php';
 Security::configure($app);
 Security::sendHeaders();
 Security::guardAuthenticatedSession();
+
+// Central release gates: forced password change and maintenance mode apply to
+// every page/action so users cannot bypass them by typing a direct URL.
+if (Auth::check()) {
+    $scriptPath = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $scriptName = basename($scriptPath);
+    $isActionRequest = str_contains($scriptPath, '/actions/');
+
+    if (Auth::requiresPasswordChange() && !in_array($scriptName, ['change-password.php', 'logout.php'], true)) {
+        if ($isActionRequest) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => false, 'message' => 'Change your temporary password before continuing.']);
+            exit;
+        }
+        redirect('change-password.php');
+    }
+
+    if (!empty($app['maintenance_mode']) && !Auth::isOwner() && !in_array($scriptName, ['maintenance.php', 'logout.php', 'change-password.php'], true)) {
+        if ($isActionRequest) {
+            http_response_code(503);
+            header('Retry-After: 300');
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => false, 'message' => 'The system is temporarily under maintenance. Please try again shortly.']);
+            exit;
+        }
+        redirect('maintenance.php');
+    }
+}

@@ -6,7 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('../index.php?page=add-item'
 if (!Csrf::verify($_POST['_csrf'] ?? null)) { flash('error','Your session expired. Please submit the form again.'); redirect('../index.php?page=add-item'); }
 
 $role = Auth::user()['role'] ?? '';
-if (!in_array($role, ['owner','branch_manager','inventory'], true)) { flash('error','Your account does not have permission to manage Products.'); redirect('../index.php?page=products'); }
+if (!in_array($role, ['branch_manager','inventory'], true)) { flash('error','Your account does not have permission to manage Products.'); redirect('../index.php?page=products'); }
 
 $type = strtolower(trim((string)($_POST['product_type'] ?? 'phone')));
 $nextAction = ($_POST['next_action'] ?? 'products') === 'receive' ? 'receive' : 'products';

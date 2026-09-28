@@ -1,5 +1,6 @@
 # Production secrets
 config/database.local.php
+config/app.local.php
 .env
 .env.*
 !.env.example

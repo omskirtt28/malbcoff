@@ -16,7 +16,7 @@ $mobileItems[] = ['inventory', 'inventory', 'Inventory'];
 if (Auth::isOwner() || in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) {
     $mobileItems[] = ['branch-transfers', 'movement', 'Transfers'];
 }
-if (!Auth::isOwner()) {
+if (!Auth::isOwner() && in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) {
     $mobileItems[] = ['stock-in', 'stock', 'Receive Stock'];
 }
 if (Auth::isOwner() || in_array($mobileUser['role'], ['branch_manager', 'inventory'], true)) {

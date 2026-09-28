@@ -75,14 +75,14 @@ try {
         )->fetchAll();
     }
 } catch (Throwable $e) {
-    $dbError = 'Dashboard inventory data will appear after the required inventory migrations are applied.';
+    $dbError = 'Inventory monitoring is temporarily unavailable. Please contact the system administrator.';
 }
 
 if ($isOwnerDashboard) {
     try {
         $salesReady = (bool)Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn();
         if (!$salesReady) {
-            throw new RuntimeException('Sales table is not ready.');
+            throw new RuntimeException('Sales monitoring is unavailable.');
         }
 
         $today = Database::query(
@@ -108,7 +108,7 @@ if ($isOwnerDashboard) {
              LIMIT 6"
         )->fetchAll();
     } catch (Throwable $e) {
-        $salesDbError = 'Sales monitoring will appear after the POS sales migration is applied.';
+        $salesDbError = 'Sales monitoring is temporarily unavailable. Please contact the system administrator.';
     }
 }
 

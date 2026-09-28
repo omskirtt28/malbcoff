@@ -152,7 +152,7 @@ function peso(float|int|string|null $amount): string
 function pos_role_allowed(?string $role = null): bool
 {
     $role = $role ?? (Auth::user()['role'] ?? '');
-    return in_array($role, ['owner', 'branch_manager', 'cashier'], true);
+    return in_array($role, ['branch_manager', 'cashier'], true);
 }
 
 function current_branch_scope(): ?int

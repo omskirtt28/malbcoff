@@ -74,7 +74,7 @@ try {
     $salesReady = (bool)Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn();
     $saleItemsReady = (bool)Database::query("SHOW TABLES LIKE 'sale_items'")->fetchColumn();
     if (!$salesReady || !$saleItemsReady) {
-        throw new RuntimeException('Sales records are not ready yet. Run the POS database migration first.');
+        throw new RuntimeException('Sales records are temporarily unavailable.');
     }
 
     if ($isOwner) {

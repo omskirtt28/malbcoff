@@ -101,7 +101,8 @@ try {
         foreach ($priceRows as $row) $priceMap[(int)$row['product_id']][(int)$row['branch_id']] = (float)$row['selling_price'];
     }
 } catch (Throwable $e) {
-    flash('error', 'Unable to load Product Master. Please apply the P1-006 database migration first.');
+    Security::reportException($e, 'products_load');
+    flash('error', 'Unable to load Product Master right now. Please contact the system administrator.');
 }
 
 if ($quickStockDone && $quickCompletedVariantId && $selectedModel) {
@@ -194,14 +195,10 @@ function product_master_url(array $overrides = []): string
 </section>
 
 <?php if ($isOwner): ?>
-<nav class="product-state-tabs" aria-label="Product status">
-    <a class="product-state-tab <?= !$archiveMode ? 'active' : '' ?>" href="index.php?page=products">
-        <span class="product-state-tab-icon"><?= icon('products') ?></span>
-        <span><strong>Active Products</strong><small>Current brands, models and variants</small></span>
-    </a>
-    <a class="product-state-tab <?= $archiveMode ? 'active archived' : '' ?>" href="index.php?page=products&status=archived">
+<nav class="product-state-tabs product-state-tabs-owner" aria-label="Product status">
+    <a class="product-state-tab active archived" href="index.php?page=products&status=archived">
         <span class="product-state-tab-icon"><?= icon('archive') ?></span>
-        <span><strong>Archived</strong><small>Restore or delete old product records</small></span>
+        <span><strong>Archived Product Records</strong><small>Restore or delete old Product Master records</small></span>
     </a>
 </nav>
 <?php endif; ?>
@@ -306,10 +303,10 @@ function product_master_url(array $overrides = []): string
 <?php else: ?>
 
 <?php if (!$schemaReady): ?>
-    <div class="alert alert-info"><strong>P1-006 migration required.</strong> Run <code>database/P1_006_product_master.sql</code> in phpMyAdmin before adding or editing models.</div>
+    <div class="alert alert-info"><strong>Product setup is temporarily unavailable.</strong> Please contact the system administrator before adding or editing models.</div>
 <?php endif; ?>
 <?php if ($isOwner && $showArchived && !$catalogDeleteReady): ?>
-    <div class="alert alert-info"><strong>Archive cleanup update required.</strong> Run <code>database/P2_009_archive_delete_cleanup.sql</code> before deleting archived variants that already have history.</div>
+    <div class="alert alert-info"><strong>Archive cleanup is temporarily unavailable.</strong> Existing records remain safe. Please contact the system administrator.</div>
 <?php endif; ?>
 
 <section class="card product-quick-start" aria-labelledby="productQuickStartTitle">
@@ -525,7 +522,7 @@ function product_master_url(array $overrides = []): string
     <?php if (!$selectedModel): ?>
         <div class="empty-state configuration-empty"><div class="empty-icon"><?= icon('products') ?></div><strong>No model selected</strong><span>Select a model's Variants action to view its available options.</span></div>
     <?php else: ?>
-        <?php if (!$pricingReady): ?><div class="alert alert-info variant-migration-note"><strong>Pricing setup required.</strong> Run <code>database/P2_004_pricing_variant_serial_ux.sql</code> before editing branch prices.</div><?php endif; ?>
+        <?php if (!$pricingReady): ?><div class="alert alert-info variant-migration-note"><strong>Branch pricing is temporarily unavailable.</strong> Please contact the system administrator.</div><?php endif; ?>
         <div class="table-wrap master-table-wrap">
             <table class="data-table compact-table configuration-table">
                 <thead><tr><th>Variant</th><th>Selling Price</th><th>Stock</th><th>Status</th><th class="action-col">Actions</th></tr></thead>

@@ -25,16 +25,22 @@ if (!isset($allowedPages[$page])) {
 $role = (string)(Auth::user()['role'] ?? '');
 $pageRoles = [
     'dashboard' => ['owner','branch_manager','cashier','inventory'],
-    'pos' => ['owner','branch_manager','cashier'],
+    'pos' => ['branch_manager','cashier'],
     'sales-records' => ['owner','branch_manager','cashier'],
     'products' => ['owner','branch_manager','cashier','inventory'],
-    'add-item' => ['owner','branch_manager','inventory'],
+    'add-item' => ['branch_manager','inventory'],
     'inventory' => ['owner','branch_manager','cashier','inventory'],
     'branch-transfers' => ['owner','branch_manager','inventory'],
-    'stock-in' => ['owner','branch_manager','inventory'],
+    'stock-in' => ['branch_manager','inventory'],
     'stock-movement' => ['owner','branch_manager','inventory'],
     'users' => ['owner','branch_manager'],
 ];
+
+if ($role === 'owner' && $page === 'products' && (($_GET['status'] ?? '') !== 'archived')) {
+    Security::audit('auth.page_denied', 'page', $page, ['role' => $role, 'reason' => 'owner_monitoring_scope']);
+    $page = 'dashboard';
+    flash('error', 'Owner access is focused on monitoring. Use Archive for Product Master history.');
+}
 
 if (!in_array($role, $pageRoles[$page] ?? [], true)) {
     Security::audit('auth.page_denied', 'page', $page, ['role' => $role]);

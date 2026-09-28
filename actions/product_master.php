@@ -9,7 +9,7 @@ if (!Csrf::verify($_POST['_csrf'] ?? null)) {
 }
 
 $role = Auth::user()['role'] ?? '';
-$canAddEdit = in_array($role, ['owner', 'branch_manager', 'inventory'], true);
+$canAddEdit = in_array($role, ['branch_manager', 'inventory'], true);
 $isOwner = Auth::isOwner();
 $entity = (string)($_POST['entity'] ?? '');
 $action = (string)($_POST['action'] ?? '');
@@ -33,12 +33,12 @@ if (in_array($action, ['archive','restore','delete'], true) && !$isOwner) {
     flash('error', 'Only the Owner can archive, restore or permanently delete Product Master records.');
     redirect('../index.php?page=products');
 }
-if ($entity === 'configuration' && $action === 'edit' && !in_array($role, ['owner','branch_manager'], true)) {
-    flash('error', 'Only the Owner or Branch Manager can update variant pricing.');
+if ($entity === 'configuration' && $action === 'edit' && !in_array($role, ['branch_manager'], true)) {
+    flash('error', 'Only the Branch Manager can update active variant pricing.');
     redirect('../index.php?page=products');
 }
-if ($entity === 'brand' && $action === 'edit' && !$isOwner) {
-    flash('error', 'Only the Owner can rename a global brand. Branch users can add brands and manage models.');
+if ($entity === 'brand' && $action === 'edit' && $role !== 'branch_manager') {
+    flash('error', 'Only the Branch Manager can rename a global brand.');
     redirect('../index.php?page=products');
 }
 
@@ -297,7 +297,7 @@ function handle_configuration(string $action, ?int $id): void {
         } else {
             $column = Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
             if (!$column) {
-                throw new RuntimeException('Run the P2-009 archive cleanup database update first.');
+                throw new RuntimeException('Archive cleanup is temporarily unavailable. Contact the system administrator.');
             }
             Database::query('UPDATE products SET catalog_deleted_at=NOW(), catalog_deleted_by=? WHERE id=?', [(int)(Auth::user()['id'] ?? 0), $id]);
         }

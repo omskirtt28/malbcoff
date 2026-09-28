@@ -7,6 +7,8 @@
     <meta name="theme-color" content="#ffffff">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title><?= e($pageTitle) ?> | <?= e($app['name']) ?></title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="shortcut icon" href="assets/favicon.svg">
     <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/app.css') ?>">
     <link rel="stylesheet" href="assets/css/branch-transfers.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/branch-transfers.css') ?>">
 </head>

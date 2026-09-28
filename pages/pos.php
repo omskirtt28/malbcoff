@@ -69,13 +69,8 @@ function pos_payment_label(string $method): string {
     <div class="empty-icon"><?= icon('alert') ?></div>
     <div>
         <span class="eyebrow">POS SETUP REQUIRED</span>
-        <h2>Point of Sale database setup is incomplete</h2>
-        <?php if(Auth::isOwner()): ?>
-            <p>Run <code>database/P2_001_brand_new_pos.sql</code> then <code>database/P2_004_pricing_variant_serial_ux.sql</code> in phpMyAdmin. This preserves the current database and adds the required POS tables/fields.</p>
-            <small>Missing: <?= e(implode(', ', $posMissing)) ?></small>
-        <?php else: ?>
-            <p>Please contact the Owner/System Administrator to finish the POS database setup before processing sales.</p>
-        <?php endif; ?>
+        <h2>Point of Sale is temporarily unavailable</h2>
+        <p>Please contact the system administrator before processing sales.</p>
     </div>
 </section>
 <?php else: ?>

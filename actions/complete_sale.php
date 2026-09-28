@@ -13,8 +13,8 @@ if (!Csrf::verify($_POST['_csrf'] ?? null)) {
 }
 
 $requestedBranch = filter_var($_POST['branch_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
-$branchId = Auth::isOwner() ? $requestedBranch : (Auth::branchId() ?: 0);
-$returnUrl = '../index.php?page=pos' . (Auth::isOwner() && $branchId ? '&branch=' . $branchId : '');
+$branchId = Auth::branchId() ?: 0;
+$returnUrl = '../index.php?page=pos';
 
 $paymentMethod = (string)($_POST['payment_method'] ?? '');
 $allowedPayments = ['cash','gcash','maya','card','bank_transfer'];

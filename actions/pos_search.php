@@ -10,14 +10,14 @@ if (!Auth::check()) {
 }
 
 $role = Auth::user()['role'] ?? '';
-if (!in_array($role, ['owner', 'branch_manager', 'cashier'], true)) {
+if (!in_array($role, ['branch_manager', 'cashier'], true)) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'Your account does not have POS access.']);
     exit;
 }
 
 $requestedBranch = filter_input(INPUT_GET, 'branch_id', FILTER_VALIDATE_INT) ?: 0;
-$branchId = Auth::isOwner() ? $requestedBranch : (Auth::branchId() ?: 0);
+$branchId = Auth::branchId() ?: 0;
 if (!$branchId) {
     http_response_code(422);
     echo json_encode(['ok' => false, 'message' => 'Select a branch before searching products.']);
@@ -116,10 +116,10 @@ try {
 
 function ensure_pos_schema_dependencies(): void
 {
-    if (!branch_pricing_ready()) throw new RuntimeException('P2-004 branch pricing migration is missing.');
+    if (!branch_pricing_ready()) throw new RuntimeException('Branch pricing setup is unavailable.');
     $condition = Database::query("SHOW COLUMNS FROM inventory_units LIKE 'condition_type'")->fetch();
     $unitCost = Database::query("SHOW COLUMNS FROM inventory_units LIKE 'acquisition_cost'")->fetch();
     if (!$condition || !$unitCost) {
-        throw new RuntimeException('Required Phase 1 inventory migrations are missing.');
+        throw new RuntimeException('Inventory setup is unavailable.');
     }
 }

@@ -33,7 +33,8 @@ if (!Auth::isOwner()) {
     </label>
 
     <div class="topbar-actions">
-        <?php if (Auth::isOwner()): ?>
+        <?php if (!empty($app['maintenance_mode']) && Auth::isOwner()): ?><span class="maintenance-owner-chip"><?= icon('alert') ?> Maintenance Mode</span><?php endif; ?>
+        <?php if (Auth::isOwner() && !in_array((string)($page ?? ''), ['products','users'], true)): ?>
             <div class="branch-switcher">
                 <?= icon('branch') ?>
                 <select aria-label="Branch scope" onchange="window.location='<?= e(owner_branch_filter_url($page, null)) ?>' + (this.value ? '&branch=' + this.value : '')">
@@ -44,7 +45,7 @@ if (!Auth::isOwner()) {
                 </select>
             </div>
         <?php else: ?>
-            <div class="branch-chip topbar-branch-chip"><?= icon('branch') ?><span><?= e($scopeName) ?></span></div>
+            <div class="branch-chip topbar-branch-chip"><?= icon('branch') ?><span><?= e(Auth::isOwner() ? 'All Branches' : $scopeName) ?></span></div>
         <?php endif; ?>
 
         <details class="notification-dropdown">
@@ -66,6 +67,7 @@ if (!Auth::isOwner()) {
                     <strong><?= e($user['name'] ?? 'User') ?></strong>
                     <span><?= e($scopeName) ?> • <?= e(role_label($user['role'])) ?></span>
                 </div>
+                <a href="change-password.php"><?= icon('shield') ?><span>Change Password</span></a>
                 <a href="logout.php"><?= icon('logout') ?><span>Sign Out</span></a>
             </div>
         </details>

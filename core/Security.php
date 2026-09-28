@@ -27,6 +27,11 @@ final class Security
         return self::$requestId ?? 'unknown';
     }
 
+    public static function isProduction(): bool
+    {
+        return !empty(self::app()['is_production']);
+    }
+
     public static function isHttps(): bool
     {
         $https = strtolower((string)($_SERVER['HTTPS'] ?? ''));
@@ -57,7 +62,9 @@ final class Security
 
         $app = self::app();
         if (!empty($app['is_production']) && !empty($app['hsts_enabled']) && self::isHttps()) {
-            header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+            $hsts = 'Strict-Transport-Security: max-age=31536000';
+            if (!empty($app['hsts_include_subdomains'])) $hsts .= '; includeSubDomains';
+            header($hsts);
         }
     }
 
@@ -127,7 +134,7 @@ final class Security
             try {
                 $userId = (int)(Auth::user()['id'] ?? 0);
                 $fresh = $userId > 0 ? Database::query(
-                    'SELECT u.id,u.branch_id,u.name,u.email,u.role,u.is_active,b.name AS branch_name FROM users u LEFT JOIN branches b ON b.id=u.branch_id WHERE u.id=? LIMIT 1',
+                    'SELECT u.id,u.branch_id,u.name,u.email,u.role,u.is_active,u.must_change_password,u.password_changed_at,u.last_login_at,b.name AS branch_name FROM users u LEFT JOIN branches b ON b.id=u.branch_id WHERE u.id=? LIMIT 1',
                     [$userId]
                 )->fetch() : null;
                 if (!$fresh || !(int)$fresh['is_active']) {
@@ -275,8 +282,21 @@ final class Security
         ];
         try {
             Database::query('DELETE FROM security_login_throttles WHERE scope_key IN (?,?)', $keys);
+            self::runHousekeeping();
         } catch (Throwable $e) {
             self::reportException($e, 'record_login_success');
+        }
+    }
+
+    public static function runHousekeeping(): void
+    {
+        if (!self::securitySchemaReady()) return;
+        $days = max(30, (int)(self::app()['audit_retention_days'] ?? 180));
+        $cutoff = date('Y-m-d H:i:s', time() - ($days * 86400));
+        try {
+            Database::query('DELETE FROM security_audit_logs WHERE created_at < ? LIMIT 5000', [$cutoff]);
+        } catch (Throwable $e) {
+            self::reportException($e, 'security_audit_housekeeping');
         }
     }
 

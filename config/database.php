@@ -1,5 +1,9 @@
 <?php
-$env = strtolower(trim((string)(getenv('APP_ENV') ?: 'local')));
+$appOverridePath = __DIR__ . '/app.local.php';
+$appOverride = is_file($appOverridePath) ? (require $appOverridePath) : [];
+if (!is_array($appOverride)) $appOverride = [];
+$envValue = getenv('APP_ENV');
+$env = strtolower(trim((string)(($envValue !== false && trim((string)$envValue) !== '') ? $envValue : ($appOverride['environment'] ?? 'local'))));
 $isProduction = $env === 'production';
 $localOverride = __DIR__ . '/database.local.php';
 $override = is_file($localOverride) ? (require $localOverride) : [];
