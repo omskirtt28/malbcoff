@@ -14,7 +14,7 @@ if (!Auth::check()) {
     if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
         http_response_code(401); header('Content-Type: application/json; charset=utf-8'); echo json_encode(['exists'=>false,'error'=>'Unauthenticated']); exit;
     }
-    redirect('../login.php');
+    redirect(app_url('login'));
 }
 
 $role=Auth::user()['role']??'';
@@ -115,18 +115,21 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
 
 if(!$canStockIn){
     if($isQuickReceive){http_response_code(403);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your account does not have permission to receive stock.']);exit;}
-    flash('error','Your account does not have permission to receive stock.');redirect('../index.php?page=inventory');
+    flash('error','Your account does not have permission to receive stock.');redirect(app_url('inventory'));
 }
-if($_SERVER['REQUEST_METHOD']!=='POST')redirect('../index.php?page=stock-in');
+if($_SERVER['REQUEST_METHOD']!=='POST')redirect(app_url('stock-in'));
 if(!Csrf::verify($_POST['_csrf']??null)){
     if($isQuickReceive){http_response_code(419);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your session expired. Refresh the page and try again.']);exit;}
-    flash('error','Your session expired. Please submit the Receive Stock form again.');redirect('../index.php?page=stock-in');
+    flash('error','Your session expired. Please submit the Receive Stock form again.');redirect(app_url('stock-in'));
 }
 
 $productId=filter_var($_POST['product_id']??null,FILTER_VALIDATE_INT)?:0;
 $requestedBranch=filter_var($_POST['branch_id']??null,FILTER_VALIDATE_INT)?:0;
 $branchId=Auth::isOwner()?$requestedBranch:(Auth::branchId()?:0);
-$returnUrl='../index.php?page=stock-in'.($productId?'&product_id='.$productId:'').(Auth::isOwner()&&$branchId?'&branch='.$branchId:'');
+$returnParams = [];
+if ($productId) $returnParams['product_id'] = $productId;
+if (Auth::isOwner() && $branchId) $returnParams['branch'] = $branchId;
+$returnUrl = app_url('stock-in', $returnParams);
 if(!$productId||!$branchId){
     $message=!$productId?'Please choose a product variant first.':'Please select a valid stock location.';
     if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}

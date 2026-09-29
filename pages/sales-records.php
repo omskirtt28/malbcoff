@@ -38,7 +38,8 @@ function sales_records_url(array $state, array $changes = []): string
         if ($value === null || $value === '') unset($state[$key]);
         else $state[$key] = $value;
     }
-    return 'index.php?' . http_build_query($state);
+    unset($state['page']);
+    return app_url('sales-records', $state);
 }
 
 $defaultFrom = date('Y-m-01');
@@ -232,22 +233,21 @@ foreach ($branches as $branch) {
             ? 'Every completed POS transaction is recorded under the branch that made the sale. Review all branch totals and open each transaction for item-level details.'
             : 'Review completed POS transactions recorded under ' . e($selectedBranchName) . '. Sales from other branches are not accessible from this account.' ?></p>
     </div>
-    <?php if (!$isOwner && pos_role_allowed()): ?><a class="btn btn-primary" href="index.php?page=pos"><?= icon('pos') ?> Open POS</a><?php endif; ?>
+    <?php if (!$isOwner && pos_role_allowed()): ?><a class="btn btn-primary" href="<?= e(app_url('pos')) ?>"><?= icon('pos') ?> Open POS</a><?php endif; ?>
 </section>
 
 <?php if ($dbError): ?>
     <div class="alert alert-error"><?= e($dbError) ?></div>
 <?php else: ?>
 
-<form class="card sales-filter-card" method="get" action="index.php">
-    <input type="hidden" name="page" value="sales-records">
+<form class="card sales-filter-card" method="get" action="<?= e(app_url('sales-records')) ?>">
     <label class="field sales-search-field"><span>Search Record</span><div class="sales-search-input"><?= icon('search') ?><input type="search" name="q" value="<?= e($search) ?>" placeholder="Sale no., cashier, reference…"></div></label>
     <?php if ($isOwner): ?><label class="field"><span>Branch</span><select name="branch"><option value="">All Branches</option><?php foreach ($branches as $branch): ?><option value="<?= (int)$branch['id'] ?>" <?= $branchId === (int)$branch['id'] ? 'selected' : '' ?>><?= e($branch['name']) ?></option><?php endforeach; ?></select></label><?php else: ?><label class="field"><span>Branch</span><input type="text" value="<?= e($selectedBranchName) ?>" readonly aria-label="Assigned branch"></label><?php endif; ?>
     <label class="field"><span>Payment</span><select name="payment"><option value="">All Payments</option><?php foreach ($allowedPayments as $method): ?><option value="<?= e($method) ?>" <?= $payment === $method ? 'selected' : '' ?>><?= e(sales_records_payment_label($method)) ?></option><?php endforeach; ?></select></label>
     <label class="field"><span>Date From</span><input type="date" name="from" value="<?= e($from) ?>"></label>
     <label class="field"><span>Date To</span><input type="date" name="to" value="<?= e($to) ?>"></label>
     <button class="btn btn-primary sales-filter-apply" type="submit">Apply</button>
-    <a class="btn btn-secondary sales-filter-reset" href="index.php?page=sales-records">Reset</a>
+    <a class="btn btn-secondary sales-filter-reset" href="<?= e(app_url('sales-records')) ?>">Reset</a>
 </form>
 
 <div class="sales-kpi-grid">

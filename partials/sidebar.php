@@ -47,12 +47,12 @@ if ($isSystemAdminControl) {
     </div>
     <nav class="sidebar-nav" aria-label="Main navigation">
         <?php foreach ($navItems as [$slug, $iconName, $label]): ?>
-            <a href="index.php?page=<?= e($slug) ?>" class="nav-link <?= ($page === $slug || ($slug === 'products' && $page === 'add-item')) ? 'active' : '' ?>">
+            <a href="<?= e(app_url($slug)) ?>" class="nav-link <?= ($page === $slug || ($slug === 'products' && $page === 'add-item')) ? 'active' : '' ?>">
                 <?= icon($iconName) ?><span><?= e($label) ?></span><?php if ($slug === 'branch-transfers' && $pendingTransferCount > 0): ?><b class="nav-count"><?= $pendingTransferCount > 99 ? '99+' : (int)$pendingTransferCount ?></b><?php endif; ?>
             </a>
         <?php endforeach; ?>
         <?php if (!$isSystemAdminControl && Auth::isOwner()): ?>
-            <a href="index.php?page=products&amp;status=archived" class="nav-link <?= ($page === 'products' && (($_GET['status'] ?? '') === 'archived')) ? 'active' : '' ?>">
+            <a href="<?= e(app_url('archive')) ?>" class="nav-link <?= ($page === 'products' && (($_GET['status'] ?? '') === 'archived')) ? 'active' : '' ?>">
                 <?= icon('archive') ?><span>Archive</span>
             </a>
         <?php endif; ?>
@@ -62,7 +62,7 @@ if ($isSystemAdminControl) {
             <?= icon($isSystemAdminControl ? 'shield' : 'branch') ?>
             <div><strong><?= e($sidebarContext) ?></strong><span><?= e(role_label($sidebarUser['role'] ?? '')) ?></span></div>
         </div>
-        <a class="logout-link" href="logout.php"><?= icon('logout') ?><span>Sign Out</span></a>
+        <a class="logout-link" href="<?= e(app_url('logout')) ?>"><?= icon('logout') ?><span>Sign Out</span></a>
     </div>
 </aside>
 <button class="sidebar-scrim" type="button" data-sidebar-close aria-label="Close navigation"></button>

@@ -24,7 +24,7 @@ try {
 $isAccessoryMode = !$presetModel && $requestedType === 'accessory';
 if (!$presetModel && !$isAccessoryMode) {
     echo '<section class="page-heading"><div><span class="eyebrow">PRODUCT SETUP</span><h1>Add Variant</h1><p>Choose a model first, then add its variant.</p></div></section>';
-    echo '<section class="card callout-card"><div>'.icon('info').'</div><div><h2>Select a model from Products.</h2><p>Open Products, choose the model, then click Add Variant.</p><a class="btn btn-primary" href="index.php?page=products">Go to Products</a></div></section>';
+    echo '<section class="card callout-card"><div>'.icon('info').'</div><div><h2>Select a model from Products.</h2><p>Open Products, choose the model, then click Add Variant.</p><a class="btn btn-primary" href="'.e(app_url('products')).'">Go to Products</a></div></section>';
     return;
 }
 
@@ -38,7 +38,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
         <h1><?= $isAccessoryMode ? 'Add Accessory' : 'Add Variant' ?></h1>
         <p><?= $isAccessoryMode ? 'Create an accessory item once, then receive its stock separately.' : 'Add one variant for '.e($modelLabel).'. Physical units and Serial Numbers / IMEIs are received after this.' ?></p>
     </div>
-    <a class="btn btn-secondary" href="index.php?page=products<?= $presetModelId ? '&model='.(int)$presetModelId : '&view=accessories' ?>">Back to Products</a>
+    <a class="btn btn-secondary" href="<?= e(app_url('products', $presetModelId ? ['model' => (int)$presetModelId] : ['view' => 'accessories'])) ?>">Back to Products</a>
 </section>
 
 <?php if (!$isAccessoryMode): ?>
@@ -87,7 +87,7 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
     </section>
 
     <div class="form-actions sticky-form-actions split-form-actions">
-        <a class="btn btn-secondary" href="index.php?page=products&model=<?= (int)$presetModel['id'] ?>">Cancel</a>
+        <a class="btn btn-secondary" href="<?= e(app_url('products', ['model' => (int)$presetModel['id']])) ?>">Cancel</a>
         <div class="form-action-group">
             <button class="btn btn-outline" type="submit" name="next_action" value="products">Save Variant</button>
             <button class="btn btn-primary" type="submit" name="next_action" value="receive"><?= icon('stock') ?> Save & Receive Stock</button>
@@ -110,6 +110,6 @@ $modelLabel = !$isAccessoryMode ? trim(($presetModel['brand_name'] ?? '').' '.($
             <?php if (Auth::isOwner()): ?><label class="field"><span>Cost Price / Unit</span><div class="money-input"><span>₱</span><input type="number" step="0.01" min="0" name="cost_price" placeholder="0.00"></div></label><?php endif; ?>
         </div>
     </section>
-    <div class="form-actions sticky-form-actions"><a class="btn btn-secondary" href="index.php?page=products&view=accessories">Cancel</a><button class="btn btn-primary" type="submit" name="next_action" value="products"><?= icon('plus') ?> Save Accessory</button></div>
+    <div class="form-actions sticky-form-actions"><a class="btn btn-secondary" href="<?= e(app_url('products', ['view' => 'accessories'])) ?>">Cancel</a><button class="btn btn-primary" type="submit" name="next_action" value="products"><?= icon('plus') ?> Save Accessory</button></div>
     <?php endif; ?>
 </form>

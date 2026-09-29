@@ -1,5 +1,7 @@
-# Malbcoff Trading - public web root protection
+# Malbcoff Trading - public web root protection and clean URLs
 # Apache 2.4+ / common shared-hosting safe rules.
+
+DirectoryIndex index.php
 
 <IfModule mod_autoindex.c>
     Options -Indexes
@@ -13,6 +15,38 @@
 
     # Development artifacts / backups / documentation are not public assets.
     RewriteRule ^(?:preview\.html|.*\.(?:md|sql|zip|bak|backup|log|ini|dist))$ - [F,L,NC]
+
+    # Existing public files/folders (assets and action endpoints) keep working.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Keep canonical clean URLs without a trailing slash.
+    RewriteRule ^(.+)/$ $1 [R=301,L]
+
+    # Authentication / utility routes.
+    RewriteRule ^login$ login.php [L,QSA]
+    RewriteRule ^logout$ logout.php [L,QSA]
+    RewriteRule ^change-password$ change-password.php [L,QSA]
+    RewriteRule ^maintenance$ maintenance.php [L,QSA]
+
+    # Application module routes. PHP files remain internal implementation details.
+    RewriteRule ^pos$ index.php?page=pos [L,QSA]
+    RewriteRule ^sales-records$ index.php?page=sales-records [L,QSA]
+    RewriteRule ^products$ index.php?page=products [L,QSA]
+    RewriteRule ^archive$ index.php?page=products&status=archived [L,QSA]
+    RewriteRule ^add-item$ index.php?page=add-item [L,QSA]
+    RewriteRule ^inventory$ index.php?page=inventory [L,QSA]
+    RewriteRule ^branch-transfers$ index.php?page=branch-transfers [L,QSA]
+    RewriteRule ^receive-stock$ index.php?page=stock-in [L,QSA]
+    RewriteRule ^stock-movement$ index.php?page=stock-movement [L,QSA]
+    RewriteRule ^users$ index.php?page=users [L,QSA]
+
+    # System Admin routes stay flat so existing relative assets/actions remain safe.
+    RewriteRule ^system-admin$ index.php?page=system-admin-dashboard [L,QSA]
+    RewriteRule ^system-admin-users$ index.php?page=system-admin-users [L,QSA]
+    RewriteRule ^system-admin-history$ index.php?page=system-admin-history [L,QSA]
+    RewriteRule ^security-logs$ index.php?page=security-logs [L,QSA]
 </IfModule>
 
 <IfModule mod_authz_core.c>

@@ -7,7 +7,7 @@ try {
     $stats['events_today']=(int)Database::query("SELECT COUNT(*) FROM security_audit_logs WHERE created_at>=CURDATE()")->fetchColumn();
 } catch(Throwable $e){ Security::reportException($e,'system_admin_dashboard'); }
 ?>
-<section class="page-heading"><div><span class="eyebrow">SYSTEM CONTROL</span><h1>System Admin</h1><p>Support users without viewing or changing their passwords. Every impersonated action remains traceable.</p></div><a class="btn btn-primary" href="index.php?page=system-admin-users"><?= icon('users') ?> User Accounts</a></section>
+<section class="page-heading"><div><span class="eyebrow">SYSTEM CONTROL</span><h1>System Admin</h1><p>Support users without viewing or changing their passwords. Every impersonated action remains traceable.</p></div><a class="btn btn-primary" href="<?= e(app_url('system-admin-users')) ?>"><?= icon('users') ?> User Accounts</a></section>
 <div class="kpi-grid system-admin-kpis">
 <article class="kpi-card tint-blue"><span>Active Users</span><strong><?= $stats['active_users'] ?></strong><small>Owner and branch accounts</small></article>
 <article class="kpi-card tint-green"><span>Active Branches</span><strong><?= $stats['branches'] ?></strong><small>Current branch master</small></article>

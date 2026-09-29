@@ -1,19 +1,19 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
-if (!Auth::check()) redirect('../login.php');
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('../index.php?page=add-item');
-if (!Csrf::verify($_POST['_csrf'] ?? null)) { flash('error','Your session expired. Please submit the form again.'); redirect('../index.php?page=add-item'); }
+if (!Auth::check()) redirect(app_url('login'));
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('add-item'));
+if (!Csrf::verify($_POST['_csrf'] ?? null)) { flash('error','Your session expired. Please submit the form again.'); redirect(app_url('add-item')); }
 
 $role = Auth::user()['role'] ?? '';
-if (!in_array($role, ['branch_manager','inventory'], true)) { flash('error','Your account does not have permission to manage Products.'); redirect('../index.php?page=products'); }
+if (!in_array($role, ['branch_manager','inventory'], true)) { flash('error','Your account does not have permission to manage Products.'); redirect(app_url('products')); }
 
 $type = strtolower(trim((string)($_POST['product_type'] ?? 'phone')));
 $nextAction = ($_POST['next_action'] ?? 'products') === 'receive' ? 'receive' : 'products';
 if (!in_array($type,['phone','tablet','accessory'],true)) $type='phone';
 $selling = round(max(0,(float)($_POST['selling_price'] ?? 0)),2);
 $cost = Auth::isOwner() ? round(max(0,(float)($_POST['cost_price'] ?? 0)),2) : 0.0;
-if ($selling <= 0) { flash('error','Enter a valid selling price.'); redirect('../index.php?page=add-item'); }
+if ($selling <= 0) { flash('error','Enter a valid selling price.'); redirect(app_url('add-item')); }
 
 try {
     ensure_configuration_schema();
@@ -33,8 +33,8 @@ try {
         seed_new_product_branch_prices($productId,$selling);
         $pdo->commit();
         Security::audit('catalog.product_created', 'product', $productId, ['product_type' => 'accessory']);
-        if ($nextAction === 'receive') { flash('success','Accessory saved. Enter the quantity that arrived.'); redirect('../index.php?page=stock-in&product_id='.$productId); }
-        flash('success','Accessory product saved to Products.');redirect('../index.php?page=products&view=accessories');
+        if ($nextAction === 'receive') { flash('success','Accessory saved. Enter the quantity that arrived.'); redirect(app_url('stock-in', ['product_id' => $productId])); }
+        flash('success','Accessory product saved to Products.');redirect(app_url('products', ['view' => 'accessories']));
     }
 
     $brandId=filter_var($_POST['brand_id']??null,FILTER_VALIDATE_INT)?:0;
@@ -64,14 +64,14 @@ try {
     Security::audit('catalog.product_created', 'product', $productId, ['product_type' => $type, 'model_id' => $modelId]);
     if ($nextAction === 'receive') {
         flash('success','Variant saved. Enter how many units arrived and add their Serial Numbers / IMEIs.');
-        redirect('../index.php?page=stock-in&product_id='.$productId);
+        redirect(app_url('stock-in', ['product_id' => $productId]));
     }
     flash('success','Variant saved. No physical stock was added.');
-    redirect('../index.php?page=products&view=devices&brand='.$brandId.'&model='.$modelId.'#variants');
+    redirect(app_url('products', ['view' => 'devices', 'brand' => $brandId, 'model' => $modelId], 'variants'));
 } catch(Throwable $e) {
     if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
     flash('error',safe_exception_message($e,'Unable to create the product right now. Please try again.'));
-    redirect('../index.php?page=add-item'.(!empty($_POST['model_id'])?'&model_id='.(int)$_POST['model_id']:''));
+    redirect(app_url('add-item', !empty($_POST['model_id']) ? ['model_id' => (int)$_POST['model_id']] : []));
 }
 
 

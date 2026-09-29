@@ -94,7 +94,7 @@ function transfer_product_specs(array $row): string {
         <p><?= $isOwner ? 'Track forwarded inventory and receiving proof across all branches.' : 'Receive incoming stock and review inventory forwarded between branches.' ?></p>
     </div>
     <?php if (!$isOwner): ?>
-        <a class="btn btn-outline" href="index.php?page=inventory"><?= icon('inventory') ?> Open Inventory</a>
+        <a class="btn btn-outline" href="<?= e(app_url('inventory')) ?>"><?= icon('inventory') ?> Open Inventory</a>
     <?php endif; ?>
 </section>
 
@@ -125,9 +125,9 @@ function transfer_product_specs(array $row): string {
     </section>
 
     <div class="tab-row transfer-tabs">
-        <a class="tab <?= $statusFilter===''?'active':'' ?>" href="index.php?page=branch-transfers">All</a>
-        <a class="tab <?= $statusFilter==='pending'?'active':'' ?>" href="index.php?page=branch-transfers&status=pending">Pending Receipt</a>
-        <a class="tab <?= $statusFilter==='received'?'active':'' ?>" href="index.php?page=branch-transfers&status=received">Received</a>
+        <a class="tab <?= $statusFilter===''?'active':'' ?>" href="<?= e(app_url('branch-transfers')) ?>">All</a>
+        <a class="tab <?= $statusFilter==='pending'?'active':'' ?>" href="<?= e(app_url('branch-transfers', ['status' => 'pending'])) ?>">Pending Receipt</a>
+        <a class="tab <?= $statusFilter==='received'?'active':'' ?>" href="<?= e(app_url('branch-transfers', ['status' => 'received'])) ?>">Received</a>
     </div>
 
     <section class="card table-card transfer-table-card">

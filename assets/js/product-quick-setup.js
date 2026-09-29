@@ -239,9 +239,9 @@
       receiveData.set('branch_id', String(receiveData.get('branch_id') || modal.dataset.defaultBranchId || ''));
       const received = await postForm('actions/stock_in.php', receiveData);
       const stock = received.stock || {};
-      const params = new URLSearchParams({page:'products', model:String(modelId), stock_done:'1', variant:String(productId)});
+      const params = new URLSearchParams({model:String(modelId), stock_done:'1', variant:String(productId)});
       if (stock.reference) params.set('stock_ref', String(stock.reference));
-      window.location.assign(`index.php?${params.toString()}#variants`);
+      window.location.assign(`products?${params.toString()}#variants`);
     } catch (error) {
       setError(error?.message || 'Unable to save the variant and stock. Nothing was hidden; correct the issue and try again.');
       setSubmitting(false);

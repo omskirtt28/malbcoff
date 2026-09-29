@@ -228,7 +228,8 @@ function inventory_page_url(array $changes = []): string {
         if ($value === null || $value === '' || $value === false) unset($params[$key]);
         else $params[$key] = $value;
     }
-    return 'index.php?' . http_build_query($params);
+    unset($params['page']);
+    return app_url('inventory', $params);
 }
 
 $totalRows = count($rows);
@@ -239,9 +240,8 @@ $visibleRows = array_slice($rows, $offset, $perPage);
 $startRow = $totalRows ? $offset + 1 : 0;
 $endRow = min($offset + $perPage, $totalRows);
 
-$receiveHref = 'index.php?page=stock-in';
-if (Auth::isOwner() && $ownerScope) $receiveHref .= '&branch='.(int)$ownerScope;
-$resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope) : 'index.php?page=inventory';
+$receiveHref = app_url('stock-in', Auth::isOwner() && $ownerScope ? ['branch' => (int)$ownerScope] : []);
+$resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope) : app_url('inventory');
 ?>
 <section class="page-heading inventory-page-heading">
     <div>
@@ -255,7 +255,6 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
 </section>
 
 <form class="filter-card inventory-filter-card" method="get">
-    <input type="hidden" name="page" value="inventory">
     <?php if ($ownerScope): ?><input type="hidden" name="branch" value="<?= (int)$ownerScope ?>"><?php endif; ?>
     <label class="search-box inventory-search"><?= icon('search') ?><input id="inventoryScanSearch" type="search" name="q" value="<?= e($search) ?>" placeholder="Search product, model, IMEI, serial, barcode…"></label>
     <label><span>Brand</span><select name="brand"><option value="">All Brands</option><?php foreach ($brands as $brandRow): ?><option value="<?= (int)$brandRow['id'] ?>" <?= $brand===(int)$brandRow['id']?'selected':'' ?>><?= e($brandRow['name']) ?></option><?php endforeach; ?></select></label>
@@ -314,8 +313,7 @@ $resetHref = Auth::isOwner() ? owner_branch_filter_url('inventory', $ownerScope)
     <span>Showing <?= number_format($startRow) ?> to <?= number_format($endRow) ?> of <?= number_format($totalRows) ?> items</span>
     <div class="inventory-pagination-controls">
         <form method="get" class="inventory-page-size">
-            <input type="hidden" name="page" value="inventory">
-            <?php if ($search !== ''): ?><input type="hidden" name="q" value="<?= e($search) ?>"><?php endif; ?>
+                    <?php if ($search !== ''): ?><input type="hidden" name="q" value="<?= e($search) ?>"><?php endif; ?>
             <?php if ($brand): ?><input type="hidden" name="brand" value="<?= (int)$brand ?>"><?php endif; ?>
             <?php if ($type !== ''): ?><input type="hidden" name="type" value="<?= e($type) ?>"><?php endif; ?>
             <?php if ($branchFilter): ?><input type="hidden" name="stock_branch" value="<?= (int)$branchFilter ?>"><?php endif; ?>

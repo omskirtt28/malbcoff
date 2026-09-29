@@ -1,20 +1,20 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
-if (!Auth::check()) redirect('../login.php');
+if (!Auth::check()) redirect(app_url('login'));
 if (!pos_role_allowed()) {
     flash('error', 'Your account does not have permission to process sales.');
-    redirect('../index.php?page=dashboard');
+    redirect(app_url('dashboard'));
 }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('../index.php?page=pos');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('pos'));
 if (!Csrf::verify($_POST['_csrf'] ?? null)) {
     flash('error', 'Your session expired. Please review the cart and submit the sale again.');
-    redirect('../index.php?page=pos');
+    redirect(app_url('pos'));
 }
 
 $requestedBranch = filter_var($_POST['branch_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $branchId = Auth::branchId() ?: 0;
-$returnUrl = '../index.php?page=pos';
+$returnUrl = app_url('pos');
 
 $paymentMethod = (string)($_POST['payment_method'] ?? '');
 $allowedPayments = ['cash','gcash','maya','card','bank_transfer'];

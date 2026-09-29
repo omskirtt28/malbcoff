@@ -182,7 +182,8 @@ function product_master_url(array $overrides = []): string
         if ($value === null || $value === '') unset($query[$key]);
         else $query[$key] = $value;
     }
-    return 'index.php?' . http_build_query($query);
+    unset($query['page']);
+    return app_url('products', $query);
 }
 ?>
 
@@ -196,7 +197,7 @@ function product_master_url(array $overrides = []): string
 
 <?php if ($isOwner): ?>
 <nav class="product-state-tabs product-state-tabs-owner" aria-label="Product status">
-    <a class="product-state-tab active archived" href="index.php?page=products&status=archived">
+    <a class="product-state-tab active archived" href="<?= e(app_url('archive')) ?>">
         <span class="product-state-tab-icon"><?= icon('archive') ?></span>
         <span><strong>Archived Product Records</strong><small>Restore or delete old Product Master records</small></span>
     </a>
@@ -345,7 +346,7 @@ function product_master_url(array $overrides = []): string
             </a>
         <?php else: ?>
             <?php if ($canAddMaster): ?>
-                <a class="product-quick-action product-quick-primary" href="index.php?page=add-item&type=accessory">
+                <a class="product-quick-action product-quick-primary" href="<?= e(app_url('add-item', ['type' => 'accessory'])) ?>">
                     <span class="product-quick-icon"><?= icon('plus') ?></span>
                     <span class="product-quick-copy"><strong>Add Accessory</strong><small>Create a new accessory product</small></span>
                     <span class="product-quick-arrow">›</span>
@@ -447,8 +448,7 @@ function product_master_url(array $overrides = []): string
             </div>
         </div>
 
-        <form class="master-filter modern-filter" method="get" action="index.php">
-            <input type="hidden" name="page" value="products">
+        <form class="master-filter modern-filter" method="get" action="<?= e(app_url('products')) ?>">
             <input type="hidden" name="view" value="devices">
             <?php if ($selectedBrandId): ?><input type="hidden" name="brand" value="<?= (int)$selectedBrandId ?>"><?php endif; ?>
             <?php if ($showArchived): ?><input type="hidden" name="status" value="all"><?php endif; ?>
@@ -604,7 +604,7 @@ function product_master_url(array $overrides = []): string
         <div class="master-card-title-actions">
             <span class="count-badge"><?= count($categories) ?></span>
             <?php if ($canAddMaster): ?>
-                <a class="btn btn-soft-primary btn-sm" href="index.php?page=add-item&type=accessory"><?= icon('plus') ?> Add Accessory Product</a>
+                <a class="btn btn-soft-primary btn-sm" href="<?= e(app_url('add-item', ['type' => 'accessory'])) ?>"><?= icon('plus') ?> Add Accessory Product</a>
                 <button class="btn btn-primary btn-sm" type="button" data-master-open="category" data-mode="add"><?= icon('plus') ?> Add Category</button>
             <?php endif; ?>
         </div>
@@ -1060,7 +1060,7 @@ function product_master_url(array $overrides = []): string
         </div>
         <div class="product-flow-success-actions">
             <button type="button" class="btn btn-outline" data-quick-variant-open data-quick-success-close><?= icon('plus') ?> Add Another Variant</button>
-            <a class="btn btn-primary" href="index.php?page=products&model=<?= (int)$selectedModel['id'] ?>#variants">Done — Back to Products</a>
+            <a class="btn btn-primary" href="<?= e(app_url('products', ['model' => (int)$selectedModel['id']], 'variants')) ?>">Done — Back to Products</a>
         </div>
     </div>
 </div>

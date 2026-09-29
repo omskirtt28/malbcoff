@@ -1,7 +1,7 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 if (!Auth::check()) {
-    redirect('login.php');
+    redirect(app_url('login'));
 }
 
 $allowedPages = [
@@ -20,6 +20,20 @@ $allowedPages = [
     'system-admin-history' => 'Impersonation History',
     'security-logs' => 'Security Logs',
 ];
+
+// Canonicalize old index.php?page=... bookmarks without affecting internal rewrites.
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && is_legacy_script_request('index.php')) {
+    $legacyPage = (string)($_GET['page'] ?? '');
+    if ($legacyPage === '') {
+        $legacyPage = Auth::isSystemAdmin() && !Auth::isImpersonating() ? 'system-admin-dashboard' : 'dashboard';
+    }
+    if (!isset($allowedPages[$legacyPage])) {
+        $legacyPage = Auth::isSystemAdmin() && !Auth::isImpersonating() ? 'system-admin-dashboard' : 'dashboard';
+    }
+    $legacyParams = $_GET;
+    unset($legacyParams['page']);
+    redirect(app_url($legacyPage, $legacyParams));
+}
 
 $requestedPage = (string)($_GET['page'] ?? '');
 if (Auth::isSystemAdmin() && !Auth::isImpersonating() && ($requestedPage === '' || $requestedPage === 'dashboard')) {

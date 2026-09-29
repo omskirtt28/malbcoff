@@ -1,8 +1,9 @@
 <?php
 require __DIR__ . '/bootstrap.php';
-if (!Auth::check()) redirect('login.php');
-if (Auth::isOwner() || Auth::actorIsSystemAdmin()) redirect('index.php');
-if (empty($app['maintenance_mode'])) redirect('index.php?page=dashboard');
+if (!Auth::check()) redirect(app_url('login'));
+if (Auth::isOwner() || Auth::actorIsSystemAdmin()) redirect(app_home_url());
+if (empty($app['maintenance_mode'])) redirect(app_url('dashboard'));
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && is_legacy_script_request('maintenance.php')) redirect(app_url('maintenance'));
 http_response_code(503);
 header('Retry-After: 300');
 ?>
@@ -24,8 +25,8 @@ header('Retry-After: 300');
     <h1>We’ll be back shortly.</h1>
     <p><?= e($app['name']) ?> is temporarily unavailable while a system update is being applied. Please wait a few minutes before trying again.</p>
     <div class="maintenance-actions">
-        <a class="btn btn-primary" href="maintenance.php">Check Again</a>
-        <a class="btn btn-secondary" href="logout.php">Sign Out</a>
+        <a class="btn btn-primary" href="<?= e(app_url('maintenance')) ?>">Check Again</a>
+        <a class="btn btn-secondary" href="<?= e(app_url('logout')) ?>">Sign Out</a>
     </div>
     <small>Version <?= e($app['version'] ?? '1.0.0') ?></small>
 </div>

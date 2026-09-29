@@ -60,7 +60,7 @@ function pos_payment_label(string $method): string {
 <?php elseif(Auth::isOwner() && !$activeBranch): ?>
 <section class="card pos-branch-picker">
     <div class="pos-branch-picker-copy"><span class="eyebrow">CHOOSE SELLING BRANCH</span><h2>Where is this sale happening?</h2><p>Inventory is deducted only from the selected branch. You can switch branches anytime from the top bar.</p></div>
-    <div class="pos-branch-grid"><?php foreach($branches as $branch): ?><a class="pos-branch-card" href="index.php?page=pos&branch=<?= (int)$branch['id'] ?>"><div class="pos-branch-icon"><?= icon('branch') ?></div><div><strong><?= e($branch['name']) ?></strong><span>Open POS</span></div><b>→</b></a><?php endforeach; ?></div>
+    <div class="pos-branch-grid"><?php foreach($branches as $branch): ?><a class="pos-branch-card" href="<?= e(app_url('pos', ['branch' => (int)$branch['id']])) ?>"><div class="pos-branch-icon"><?= icon('branch') ?></div><div><strong><?= e($branch['name']) ?></strong><span>Open POS</span></div><b>→</b></a><?php endforeach; ?></div>
 </section>
 <?php elseif(!$activeBranch): ?>
 <div class="card pos-blocked-state"><div class="empty-icon"><?= icon('branch') ?></div><strong>No active selling branch is assigned</strong><span>Ask the Owner/System Administrator to assign this account to an active branch.</span></div>
@@ -94,7 +94,7 @@ function pos_payment_label(string $method): string {
         </div>
 
         <div class="card pos-recent-card">
-            <div class="pos-section-heading compact"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent Sales</h2></div><?php if(Auth::isOwner() || in_array($role, ['branch_manager','cashier'], true)): ?><a class="btn btn-ghost btn-sm" href="index.php?page=sales-records<?= Auth::isOwner() && $activeBranch ? '&branch='.(int)$activeBranch['id'] : '' ?>">View All</a><?php else: ?><span class="mini-chip"><?= count($recentSales) ?> shown</span><?php endif; ?></div>
+            <div class="pos-section-heading compact"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent Sales</h2></div><?php if(Auth::isOwner() || in_array($role, ['branch_manager','cashier'], true)): ?><a class="btn btn-ghost btn-sm" href="<?= e(app_url('sales-records', Auth::isOwner() && $activeBranch ? ['branch' => (int)$activeBranch['id']] : [])) ?>">View All</a><?php else: ?><span class="mini-chip"><?= count($recentSales) ?> shown</span><?php endif; ?></div>
             <?php if(!$recentSales): ?><div class="pos-recent-empty">No completed sales yet for this branch.</div><?php else: ?><div class="pos-recent-list"><?php foreach($recentSales as $sale): ?><div class="pos-recent-row"><div class="pos-recent-icon"><?= icon('receipt') ?></div><div><strong><?= e($sale['sale_no']) ?></strong><span><?= e(date('M d, Y • h:i A', strtotime($sale['created_at']))) ?> • <?= e($sale['cashier_name']) ?></span></div><div><strong><?= peso($sale['total']) ?></strong><span><?= e(pos_payment_label($sale['payment_method'])) ?></span></div></div><?php endforeach; ?></div><?php endif; ?>
         </div>
     </section>

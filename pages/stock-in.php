@@ -128,7 +128,7 @@ if (!empty($successData['product_id'])) {
         <h1>Receive Stock</h1>
         <p>Sort the delivery, select the model and variant, enter the quantity, then scan every Serial / IMEI.</p>
     </div>
-    <a class="btn btn-secondary" href="index.php?page=products">Manage Products</a>
+    <a class="btn btn-secondary" href="<?= e(app_url('products')) ?>">Manage Products</a>
 </section>
 
 <div class="receive-workflow-strip" aria-label="Stock receiving workflow">
@@ -153,11 +153,11 @@ if (!empty($successData['product_id'])) {
         <small>Reference: <?= e($successData['reference'] ?? '—') ?></small>
     </div>
     <div class="stock-success-actions">
-        <a class="btn btn-outline btn-sm" href="index.php?page=inventory">View Inventory</a>
+        <a class="btn btn-outline btn-sm" href="<?= e(app_url('inventory')) ?>">View Inventory</a>
         <?php if ($successModelId > 0): ?>
-        <a class="btn btn-primary btn-sm" href="index.php?page=stock-in&model_id=<?= (int)$successModelId ?>">Receive Another Variant</a>
+        <a class="btn btn-primary btn-sm" href="<?= e(app_url('stock-in', ['model_id' => (int)$successModelId])) ?>">Receive Another Variant</a>
         <?php else: ?>
-        <a class="btn btn-primary btn-sm" href="index.php?page=stock-in">Receive More</a>
+        <a class="btn btn-primary btn-sm" href="<?= e(app_url('stock-in')) ?>">Receive More</a>
         <?php endif; ?>
     </div>
 </div>
@@ -187,7 +187,7 @@ if (!empty($successData['product_id'])) {
                 <div class="receive-selected-copy"><small>Selected item</small><strong id="selectedItemName">—</strong><span id="selectedItemMeta">—</span></div>
                 <button class="btn btn-ghost btn-sm" type="button" id="changeItemBtn">Change</button>
             </div>
-            <p class="receive-help">Can’t find the model? Add it first in <a href="index.php?page=products">Products</a>.</p>
+            <p class="receive-help">Can’t find the model? Add it first in <a href="<?= e(app_url('products')) ?>">Products</a>.</p>
         </div>
     </section>
 
@@ -254,7 +254,7 @@ if (!empty($successData['product_id'])) {
     </section>
 
     <div class="receive-form-actions hidden" id="receiveFormActions">
-        <a class="btn btn-secondary" href="index.php?page=inventory">Cancel</a>
+        <a class="btn btn-secondary" href="<?= e(app_url('inventory')) ?>">Cancel</a>
         <div class="receive-submit-group">
             <span class="receive-ready-note" id="receiveReadyNote">Complete the required fields to continue.</span>
             <button class="btn btn-primary" id="reviewStockButton" type="submit"><?= icon('stock') ?> Review &amp; Confirm Stock In</button>

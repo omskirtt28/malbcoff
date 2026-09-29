@@ -57,7 +57,7 @@ if (Auth::check()) {
             echo json_encode(['ok' => false, 'message' => 'Change your temporary password before continuing.']);
             exit;
         }
-        redirect('change-password.php');
+        redirect(app_url('change-password'));
     }
 
     if (!empty($app['maintenance_mode']) && !Auth::isOwner() && !Auth::actorIsSystemAdmin() && !in_array($scriptName, ['maintenance.php', 'logout.php', 'change-password.php'], true)) {
@@ -68,6 +68,6 @@ if (Auth::check()) {
             echo json_encode(['ok' => false, 'message' => 'The system is temporarily under maintenance. Please try again shortly.']);
             exit;
         }
-        redirect('maintenance.php');
+        redirect(app_url('maintenance'));
     }
 }

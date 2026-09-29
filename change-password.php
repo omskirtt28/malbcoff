@@ -1,9 +1,13 @@
 <?php
 require __DIR__ . '/bootstrap.php';
-if (!Auth::check()) redirect('login.php');
+if (!Auth::check()) redirect(app_url('login'));
 if (Auth::isImpersonating()) {
     flash('error', 'Return to System Admin before changing a password.');
-    redirect('index.php');
+    redirect(app_home_url());
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && is_legacy_script_request('change-password.php')) {
+    redirect(app_url('change-password'));
 }
 
 $error = null;
@@ -42,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
             Security::initializeAuthenticatedSession();
             flash('success', 'Password updated successfully.');
-            redirect('index.php?page=dashboard');
+            redirect(app_home_url());
         } catch (Throwable $e) {
             $error = safe_exception_message($e, 'Unable to update your password right now. Please try again.');
         }
@@ -100,9 +104,9 @@ function validate_account_password(string $password): void
             <label class="field"><span>New password</span><input type="password" name="new_password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
             <label class="field"><span>Confirm new password</span><input type="password" name="confirm_password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
             <button class="btn btn-primary btn-block" type="submit">Save New Password</button>
-            <?php if (!$forced): ?><a class="btn btn-secondary btn-block" href="index.php?page=dashboard">Cancel</a><?php endif; ?>
+            <?php if (!$forced): ?><a class="btn btn-secondary btn-block" href="<?= e(app_home_url()) ?>">Cancel</a><?php endif; ?>
         </form>
-        <?php if ($forced): ?><a class="auth-secondary-link" href="logout.php">Sign out instead</a><?php endif; ?>
+        <?php if ($forced): ?><a class="auth-secondary-link" href="<?= e(app_url('logout')) ?>">Sign out instead</a><?php endif; ?>
     </section>
 </div>
 </body>

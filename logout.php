@@ -8,4 +8,4 @@ if (Auth::check()) {
     Security::audit('auth.logout', 'user', (int)(Auth::user()['id'] ?? 0));
 }
 Auth::logout();
-redirect('login.php');
+redirect(app_url('login'));

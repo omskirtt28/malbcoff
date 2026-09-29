@@ -34,11 +34,11 @@
 
   qsa('[data-global-search]').forEach(input => input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && input.value.trim()) {
-      const params = new URLSearchParams({page:'inventory', q:input.value.trim()});
+      const params = new URLSearchParams({q:input.value.trim()});
       const current = new URL(window.location.href);
       const branch = current.searchParams.get('branch');
       if (branch) params.set('branch', branch);
-      window.location = 'index.php?' + params.toString();
+      window.location = 'inventory?' + params.toString();
     }
   }));
 

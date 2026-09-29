@@ -1,7 +1,11 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 if (Auth::check()) {
-    redirect('index.php');
+    redirect(app_home_url());
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && is_legacy_script_request('login.php')) {
+    redirect(app_url('login'));
 }
 
 $error = null;
@@ -27,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (Auth::attempt($email, $password)) {
                     Security::recordLoginSuccess($email);
                     Security::audit('auth.login_success', 'user', (int)(Auth::user()['id'] ?? 0));
-                    redirect(Auth::requiresPasswordChange() ? 'change-password.php' : 'index.php');
+                    redirect(Auth::requiresPasswordChange() ? app_url('change-password') : app_home_url());
                 }
                 Security::recordLoginFailure($email);
                 Security::audit('auth.login_failed', 'login', null, ['email_hash' => hash('sha256', $email)]);

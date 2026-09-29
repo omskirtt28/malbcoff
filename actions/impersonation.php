@@ -1,14 +1,14 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
-if (!Auth::check()) redirect('../login.php');
+if (!Auth::check()) redirect(app_url('login'));
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     exit('Method Not Allowed');
 }
 if (!Csrf::verify($_POST['_csrf'] ?? null)) {
     flash('error', 'Your session expired. Please try again.');
-    redirect('../index.php');
+    redirect(app_home_url());
 }
 
 $action = strtolower(trim((string)($_POST['action'] ?? '')));
@@ -34,7 +34,7 @@ try {
         Auth::beginImpersonation($target, $dbSessionId, $sessionKey);
         Security::audit('impersonation.started', 'user', (int)$target['id'], ['system_admin_user_id' => (int)$actor['id'], 'target_role' => $target['role'], 'target_branch_id' => $target['branch_id']]);
         flash('success', 'You are now viewing the selected account.');
-        redirect('../index.php');
+        redirect(app_home_url());
     }
 
     if ($action === 'end') {
@@ -46,11 +46,11 @@ try {
         Security::closeImpersonationSession('manual_return');
         Auth::endImpersonation();
         flash('success', 'Returned to System Admin.');
-        redirect('../index.php?page=system-admin-dashboard');
+        redirect(app_url('system-admin-dashboard'));
     }
 
     throw new RuntimeException('Invalid impersonation request.');
 } catch (Throwable $e) {
     flash('error', safe_exception_message($e, 'Unable to change account view right now.'));
-    redirect('../index.php?page=' . (Auth::isSystemAdmin() ? 'system-admin-users' : 'dashboard'));
+    redirect(app_url(Auth::isSystemAdmin() ? 'system-admin-users' : 'dashboard'));
 }

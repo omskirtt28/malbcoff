@@ -10,6 +10,89 @@ function redirect(string $url): never
     exit;
 }
 
+
+/**
+ * Return the application's public base path.
+ *
+ * Production runs at the domain root, while local/XAMPP copies may live in a
+ * sub-folder (for example /malbcoff). Keeping this dynamic lets clean URLs
+ * work in both environments and from /actions/*.php redirects.
+ */
+function app_base_path(): string
+{
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (($actionPos = strpos($script, '/actions/')) !== false) {
+        return rtrim(substr($script, 0, $actionPos), '/');
+    }
+
+    $dir = str_replace('\\', '/', dirname($script));
+    if ($dir === '/' || $dir === '.' || $dir === '\\') return '';
+    return rtrim($dir, '/');
+}
+
+/**
+ * Build a browser-facing clean URL for an application route.
+ */
+function app_url(string $route = 'dashboard', array $params = [], string $fragment = ''): string
+{
+    // Archive is the clean public route for the archived Products state.
+    if ($route === 'products' && (($params['status'] ?? '') === 'archived')) {
+        $route = 'archive';
+        unset($params['status']);
+    }
+
+    $paths = [
+        'dashboard' => '/',
+        'pos' => '/pos',
+        'sales-records' => '/sales-records',
+        'products' => '/products',
+        'archive' => '/archive',
+        'add-item' => '/add-item',
+        'inventory' => '/inventory',
+        'branch-transfers' => '/branch-transfers',
+        'stock-in' => '/receive-stock',
+        'stock-movement' => '/stock-movement',
+        'users' => '/users',
+        'system-admin-dashboard' => '/system-admin',
+        'system-admin-users' => '/system-admin-users',
+        'system-admin-history' => '/system-admin-history',
+        'security-logs' => '/security-logs',
+        'login' => '/login',
+        'logout' => '/logout',
+        'change-password' => '/change-password',
+        'maintenance' => '/maintenance',
+    ];
+
+    $path = $paths[$route] ?? '/';
+    $base = app_base_path();
+    $url = $path === '/' ? ($base !== '' ? $base . '/' : '/') : $base . $path;
+
+    if ($params) {
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        if ($query !== '') $url .= '?' . $query;
+    }
+    if ($fragment !== '') $url .= '#' . ltrim($fragment, '#');
+    return $url;
+}
+
+function app_home_url(): string
+{
+    return Auth::isSystemAdmin() && !Auth::isImpersonating()
+        ? app_url('system-admin-dashboard')
+        : app_url('dashboard');
+}
+
+/**
+ * True only when the browser directly requested a legacy root PHP script.
+ * Internal mod_rewrite requests keep the friendly REQUEST_URI and therefore
+ * do not trigger a redirect loop.
+ */
+function is_legacy_script_request(string $filename): bool
+{
+    $requestPath = (string)(parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? '');
+    return basename(rtrim($requestPath, '/')) === $filename;
+}
+
 function flash(string $key, ?string $message = null): ?string
 {
     if ($message !== null) {
@@ -167,7 +250,7 @@ function current_branch_scope(): ?int
 
 function owner_branch_filter_url(string $page, ?int $branchId): string
 {
-    return 'index.php?page=' . urlencode($page) . ($branchId ? '&branch=' . $branchId : '');
+    return app_url($page, $branchId ? ['branch' => $branchId] : []);
 }
 
 function branch_pricing_ready(): bool

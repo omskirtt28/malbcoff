@@ -1,11 +1,11 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
-if (!Auth::check()) redirect('../login.php');
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('../index.php?page=products');
+if (!Auth::check()) redirect(app_url('login'));
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('products'));
 if (!Csrf::verify($_POST['_csrf'] ?? null)) {
     flash('error', 'Your session expired. Please try again.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 
 $role = Auth::user()['role'] ?? '';
@@ -18,28 +18,28 @@ $returnView = (($_POST['return_view'] ?? '') === 'accessories') ? 'accessories' 
 $returnModel = filter_var($_POST['return_model'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $returnArchive = (($_POST['return_archive'] ?? '') === '1');
 $returnUrl = $returnArchive
-    ? '../index.php?page=products&status=archived'
-    : '../index.php?page=products&view=' . $returnView . ($returnModel ? '&model='.$returnModel.'#variants' : '');
+    ? app_url('archive')
+    : app_url('products', array_filter(['view' => $returnView, 'model' => $returnModel ?: null], static fn($v) => $v !== null && $v !== ''), $returnModel ? 'variants' : '');
 
 if (!in_array($entity, ['brand','model','category','configuration'], true) || !in_array($action, ['add','edit','archive','restore','delete'], true)) {
     flash('error', 'Invalid Product Master request.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 if (in_array($action, ['add','edit'], true) && !$canAddEdit) {
     flash('error', 'Your account has view-only access to Product Master.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 if (in_array($action, ['archive','restore','delete'], true) && !$isOwner) {
     flash('error', 'Only the Owner can archive, restore or permanently delete Product Master records.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 if ($entity === 'configuration' && $action === 'edit' && !in_array($role, ['branch_manager'], true)) {
     flash('error', 'Only the Branch Manager can update active variant pricing.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 if ($entity === 'brand' && $action === 'edit' && $role !== 'branch_manager') {
     flash('error', 'Only the Branch Manager can rename a global brand.');
-    redirect('../index.php?page=products');
+    redirect(app_url('products'));
 }
 
 try {
@@ -58,7 +58,7 @@ try {
     Security::audit('catalog.' . $entity . '.' . $action, $entity, $auditEntityId);
     flash('success', success_message($entity, $action));
     if ($entity === 'model' && $action === 'add' && $createdModelId) {
-        $returnUrl = '../index.php?page=products&view=devices&model='.(int)$createdModelId.'&setup=1#variants';
+        $returnUrl = app_url('products', ['view' => 'devices', 'model' => (int)$createdModelId, 'setup' => 1], 'variants');
     }
 } catch (PDOException $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();

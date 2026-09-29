@@ -141,9 +141,9 @@ function dashboard_payment_label(string $method): string
             : 'A quick view of your branch inventory and recent stock activity.' ?></p>
     </div>
     <?php if ($isOwnerDashboard): ?>
-        <a class="btn btn-primary" href="index.php?page=sales-records"><?= icon('receipt') ?> View Sales Records</a>
+        <a class="btn btn-primary" href="<?= e(app_url('sales-records')) ?>"><?= icon('receipt') ?> View Sales Records</a>
     <?php else: ?>
-        <a class="btn btn-primary" href="index.php?page=stock-in"><?= icon('stock') ?> Stock In</a>
+        <a class="btn btn-primary" href="<?= e(app_url('stock-in')) ?>"><?= icon('stock') ?> Stock In</a>
     <?php endif; ?>
 </section>
 
@@ -177,7 +177,7 @@ function dashboard_payment_label(string $method): string
     <section class="card">
         <div class="card-header">
             <div><h2>Recent Sales</h2><p>Latest completed POS transactions across all branches.</p></div>
-            <a href="index.php?page=sales-records">View All</a>
+            <a href="<?= e(app_url('sales-records')) ?>">View All</a>
         </div>
         <div class="activity-list">
             <?php if (!$recentSales): ?>
@@ -199,7 +199,7 @@ function dashboard_payment_label(string $method): string
     </section>
     <?php else: ?>
     <section class="card">
-        <div class="card-header"><div><h2>Recent Stock Activity</h2><p>Latest inventory movements.</p></div><a href="index.php?page=stock-movement">View All</a></div>
+        <div class="card-header"><div><h2>Recent Stock Activity</h2><p>Latest inventory movements.</p></div><a href="<?= e(app_url('stock-movement')) ?>">View All</a></div>
         <div class="activity-list">
             <?php if (!$recent): ?>
                 <div class="empty-state"><div class="empty-icon"><?= icon('movement') ?></div><strong>No stock activity yet</strong><span>Your latest Stock In / Out records will appear here.</span></div>

@@ -1,16 +1,16 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 
-if (!Auth::check()) redirect('../login.php');
+if (!Auth::check()) redirect(app_url('login'));
 if (!Auth::isOwner()) {
     Security::audit('auth.user_management_denied', 'user', null, ['role' => Auth::user()['role'] ?? '']);
     flash('error', 'Only the Owner can manage user accounts.');
-    redirect('../index.php?page=users');
+    redirect(app_url('users'));
 }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('../index.php?page=users');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('users'));
 if (!Csrf::verify($_POST['_csrf'] ?? null)) {
     flash('error', 'Your session expired. Please try again.');
-    redirect('../index.php?page=users');
+    redirect(app_url('users'));
 }
 
 $action = strtolower(trim((string)($_POST['action'] ?? '')));
@@ -100,7 +100,7 @@ try {
     flash('error', safe_exception_message($e, 'Unable to update the user account right now. Please try again.'));
 }
 
-redirect('../index.php?page=users');
+redirect(app_url('users'));
 
 function clean_user_name(mixed $value): string
 {
