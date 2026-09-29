@@ -22,6 +22,33 @@
 
   const clampQuantity = raw => Math.max(1, Math.min(100, Number(raw) || 1));
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const customSpecNames = isApple ? ['storage'] : ['ram', 'storage'];
+
+  function customSpecParts(name) {
+    return {
+      select: form.querySelector(`[data-custom-spec-select="${name}"]`),
+      input: form.querySelector(`[data-custom-spec-input="${name}"]`),
+      hint: form.querySelector(`[data-custom-spec-hint="${name}"]`)
+    };
+  }
+
+  function syncCustomSpec(name, focus = false) {
+    const {select, input, hint} = customSpecParts(name);
+    if (!select || !input) return;
+    const custom = select.value === '__other__';
+    input.hidden = !custom;
+    input.disabled = !custom;
+    input.required = custom;
+    if (hint) hint.hidden = !custom;
+    if (!custom) input.value = '';
+    if (custom && focus) setTimeout(() => input.focus({preventScroll:false}), 0);
+  }
+
+  function resolvedSpecValue(original, name) {
+    const selected = String(original.get(name) || '').trim();
+    if (selected !== '__other__') return selected;
+    return String(original.get(`${name}_custom`) || '').trim().toUpperCase();
+  }
 
 
   function clearFlowQuery(keys) {
@@ -214,12 +241,24 @@
     event.preventDefault();
     if (submitting || !validateBeforeSubmit()) return;
     const original = new FormData(form);
+    const ramValue = isApple ? '' : resolvedSpecValue(original, 'ram');
+    const storageValue = resolvedSpecValue(original, 'storage');
+    if (!isApple && !ramValue) {
+      setError('Enter the custom RAM capacity.');
+      customSpecParts('ram').input?.focus();
+      return;
+    }
+    if (!storageValue) {
+      setError('Enter the custom storage capacity.');
+      customSpecParts('storage').input?.focus();
+      return;
+    }
     const createData = new FormData();
     createData.set('_csrf', original.get('_csrf'));
     createData.set('ajax_action', 'create_variant');
     createData.set('model_id', String(modelId));
-    createData.set('ram', String(original.get('ram') || ''));
-    createData.set('storage', String(original.get('storage') || ''));
+    createData.set('ram', ramValue);
+    createData.set('storage', storageValue);
     createData.set('color', String(original.get('color') || ''));
     createData.set('connectivity', String(original.get('connectivity') || ''));
     createData.set('selling_price', String(original.get('selling_price') || ''));
@@ -250,6 +289,7 @@
 
   function resetForm() {
     form.reset();
+    customSpecNames.forEach(name => syncCustomSpec(name));
     identifierMode = isApple ? 'serial' : 'imei';
     if (quantityInput) quantityInput.value = '1';
     modal.querySelector('[data-quick-product-id]').value = '';
@@ -291,6 +331,15 @@
   });
 
   form.addEventListener('submit', submitQuickSetup);
+  customSpecNames.forEach(name => {
+    const {select, input} = customSpecParts(name);
+    select?.addEventListener('change', () => syncCustomSpec(name, select.value === '__other__'));
+    input?.addEventListener('input', () => {
+      input.value = input.value.toUpperCase();
+      setError('');
+    });
+    syncCustomSpec(name);
+  });
   quantityInput?.addEventListener('input', () => {
     quantityInput.value = String(clampQuantity(quantityInput.value));
     renderRows();

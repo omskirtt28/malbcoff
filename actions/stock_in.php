@@ -390,16 +390,20 @@ function create_receive_variant(array $input):array{
 
     $type=in_array($model['device_type'],['phone','tablet'],true)?$model['device_type']:'phone';
     $isApple=strcasecmp(trim((string)$model['brand_name']),'Apple')===0;
-    $storage=normalize_receive_capacity($input['storage']??'');
-    $ram=$isApple?null:normalize_receive_capacity($input['ram']??'');
+    $storageRaw=(string)($input['storage']??'');
+    if(strtolower(trim($storageRaw))==='__other__')$storageRaw=(string)($input['storage_custom']??'');
+    $ramRaw=(string)($input['ram']??'');
+    if(strtolower(trim($ramRaw))==='__other__')$ramRaw=(string)($input['ram_custom']??'');
+    $storage=normalize_receive_capacity($storageRaw);
+    $ram=$isApple?null:normalize_receive_capacity($ramRaw);
     $color=clean_receive_text($input['color']??'',80,true);
     $connectivity=$type==='tablet'?clean_receive_text($input['connectivity']??'',40,false):null;
     $selling=max(0,(float)($input['selling_price']??0));
     $requestedBranch=filter_var($input['branch_id']??null,FILTER_VALIDATE_INT)?:0;
     $priceBranchId=Auth::isOwner()?$requestedBranch:(Auth::branchId()?:0);
 
-    if($storage==='') throw new RuntimeException('Select the storage.');
-    if(!$isApple&&$ram==='') throw new RuntimeException('Select the RAM.');
+    if($storage===''||$storage==='__OTHER__') throw new RuntimeException('Select a storage option or enter the custom storage capacity.');
+    if(!$isApple&&($ram===''||$ram==='__OTHER__')) throw new RuntimeException('Select a RAM option or enter the custom RAM capacity.');
     if($color==='') throw new RuntimeException('Enter the color.');
     if($type==='tablet'&&!in_array($connectivity,['Wi-Fi','Wi-Fi + Cellular'],true)) throw new RuntimeException('Select the tablet connectivity.');
     if($selling<=0) throw new RuntimeException('Enter a valid selling price.');

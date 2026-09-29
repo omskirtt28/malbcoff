@@ -999,9 +999,27 @@ function product_master_url(array $overrides = []): string
                     <div class="quick-variant-section-heading"><span>1</span><div><strong>Variant Details</strong><small>Set the specs once, then add the units that arrived.</small></div></div>
                     <div class="quick-variant-grid">
                         <?php if (!$quickIsApple): ?>
-                        <label class="field"><span>RAM <b>*</b></span><select name="ram" required><option value="">Select RAM</option><option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option></select></label>
+                        <label class="field quick-custom-spec-field">
+                            <span>RAM <b>*</b></span>
+                            <select name="ram" data-custom-spec-select="ram" required>
+                                <option value="">Select RAM</option>
+                                <option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option>
+                                <option value="__other__">Other</option>
+                            </select>
+                            <input class="custom-spec-input" type="text" name="ram_custom" data-custom-spec-input="ram" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE RAM, E.G. 10GB" aria-label="Custom RAM" hidden disabled>
+                            <small class="custom-spec-hint" data-custom-spec-hint="ram" hidden>Enter the exact RAM capacity for this variant.</small>
+                        </label>
                         <?php endif; ?>
-                        <label class="field"><span>Storage <b>*</b></span><select name="storage" required><option value="">Select storage</option><option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option></select></label>
+                        <label class="field quick-custom-spec-field">
+                            <span>Storage <b>*</b></span>
+                            <select name="storage" data-custom-spec-select="storage" required>
+                                <option value="">Select storage</option>
+                                <option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option>
+                                <option value="__other__">Other</option>
+                            </select>
+                            <input class="custom-spec-input" type="text" name="storage_custom" data-custom-spec-input="storage" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE STORAGE, E.G. 32GB / 3TB" aria-label="Custom storage" hidden disabled>
+                            <small class="custom-spec-hint" data-custom-spec-hint="storage" hidden>Enter the exact storage capacity for this variant.</small>
+                        </label>
                         <label class="field"><span>Color <b>*</b></span><input type="text" name="color" data-uppercase maxlength="80" placeholder="E.G. DEEP BLUE" required></label>
                         <?php if ($quickType === 'tablet'): ?>
                         <label class="field"><span>Connectivity <b>*</b></span><select name="connectivity" data-quick-connectivity required><option value="">Select connectivity</option><option value="Wi-Fi">Wi-Fi</option><option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option></select></label>

@@ -37,6 +37,7 @@ DirectoryIndex index.php
     RewriteRule ^archive$ index.php?page=products&status=archived [L,QSA]
     RewriteRule ^add-item$ index.php?page=add-item [L,QSA]
     RewriteRule ^inventory$ index.php?page=inventory [L,QSA]
+    RewriteRule ^stock-monitoring$ index.php?page=stock-monitoring [L,QSA]
     RewriteRule ^branch-transfers$ index.php?page=branch-transfers [L,QSA]
     RewriteRule ^receive-stock$ index.php?page=stock-in [L,QSA]
     RewriteRule ^stock-movement$ index.php?page=stock-movement [L,QSA]

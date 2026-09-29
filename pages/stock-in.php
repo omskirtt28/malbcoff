@@ -271,8 +271,18 @@ if (!empty($successData['product_id'])) {
         </div>
         <div class="modal-body">
             <div class="form-grid two" id="variantFields">
-                <label class="field hidden" id="variantRamField"><span>RAM <b>*</b></span><select id="variantRam"><option value="">Select RAM</option><option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option></select></label>
-                <label class="field"><span>Storage <b>*</b></span><select id="variantStorage"><option value="">Select storage</option><option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option></select></label>
+                <label class="field hidden receive-custom-spec-field" id="variantRamField">
+                    <span>RAM <b>*</b></span>
+                    <select id="variantRam"><option value="">Select RAM</option><option>4GB</option><option>6GB</option><option>8GB</option><option>12GB</option><option>16GB</option><option>24GB</option><option value="__other__">Other</option></select>
+                    <input class="custom-spec-input" id="variantRamCustom" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE RAM, E.G. 10GB" aria-label="Custom RAM" hidden disabled>
+                    <small class="custom-spec-hint" id="variantRamCustomHint" hidden>Enter the exact RAM capacity for this variant.</small>
+                </label>
+                <label class="field receive-custom-spec-field">
+                    <span>Storage <b>*</b></span>
+                    <select id="variantStorage"><option value="">Select storage</option><option>64GB</option><option>128GB</option><option>256GB</option><option>512GB</option><option>1TB</option><option>2TB</option><option value="__other__">Other</option></select>
+                    <input class="custom-spec-input" id="variantStorageCustom" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE STORAGE, E.G. 32GB / 3TB" aria-label="Custom storage" hidden disabled>
+                    <small class="custom-spec-hint" id="variantStorageCustomHint" hidden>Enter the exact storage capacity for this variant.</small>
+                </label>
                 <label class="field hidden" id="variantColorField"><span>Color <b>*</b></span><input id="variantColor" data-uppercase maxlength="80" placeholder="E.G. BLACK TITANIUM"></label>
                 <label class="field hidden" id="variantConnectivityField"><span>Connectivity <b>*</b></span><select id="variantConnectivity"><option value="">Select connectivity</option><option>Wi-Fi</option><option>Wi-Fi + Cellular</option></select></label>
                 <?php if ($isOwner): ?><label class="field"><span>Cost Price / Unit <b>*</b></span><div class="money-input"><span>₱</span><input id="variantCostPrice" type="number" min="0.01" step="0.01" placeholder="0.00"></div><small>Owner-only cost for newly received units.</small></label><?php endif; ?>
@@ -504,11 +514,26 @@ function selectVariant(v,isAccessory=false){
 
 if(isOwner && $('branchSelect')) $('branchSelect').addEventListener('change',()=>{ if(selectedVariant){ syncPriceFields(); const summary=$('summarySellingPrice'); if(summary)summary.textContent=money(variantSelling(selectedVariant)); document.querySelectorAll('[data-identifier-input]').forEach(input=>{ if(input.value.trim()) checkIdentifier(input); }); } });
 
+function syncVariantCustomSpec(selectId,inputId,hintId,focus=false){
+  const select=$(selectId), input=$(inputId), hint=$(hintId);
+  if(!select||!input)return;
+  const custom=select.value==='__other__';
+  input.hidden=!custom; input.disabled=!custom; input.required=custom;
+  if(hint)hint.hidden=!custom;
+  if(!custom)input.value='';
+  if(custom&&focus)setTimeout(()=>input.focus(),0);
+}
+function variantSpecValue(selectId,inputId){
+  const select=$(selectId), input=$(inputId);
+  return select?.value==='__other__' ? (input?.value||'').trim().toUpperCase() : (select?.value||'');
+}
 function openVariant(){
   if(!selectedItem || selectedItem.kind!=='model')return;
   $('variantModalModel').textContent=selectedItem.label;
   $('variantError').classList.add('hidden'); $('variantError').textContent='';
-  $('variantRam').value=''; $('variantStorage').value=''; $('variantColor').value=''; $('variantConnectivity').value=''; $('variantSellingPrice').value=''; if($('variantCostPrice')) $('variantCostPrice').value='';
+  $('variantRam').value=''; $('variantStorage').value=''; $('variantRamCustom').value=''; $('variantStorageCustom').value=''; $('variantColor').value=''; $('variantConnectivity').value=''; $('variantSellingPrice').value=''; if($('variantCostPrice')) $('variantCostPrice').value='';
+  syncVariantCustomSpec('variantRam','variantRamCustom','variantRamCustomHint');
+  syncVariantCustomSpec('variantStorage','variantStorageCustom','variantStorageCustomHint');
   const apple=isApple(selectedItem), tablet=selectedItem.type==='tablet';
   $('variantRamField').classList.toggle('hidden',apple);
   $('variantColorField').classList.toggle('hidden',!(apple && !tablet));
@@ -516,10 +541,19 @@ function openVariant(){
   variantModal.hidden=false; document.body.classList.add('modal-open');
 }
 $('openAddVariant').addEventListener('click',openVariant); $('openAddVariantEmpty').addEventListener('click',openVariant);
+$('variantRam').addEventListener('change',()=>syncVariantCustomSpec('variantRam','variantRamCustom','variantRamCustomHint',$('variantRam').value==='__other__'));
+$('variantStorage').addEventListener('change',()=>syncVariantCustomSpec('variantStorage','variantStorageCustom','variantStorageCustomHint',$('variantStorage').value==='__other__'));
+$('variantRamCustom').addEventListener('input',()=>{$('variantRamCustom').value=$('variantRamCustom').value.toUpperCase();});
+$('variantStorageCustom').addEventListener('input',()=>{$('variantStorageCustom').value=$('variantStorageCustom').value.toUpperCase();});
 document.querySelectorAll('[data-variant-close]').forEach(b=>b.addEventListener('click',()=>{variantModal.hidden=true;document.body.classList.remove('modal-open');}));
 $('saveVariantBtn').addEventListener('click',async()=>{
   if(!selectedItem)return;
-  const payload=new URLSearchParams({ajax_action:'create_variant',_csrf:csrf,model_id:String(selectedItem.id),storage:$('variantStorage').value,ram:$('variantRam').value,color:$('variantColor').value,connectivity:$('variantConnectivity').value,selling_price:$('variantSellingPrice').value,cost_price:$('variantCostPrice')?.value||'',branch_id:String(activeBranchId()||'')});
+  const ramValue=variantSpecValue('variantRam','variantRamCustom');
+  const storageValue=variantSpecValue('variantStorage','variantStorageCustom');
+  const apple=isApple(selectedItem);
+  if(!apple&&!ramValue){$('variantError').textContent='Enter the custom RAM capacity.';$('variantError').classList.remove('hidden');$('variantRamCustom').focus();return;}
+  if(!storageValue){$('variantError').textContent='Enter the custom storage capacity.';$('variantError').classList.remove('hidden');$('variantStorageCustom').focus();return;}
+  const payload=new URLSearchParams({ajax_action:'create_variant',_csrf:csrf,model_id:String(selectedItem.id),storage:storageValue,ram:ramValue,color:$('variantColor').value,connectivity:$('variantConnectivity').value,selling_price:$('variantSellingPrice').value,cost_price:$('variantCostPrice')?.value||'',branch_id:String(activeBranchId()||'')});
   const btn=$('saveVariantBtn'); btn.disabled=true; btn.textContent='Saving…';
   try{
     const res=await fetch('actions/stock_in.php',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8','Accept':'application/json'},body:payload.toString()});

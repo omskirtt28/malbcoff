@@ -49,6 +49,8 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         'archive' => '/archive',
         'add-item' => '/add-item',
         'inventory' => '/inventory',
+        'stock-monitoring' => '/stock-monitoring',
+        'stock-monitoring-export' => '/stock-monitoring/export',
         'branch-transfers' => '/branch-transfers',
         'stock-in' => '/receive-stock',
         'stock-movement' => '/stock-movement',

@@ -19,8 +19,9 @@ if ($isSystemAdminControl) {
     if (Auth::isOwner() || in_array($sidebarUser['role'], ['branch_manager', 'cashier'], true)) $navItems[] = ['sales-records', 'receipt', 'Sales Records'];
     if (!Auth::isOwner()) $navItems[] = ['products', 'products', 'Products'];
     $navItems[] = ['inventory', 'inventory', 'Inventory'];
-    if (Auth::isOwner() || in_array((string)($sidebarUser['role'] ?? ''), ['branch_manager','inventory'], true)) $navItems[] = ['branch-transfers', 'movement', 'Branch Transfers'];
+    if (Auth::isOwner() || in_array((string)($sidebarUser['role'] ?? ''), ['branch_manager','inventory'], true)) $navItems[] = ['stock-monitoring', 'receipt', 'Stock Monitoring'];
     if (!Auth::isOwner() && in_array((string)($sidebarUser['role'] ?? ''), ['branch_manager','inventory'], true)) $navItems[] = ['stock-in', 'stock', 'Receive Stock'];
+    if (Auth::isOwner() || in_array((string)($sidebarUser['role'] ?? ''), ['branch_manager','inventory'], true)) $navItems[] = ['branch-transfers', 'movement', 'Branch Transfers'];
     if (Auth::isOwner() || in_array($sidebarUser['role'], ['branch_manager', 'inventory'], true)) $navItems[] = ['stock-movement', 'movement', 'Stock Movement'];
     if (Auth::isOwner() || ($sidebarUser['role'] ?? '') === 'branch_manager') $navItems[] = ['users', 'users', 'Users'];
 

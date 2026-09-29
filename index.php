@@ -11,6 +11,7 @@ $allowedPages = [
     'products' => 'Products',
     'add-item' => 'Add New Item',
     'inventory' => 'Inventory',
+    'stock-monitoring' => 'Stock Monitoring',
     'branch-transfers' => 'Branch Transfers',
     'stock-in' => 'Stock In',
     'stock-movement' => 'Stock Movement',
@@ -52,6 +53,7 @@ $pageRoles = [
     'products' => ['owner','branch_manager','cashier','inventory'],
     'add-item' => ['branch_manager','inventory'],
     'inventory' => ['owner','branch_manager','cashier','inventory'],
+    'stock-monitoring' => ['owner','branch_manager','inventory'],
     'branch-transfers' => ['owner','branch_manager','inventory'],
     'stock-in' => ['branch_manager','inventory'],
     'stock-movement' => ['owner','branch_manager','inventory'],
@@ -81,6 +83,7 @@ if (!in_array($role, $pageRoles[$page] ?? [], true)) {
 }
 
 $pageTitle = $allowedPages[$page];
+if ($page === 'stock-monitoring' && Auth::isOwner()) $pageTitle = 'Overall Stock Monitoring';
 require __DIR__ . '/partials/header.php';
 require __DIR__ . '/partials/sidebar.php';
 ?>

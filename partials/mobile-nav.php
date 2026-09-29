@@ -18,8 +18,9 @@ if ($isSystemAdminControl) {
     if (Auth::isOwner() || in_array($mobileUser['role'], ['branch_manager','cashier'], true)) $mobileItems[] = ['sales-records','receipt','Sales'];
     if (!Auth::isOwner()) $mobileItems[] = ['products','products','Products'];
     $mobileItems[] = ['inventory','inventory','Inventory'];
-    if (Auth::isOwner() || in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) $mobileItems[] = ['branch-transfers','movement','Transfers'];
+    if (Auth::isOwner() || in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) $mobileItems[] = ['stock-monitoring','receipt','Stock Monitoring'];
     if (!Auth::isOwner() && in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) $mobileItems[] = ['stock-in','stock','Receive Stock'];
+    if (Auth::isOwner() || in_array((string)($mobileUser['role'] ?? ''), ['branch_manager','inventory'], true)) $mobileItems[] = ['branch-transfers','movement','Transfers'];
     if (Auth::isOwner() || in_array($mobileUser['role'], ['branch_manager','inventory'], true)) $mobileItems[] = ['stock-movement','movement','Stock Movement'];
     if (Auth::isOwner() || ($mobileUser['role'] ?? '') === 'branch_manager') $mobileItems[] = ['users','users','Users'];
     $primarySlugs = Auth::isOwner() ? ['dashboard','sales-records','inventory'] : (pos_role_allowed() ? ['dashboard','pos','sales-records','products'] : ['dashboard','products','inventory','stock-in']);

@@ -2177,3 +2177,187 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 /* POS cart empty-state visibility fix: respect the HTML hidden attribute. */
 .pos-cart-empty[hidden]{display:none!important}
+
+/* Stock Monitoring — approved production reference */
+.stock-monitoring-heading{align-items:flex-end;margin-bottom:18px}
+.stock-monitoring-heading h1{font-size:27px;margin:4px 0 6px;letter-spacing:-.65px}
+.stock-monitoring-heading p{font-size:12px;max-width:720px}
+.stock-monitoring-export{min-height:38px;padding:0 14px;border-color:#9fc5ff;background:#fff;box-shadow:0 3px 10px rgba(23,105,232,.04)}
+.stock-monitoring-export .icon{width:16px;height:16px}
+
+.stock-monitoring-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 14px}
+.stock-monitoring-kpi{min-width:0;display:flex;gap:11px;align-items:flex-start;padding:15px 16px;border:1px solid #dfe7f1;border-radius:13px;background:#fff;box-shadow:0 6px 18px rgba(30,64,175,.025)}
+.stock-monitoring-kpi-icon{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;background:#eaf3ff;color:#1769e8}
+.stock-monitoring-kpi-icon .icon{width:17px;height:17px}
+.stock-monitoring-kpi>div>span,.stock-monitoring-kpi>div>strong,.stock-monitoring-kpi>div>small{display:block}
+.stock-monitoring-kpi>div>span{font-size:10px;font-weight:800;color:#44546a;margin-bottom:4px}
+.stock-monitoring-kpi>div>strong{font-size:25px;line-height:1;color:#1769e8;letter-spacing:-.04em}
+.stock-monitoring-kpi>div>small{font-size:9.5px;line-height:1.35;color:#7b8797;margin-top:6px;white-space:normal}
+.stock-monitoring-kpi.is-overall{background:#f4f8ff;border-color:#dce8fb}.stock-monitoring-kpi.is-overall .stock-monitoring-kpi-icon{background:#e8f2ff;color:#1769e8}
+.stock-monitoring-kpi.is-in{background:#f4fbf7;border-color:#dcefe4}.stock-monitoring-kpi.is-in .stock-monitoring-kpi-icon{background:#e9f8ef;color:#1b9c5a}.stock-monitoring-kpi.is-in strong{color:#179452}
+.stock-monitoring-kpi.is-out{background:#fff7f6;border-color:#f2dfdc}.stock-monitoring-kpi.is-out .stock-monitoring-kpi-icon{background:#fff0ee;color:#de4c45}.stock-monitoring-kpi.is-out strong{color:#d94841}
+.stock-monitoring-kpi.is-sold{background:#fffaf0;border-color:#f3e7ca}.stock-monitoring-kpi.is-sold .stock-monitoring-kpi-icon{background:#fff3d8;color:#d4890f}.stock-monitoring-kpi.is-sold strong{color:#cb7c08}
+
+.stock-monitoring-filter{display:grid;gap:10px;align-items:end;margin-bottom:14px;padding:12px;background:#fff;border:1px solid #dfe6ef;border-radius:12px;box-shadow:0 5px 16px rgba(31,62,104,.022)}
+.stock-monitoring-filter.is-branch{grid-template-columns:150px 180px minmax(280px,1fr) auto auto}
+.stock-monitoring-filter.is-owner{grid-template-columns:150px 180px 180px minmax(260px,1fr) auto auto}
+.stock-monitoring-filter>label>span{display:block;font-size:10px;font-weight:800;color:#4a596d;margin:0 0 5px}
+.stock-monitoring-filter input,.stock-monitoring-filter select{height:38px;border-radius:8px;border-color:#dce3ec;font-size:11px;background:#fff}
+.stock-monitoring-filter .search-box{height:38px;margin:0;align-self:end;border-radius:8px;border-color:#dce3ec;background:#fff}
+.stock-monitoring-filter .search-box .icon{width:16px;height:16px}
+.stock-monitoring-filter .search-box input{height:36px;min-width:0;padding-right:8px}
+.stock-monitoring-filter .btn{min-height:38px;border-radius:8px;padding:0 18px;font-size:11px}
+.stock-monitoring-filter .filter-reset{height:38px;display:inline-flex;align-items:center;justify-content:center;padding:0 8px;color:#667085;font-size:10.5px;font-weight:750}
+.stock-monitoring-filter .filter-reset:hover{color:#1769e8}
+
+.stock-monitoring-card{overflow:hidden;border-radius:13px;border-color:#dfe6ef;box-shadow:0 5px 18px rgba(31,62,104,.025)}
+.stock-monitoring-table-wrap{overflow:auto;overscroll-behavior-inline:contain;max-width:100%}
+.stock-monitoring-table{width:100%;min-width:720px;margin:0;border-collapse:collapse}
+.stock-monitoring-owner-table{min-width:820px}
+.stock-monitoring-table th,.stock-monitoring-table td{border-right:1px solid #edf1f5}
+.stock-monitoring-table th:last-child,.stock-monitoring-table td:last-child{border-right:0}
+.stock-monitoring-table thead th{padding:9px 12px;background:#fafbfd;color:#516075;font-size:9.5px;font-weight:800;border-bottom:1px solid #dfe6ef;white-space:nowrap}
+.stock-monitoring-table thead th:first-child{min-width:280px}
+.stock-monitoring-table tbody td{padding:7px 12px;font-size:10.5px;line-height:1.3;border-bottom:1px solid #edf1f5;background:#fff}
+.stock-monitoring-table tbody tr:hover td{background:#fbfdff}
+.stock-monitoring-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stock-monitoring-model-cell{font-weight:620;color:#26364b;white-space:normal;min-width:280px}
+.stock-monitoring-overall-head{color:#334f78!important}
+.stock-monitoring-overall-cell{font-weight:800;color:#263f6c}
+
+.stock-monitoring-brand-row th{padding:0!important;background:#f8fbff!important;border-bottom:1px solid #e2ebf7!important;text-align:left!important}
+.stock-monitoring-brand-toggle{width:100%;min-height:34px;display:flex;align-items:center;gap:7px;padding:6px 11px;border:0;background:transparent;color:#1769e8;font:inherit;font-size:10.5px;font-weight:850;letter-spacing:.02em;text-align:left;cursor:pointer}
+.stock-monitoring-brand-toggle:hover{background:#f1f7ff}
+.stock-monitoring-brand-chevron{display:grid;place-items:center;width:16px;height:16px;color:#405a7d;transition:transform .16s ease}
+.stock-monitoring-brand-chevron .icon{width:14px;height:14px}
+.stock-monitoring-brand-toggle.is-collapsed .stock-monitoring-brand-chevron{transform:rotate(-90deg)}
+.stock-monitoring-brand-logo{width:22px;height:22px;border-radius:6px;display:inline-grid;place-items:center;flex:0 0 auto}
+.stock-monitoring-brand-logo img{max-width:16px;max-height:16px}
+.stock-monitoring-total-row td{padding:7px 12px!important;background:#edf5ff!important;color:#1760c8!important;font-size:10px!important;font-weight:850!important;border-top:1px solid #d7e7fb!important;border-bottom:1px solid #d7e7fb!important}
+.stock-monitoring-table tfoot th{padding:9px 12px;background:#e4efff;color:#16468d;font-size:10.5px;font-weight:900;border-top:2px solid #c8daf4;border-right:1px solid #d2e0f2}
+.stock-monitoring-table tfoot th:last-child{border-right:0}
+.stock-monitoring-model-row[hidden]{display:none!important}
+.stock-monitoring-empty{min-height:250px;padding:34px 20px}
+.stock-monitoring-empty .icon{color:#8ca4c4}
+
+@media(max-width:1180px){
+  .stock-monitoring-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stock-monitoring-filter.is-owner{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stock-monitoring-filter.is-owner .stock-monitoring-search{grid-column:span 2}
+  .stock-monitoring-filter.is-branch{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stock-monitoring-filter.is-branch .stock-monitoring-search{grid-column:span 1}
+}
+@media(max-width:820px){
+  .stock-monitoring-heading{align-items:flex-start;flex-direction:column;gap:12px}
+  .stock-monitoring-heading .stock-monitoring-export{align-self:flex-start}
+  .stock-monitoring-filter.is-owner,.stock-monitoring-filter.is-branch{grid-template-columns:1fr 1fr}
+  .stock-monitoring-filter.is-owner .stock-monitoring-search,.stock-monitoring-filter.is-branch .stock-monitoring-search{grid-column:1/-1}
+  .stock-monitoring-filter .stock-monitoring-apply{width:100%}
+  .stock-monitoring-table thead th:first-child,.stock-monitoring-model-cell{min-width:230px}
+}
+@media(max-width:560px){
+  .stock-monitoring-heading h1{font-size:24px}
+  .stock-monitoring-heading .stock-monitoring-export{width:100%}
+  .stock-monitoring-kpis{grid-template-columns:1fr 1fr;gap:8px}
+  .stock-monitoring-kpi{padding:12px 11px;gap:8px;border-radius:11px}
+  .stock-monitoring-kpi-icon{width:28px;height:28px;border-radius:8px}
+  .stock-monitoring-kpi>div>strong{font-size:21px}
+  .stock-monitoring-kpi>div>small{font-size:8.8px}
+  .stock-monitoring-filter.is-owner,.stock-monitoring-filter.is-branch{grid-template-columns:1fr;padding:10px}
+  .stock-monitoring-filter.is-owner .stock-monitoring-search,.stock-monitoring-filter.is-branch .stock-monitoring-search{grid-column:auto}
+  .stock-monitoring-filter .stock-monitoring-reset{height:34px}
+  .stock-monitoring-card{border-radius:11px}
+  .stock-monitoring-table{min-width:700px}
+  .stock-monitoring-owner-table{min-width:760px}
+  .stock-monitoring-table thead th,.stock-monitoring-table tbody td{padding-left:10px;padding-right:10px}
+}
+
+
+/* P2-051 — Stock Monitoring filter-bar precision UI/UX refinement
+   Keeps all existing filter names/behavior intact; presentation only. */
+@media (min-width:1181px){
+  .stock-monitoring-filter.is-branch{
+    grid-template-columns:156px 184px minmax(360px,560px) 78px 58px;
+    gap:12px;
+    justify-content:start;
+  }
+  .stock-monitoring-filter.is-owner{
+    grid-template-columns:156px 176px 176px minmax(340px,500px) 78px 58px;
+    gap:12px;
+    justify-content:start;
+  }
+}
+
+.stock-monitoring-filter>label{
+  min-width:0;
+  margin:0;
+}
+.stock-monitoring-filter>label>span{
+  margin-bottom:6px;
+  line-height:1.2;
+}
+.stock-monitoring-filter input[type="date"],
+.stock-monitoring-filter select{
+  width:100%;
+  min-width:0;
+  height:40px;
+  padding-inline:12px;
+}
+.stock-monitoring-filter input[type="date"]{
+  color:#344054;
+  font-variant-numeric:tabular-nums;
+}
+.stock-monitoring-filter input[type="date"]::-webkit-calendar-picker-indicator{
+  cursor:pointer;
+  opacity:.72;
+}
+.stock-monitoring-filter .search-box{
+  width:100%;
+  min-width:0;
+  height:40px;
+  padding-left:12px;
+  gap:7px;
+}
+.stock-monitoring-filter .search-box input{
+  width:100%;
+  min-width:0;
+  height:38px;
+  padding:0 10px 0 0;
+  text-overflow:ellipsis;
+}
+.stock-monitoring-filter .search-box .icon{
+  width:15px;
+  height:15px;
+  flex:0 0 auto;
+}
+.stock-monitoring-filter .btn{
+  width:100%;
+  min-width:0;
+  min-height:40px;
+  padding-inline:14px;
+}
+.stock-monitoring-filter .filter-reset{
+  width:100%;
+  min-width:0;
+  height:40px;
+  padding:0 6px;
+}
+
+@media (max-width:1180px) and (min-width:761px){
+  .stock-monitoring-filter.is-branch,
+  .stock-monitoring-filter.is-owner{
+    gap:10px;
+  }
+  .stock-monitoring-filter input[type="date"],
+  .stock-monitoring-filter select,
+  .stock-monitoring-filter .search-box,
+  .stock-monitoring-filter .btn{
+    min-width:0;
+  }
+}
+
+/* P2-009: custom RAM / Storage option for Add Variant */
+.custom-spec-input[hidden],.custom-spec-hint[hidden]{display:none!important}
+.quick-custom-spec-field .custom-spec-input:not([hidden]),.receive-custom-spec-field .custom-spec-input:not([hidden]){display:block;margin-top:8px;border-color:#b9d3fb;background:#fbfdff}
+.quick-custom-spec-field .custom-spec-input:not([hidden]):focus,.receive-custom-spec-field .custom-spec-input:not([hidden]):focus{border-color:#6fa7fb;box-shadow:0 0 0 3px #edf4ff}
+.quick-custom-spec-field .custom-spec-hint:not([hidden]),.receive-custom-spec-field .custom-spec-hint:not([hidden]){display:block;margin-top:5px;color:#667085;font-size:10px;line-height:1.4}
