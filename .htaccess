@@ -38,6 +38,7 @@ DirectoryIndex index.php
     RewriteRule ^add-item$ index.php?page=add-item [L,QSA]
     RewriteRule ^inventory$ index.php?page=inventory [L,QSA]
     RewriteRule ^stock-monitoring$ index.php?page=stock-monitoring [L,QSA]
+    RewriteRule ^stock-monitoring/export$ actions/export_stock_monitoring.php [L,QSA]
     RewriteRule ^branch-transfers$ index.php?page=branch-transfers [L,QSA]
     RewriteRule ^receive-stock$ index.php?page=stock-in [L,QSA]
     RewriteRule ^stock-movement$ index.php?page=stock-movement [L,QSA]
@@ -48,6 +49,7 @@ DirectoryIndex index.php
     RewriteRule ^system-admin-users$ index.php?page=system-admin-users [L,QSA]
     RewriteRule ^system-admin-history$ index.php?page=system-admin-history [L,QSA]
     RewriteRule ^security-logs$ index.php?page=security-logs [L,QSA]
+    RewriteRule ^system-admin-data-reset$ index.php?page=system-admin-data-reset [L,QSA]
 </IfModule>
 
 <IfModule mod_authz_core.c>

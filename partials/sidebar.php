@@ -8,6 +8,7 @@ if ($isSystemAdminControl) {
         ['system-admin-users', 'users', 'User Accounts'],
         ['system-admin-history', 'movement', 'Impersonation History'],
         ['security-logs', 'shield', 'Security Logs'],
+        ['system-admin-data-reset', 'trash', 'Data Reset'],
     ];
     $sidebarContext = 'System Control';
     $pendingTransferCount = 0;

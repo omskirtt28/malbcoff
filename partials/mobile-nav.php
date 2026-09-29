@@ -6,10 +6,11 @@ if ($isSystemAdminControl) {
         ['system-admin-dashboard','dashboard','Home'],
         ['system-admin-users','users','Accounts'],
         ['system-admin-history','movement','History'],
+        ['system-admin-data-reset','trash','Data Reset'],
         ['security-logs','shield','Logs'],
     ];
-    $primary = $mobileItems;
-    $secondary = [];
+    $primary = array_slice($mobileItems, 0, 4);
+    $secondary = array_slice($mobileItems, 4);
     $mobileContext = 'System Control';
     $mobilePendingTransferCount = 0;
 } else {

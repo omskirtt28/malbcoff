@@ -20,6 +20,7 @@ $allowedPages = [
     'system-admin-users' => 'User Accounts',
     'system-admin-history' => 'Impersonation History',
     'security-logs' => 'Security Logs',
+    'system-admin-data-reset' => 'Data Reset',
 ];
 
 // Canonicalize old index.php?page=... bookmarks without affecting internal rewrites.
@@ -62,6 +63,7 @@ $pageRoles = [
     'system-admin-users' => ['system_admin'],
     'system-admin-history' => ['system_admin'],
     'security-logs' => ['system_admin'],
+    'system-admin-data-reset' => ['system_admin'],
 ];
 
 if ($role === 'system_admin' && !Auth::isImpersonating() && !str_starts_with($page, 'system-admin') && $page !== 'security-logs') {

@@ -59,6 +59,7 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         'system-admin-users' => '/system-admin-users',
         'system-admin-history' => '/system-admin-history',
         'security-logs' => '/security-logs',
+        'system-admin-data-reset' => '/system-admin-data-reset',
         'login' => '/login',
         'logout' => '/logout',
         'change-password' => '/change-password',
