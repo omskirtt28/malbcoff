@@ -36,7 +36,7 @@ final class Auth
         try {
             // Store the actual application-local login time (Asia/Manila) instead of
             // relying on the hosting MySQL server's system timezone.
-            $loginAt = date('Y-m-d H:i:s');
+            $loginAt = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
             Database::query('UPDATE users SET last_login_at=? WHERE id=?', [$loginAt, (int)$user['id']]);
             $user['last_login_at'] = $loginAt;
             if (($user['role'] ?? '') === 'system_admin') {

@@ -350,19 +350,26 @@ final class Security
                 $metadataJson,
             ];
 
+            // Store an explicit Asia/Manila audit timestamp instead of relying on
+            // the hosting database server's CURRENT_TIMESTAMP timezone. This makes
+            // login/audit history deterministic and keeps System Admin monitoring
+            // aligned with the actual Philippine application clock.
+            $auditCreatedAt = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s');
+
             if (self::impersonationAuditReady()) {
                 Database::query(
-                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json,actor_user_id,effective_user_id,impersonation_session_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json,actor_user_id,effective_user_id,impersonation_session_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     array_merge($base, [
                         isset($actor['id']) ? (int)$actor['id'] : null,
                         isset($effective['id']) ? (int)$effective['id'] : null,
                         Auth::impersonationSessionId(),
+                        $auditCreatedAt,
                     ])
                 );
             } else {
                 Database::query(
-                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json) VALUES (?,?,?,?,?,?,?,?,?)',
-                    $base
+                    'INSERT INTO security_audit_logs (request_id,user_id,branch_id,event_type,entity_type,entity_id,ip_address,user_agent,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    array_merge($base, [$auditCreatedAt])
                 );
             }
         } catch (Throwable $e) {
