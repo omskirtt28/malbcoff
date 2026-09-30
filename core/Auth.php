@@ -34,8 +34,11 @@ final class Auth
         }
 
         try {
-            Database::query('UPDATE users SET last_login_at=NOW() WHERE id=?', [(int)$user['id']]);
-            $user['last_login_at'] = date('Y-m-d H:i:s');
+            // Store the actual application-local login time (Asia/Manila) instead of
+            // relying on the hosting MySQL server's system timezone.
+            $loginAt = date('Y-m-d H:i:s');
+            Database::query('UPDATE users SET last_login_at=? WHERE id=?', [$loginAt, (int)$user['id']]);
+            $user['last_login_at'] = $loginAt;
             if (($user['role'] ?? '') === 'system_admin') {
                 try {
                     Database::query("UPDATE security_impersonation_sessions SET ended_at=NOW(),ended_reason='new_login' WHERE system_admin_user_id=? AND ended_at IS NULL", [(int)$user['id']]);
