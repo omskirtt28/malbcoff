@@ -1,6 +1,7 @@
 <?php
 $role = Auth::user()['role'] ?? '';
 $isOwner = Auth::isOwner();
+$canMergeVariant = $isOwner || (method_exists('Auth','actorIsSystemAdmin') && Auth::actorIsSystemAdmin());
 $canAddMaster = in_array($role, ['owner', 'branch_manager', 'inventory'], true);
 $canQuickReceive = $canAddMaster;
 $quickSetupAfterCreate = (($_GET['setup'] ?? '') === '1');
@@ -16,8 +17,12 @@ $priceBranches = [];
 $priceMap = [];
 $pricingReady = false;
 
+// Clean up already-existing truncated spelling duplicates before rendering Product Master.
+variant_cleanup_truncated_color_duplicates_once();
+
 $selectedBrandId = filter_input(INPUT_GET, 'brand', FILTER_VALIDATE_INT) ?: null;
 $selectedModelId = filter_input(INPUT_GET, 'model', FILTER_VALIDATE_INT) ?: null;
+$selectedCategoryId = filter_input(INPUT_GET, 'category', FILTER_VALIDATE_INT) ?: null;
 $search = trim((string)($_GET['q'] ?? ''));
 $archiveMode = $isOwner && in_array(($_GET['status'] ?? ''), ['archived','all'], true);
 $showArchived = $archiveMode;
@@ -25,6 +30,8 @@ $activeView = (($_GET['view'] ?? 'devices') === 'accessories') ? 'accessories' :
 $schemaReady = false;
 $catalogDeleteReady = false;
 $brands = $models = $categories = $configurations = [];
+$selectedCategory = null;
+$accessoryProducts = [];
 $archivedBrands = $archivedModels = $archivedVariants = $archivedCategories = [];
 $selectedModel = null;
 
@@ -76,7 +83,7 @@ try {
             $configWhere = ($isOwner && $showArchived) ? 'p.is_active=0' : 'p.is_active=1';
             if ($catalogDeleteReady) $configWhere .= ' AND p.catalog_deleted_at IS NULL';
             $configurations = Database::query(
-                "SELECT p.id,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,p.is_active,
+                "SELECT p.id,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,p.is_active,p.created_at,
                         (SELECT COUNT(*) FROM inventory_units iu WHERE iu.product_id=p.id) unit_count,
                         (SELECT COUNT(*) FROM inventory_units ia WHERE ia.product_id=p.id AND ia.status='available') available_count,
                         (SELECT COUNT(*) FROM inventory_units il WHERE il.product_id=p.id AND il.status IN ('available','reserved','sold','transferred')) locked_unit_count,
@@ -88,10 +95,40 @@ try {
     }
 
     $categoryWhere = $isOwner ? ($showArchived ? '1=1' : 'c.is_active=1') : 'c.is_active=1';
+    $categoryProductStatusFilter = ($isOwner && $showArchived) ? '' : ' AND p.is_active=1';
+    $categoryProductDeleteFilter = $catalogDeleteReady ? ' AND p.catalog_deleted_at IS NULL' : '';
     $categories = Database::query(
-        "SELECT c.id,c.name,c.is_active,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id) AS product_count
+        "SELECT c.id,c.name,c.is_active,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id AND p.product_type='accessory'{$categoryProductStatusFilter}{$categoryProductDeleteFilter}) AS product_count
          FROM categories c WHERE {$categoryWhere} ORDER BY c.is_active DESC,c.name"
     )->fetchAll();
+
+    if ($activeView === 'accessories' && $selectedCategoryId) {
+        $selectedCategorySql = "SELECT c.id,c.name,c.is_active FROM categories c WHERE c.id=?";
+        if (!$isOwner || !$showArchived) $selectedCategorySql .= " AND c.is_active=1";
+        $selectedCategorySql .= " LIMIT 1";
+        $selectedCategory = Database::query($selectedCategorySql, [$selectedCategoryId])->fetch();
+        if (!$selectedCategory) {
+            $selectedCategoryId = null;
+        } else {
+            $productWhere = "p.product_type='accessory' AND p.category_id=?";
+            if (!$isOwner || !$showArchived) $productWhere .= " AND p.is_active=1";
+            if ($catalogDeleteReady) $productWhere .= " AND p.catalog_deleted_at IS NULL";
+
+            $stockSql = $isOwner
+                ? "(SELECT COALESCE(SUM(ib.quantity),0) FROM inventory_balances ib WHERE ib.product_id=p.id)"
+                : "(SELECT COALESCE(SUM(ib.quantity),0) FROM inventory_balances ib WHERE ib.product_id=p.id AND ib.branch_id=?)";
+            $accessoryParams = [$selectedCategoryId];
+            if (!$isOwner) array_unshift($accessoryParams, (int)(Auth::branchId() ?: 0));
+
+            $accessoryProducts = Database::query(
+                "SELECT p.id,p.product_name,p.barcode,p.selling_price,p.is_active,{$stockSql} AS available_stock
+                 FROM products p
+                 WHERE {$productWhere}
+                 ORDER BY p.is_active DESC,p.product_name",
+                $accessoryParams
+            )->fetchAll();
+        }
+    }
     $pricingReady = branch_pricing_ready();
     $priceBranches = Database::query('SELECT id,name FROM branches WHERE is_active=1 ORDER BY id')->fetchAll();
     if ($pricingReady && $configurations) {
@@ -175,6 +212,7 @@ function product_master_url(array $overrides = []): string
     ];
     if (!empty($_GET['brand'])) $query['brand'] = (int)$_GET['brand'];
     if (!empty($_GET['model'])) $query['model'] = (int)$_GET['model'];
+    if (!empty($_GET['category'])) $query['category'] = (int)$_GET['category'];
     if (!empty($_GET['q'])) $query['q'] = (string)$_GET['q'];
     if (!empty($_GET['status'])) $query['status'] = (string)$_GET['status'];
     if (!empty($_GET['branch'])) $query['branch'] = (int)$_GET['branch'];
@@ -185,6 +223,41 @@ function product_master_url(array $overrides = []): string
     unset($query['page']);
     return app_url('products', $query);
 }
+// Build reusable color suggestions and safe typo-merge hints for the selected model.
+$existingModelColors = [];
+$variantTypoTargets = [];
+if ($selectedModel && $configurations) {
+    foreach ($configurations as $config) {
+        $color = variant_color_normalize($config['color'] ?? '');
+        if ($color !== '') $existingModelColors[$color] = true;
+    }
+    $countConfigs = count($configurations);
+    for ($i = 0; $i < $countConfigs; $i++) {
+        for ($j = $i + 1; $j < $countConfigs; $j++) {
+            $a = $configurations[$i];
+            $b = $configurations[$j];
+            $sameSpecs = trim((string)($a['ram'] ?? '')) === trim((string)($b['ram'] ?? ''))
+                && trim((string)($a['storage'] ?? '')) === trim((string)($b['storage'] ?? ''))
+                && trim((string)($a['connectivity'] ?? '')) === trim((string)($b['connectivity'] ?? ''));
+            if (!$sameSpecs || !variant_colors_are_probable_typo($a['color'] ?? '', $b['color'] ?? '')) continue;
+
+            $source = null; $target = null;
+            if (variant_color_is_likely_completion($a['color'] ?? '', $b['color'] ?? '')) { $source = $a; $target = $b; }
+            elseif (variant_color_is_likely_completion($b['color'] ?? '', $a['color'] ?? '')) { $source = $b; $target = $a; }
+            else {
+                $aTime = strtotime((string)($a['created_at'] ?? '')) ?: PHP_INT_MAX;
+                $bTime = strtotime((string)($b['created_at'] ?? '')) ?: PHP_INT_MAX;
+                if ($aTime <= $bTime) { $source = $b; $target = $a; }
+                else { $source = $a; $target = $b; }
+            }
+            if ($source && $target && !isset($variantTypoTargets[(int)$source['id']])) {
+                $variantTypoTargets[(int)$source['id']] = $target;
+            }
+        }
+    }
+}
+$existingModelColors = array_keys($existingModelColors);
+sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
 ?>
 
 <section class="page-heading product-master-heading">
@@ -542,7 +615,7 @@ function product_master_url(array $overrides = []): string
                     }
                 ?>
                     <tr class="<?= !(int)$config['is_active'] ? 'archived-row' : '' ?>" data-variant-row="<?= (int)$config['id'] ?>">
-                        <td><strong><?= e($specs) ?></strong></td>
+                        <td><strong><?= e($specs) ?></strong><?php if(isset($variantTypoTargets[(int)$config['id']])): $typoTarget=$variantTypoTargets[(int)$config['id']]; ?><span class="variant-typo-warning">Possible color typo → <?= e((string)$typoTarget['color']) ?></span><?php endif; ?></td>
                         <td><?php if($shownPrice!==null): ?><strong><?= peso($shownPrice) ?></strong><span class="table-subtext"><?= e($priceNote ?: 'All branches') ?></span><?php else: ?><strong>Varies by branch</strong><span class="table-subtext">Select a branch above to view its price</span><?php endif; ?></td>
                         <td><strong><span data-variant-stock="<?= (int)$config['id'] ?>"><?= number_format((int)$config['available_count']) ?></span> available</strong></td>
                         <td><span class="status-pill <?= (int)$config['is_active']?'available':'low' ?>"><?= (int)$config['is_active']?'Active':'Archived' ?></span></td>
@@ -561,6 +634,18 @@ function product_master_url(array $overrides = []): string
                                     data-selling-price="<?= e((string)($priceBranchId ? ($branchPricesForVariant[(int)$priceBranchId] ?? $config['selling_price']) : $config['selling_price'])) ?>"
                                     data-branch-prices='<?= e(json_encode($branchPricesForVariant, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)) ?>'
                                     data-config-label="<?= e($selectedModel['brand_name'].' '.$selectedModel['name'].' • '.$specs) ?>"><?= icon('edit') ?><span>Edit</span></button>
+                            <?php endif; ?>
+                            <?php if ($canMergeVariant && isset($variantTypoTargets[(int)$config['id']])): $typoTarget=$variantTypoTargets[(int)$config['id']]; ?>
+                                <form method="post" action="actions/product_master.php" data-confirm="Merge this spelling duplicate into <?= e((string)$typoTarget['color']) ?>? Inventory, movements, transfers, prices and sales links will be preserved under the correct variant.">
+                                    <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
+                                    <input type="hidden" name="entity" value="configuration">
+                                    <input type="hidden" name="return_view" value="devices">
+                                    <input type="hidden" name="return_model" value="<?= (int)$selectedModel['id'] ?>">
+                                    <input type="hidden" name="id" value="<?= (int)$config['id'] ?>">
+                                    <input type="hidden" name="target_id" value="<?= (int)$typoTarget['id'] ?>">
+                                    <input type="hidden" name="action" value="merge_typo">
+                                    <button class="table-action-btn success variant-merge-btn" type="submit"><?= icon('restore') ?><span>Merge → <?= e((string)$typoTarget['color']) ?></span></button>
+                                </form>
                             <?php endif; ?>
                             <?php if ($isOwner): ?>
                                 <form method="post" action="actions/product_master.php" data-confirm="<?= (int)$config['is_active']?'Archive this variant? Existing stock and history will remain.':'Restore this variant?' ?>">
@@ -612,7 +697,8 @@ function product_master_url(array $overrides = []): string
 
     <div class="accessory-category-grid">
         <?php foreach ($categories as $category): ?>
-            <article class="accessory-category-card <?= !(int)$category['is_active'] ? 'archived' : '' ?>">
+            <article class="accessory-category-card <?= !(int)$category['is_active'] ? 'archived' : '' ?> <?= (int)$selectedCategoryId === (int)$category['id'] ? 'selected' : '' ?>">
+                <a class="accessory-category-card-link" href="<?= e(product_master_url(['view'=>'accessories','category'=>(int)$category['id'],'brand'=>null,'model'=>null,'q'=>null])) ?>#accessory-products" aria-label="View <?= e($category['name']) ?> products"></a>
                 <div class="accessory-category-icon"><?= icon('accessory') ?></div>
                 <div class="accessory-category-copy">
                     <strong><?= e($category['name']) ?></strong>
@@ -642,6 +728,45 @@ function product_master_url(array $overrides = []): string
             <div class="empty-state accessory-empty"><div class="empty-icon"><?= icon('accessory') ?></div><strong>No accessory categories yet</strong><span>Add categories such as Chargers, Cables, Cases or Earphones.</span></div>
         <?php endif; ?>
     </div>
+
+    <?php if ($selectedCategory): ?>
+    <section class="accessory-products-panel" id="accessory-products" aria-labelledby="accessoryProductsTitle">
+        <div class="accessory-products-header">
+            <div>
+                <span class="section-kicker">CATEGORY PRODUCTS</span>
+                <h3 id="accessoryProductsTitle"><?= e($selectedCategory['name']) ?></h3>
+                <p><?= count($accessoryProducts) ?> product<?= count($accessoryProducts) === 1 ? '' : 's' ?> in this category. Products are shared; stock shown is <?= $isOwner ? 'across all branches' : 'for your branch' ?>.</p>
+            </div>
+            <a class="btn btn-secondary btn-sm" href="<?= e(product_master_url(['view'=>'accessories','category'=>null])) ?>">Close</a>
+        </div>
+
+        <?php if ($accessoryProducts): ?>
+        <div class="accessory-product-list">
+            <?php foreach ($accessoryProducts as $accessory): ?>
+                <article class="accessory-product-row">
+                    <div class="accessory-product-main">
+                        <div class="accessory-product-icon"><?= icon('accessory') ?></div>
+                        <div>
+                            <strong><?= e($accessory['product_name'] ?: 'Accessory') ?></strong>
+                            <span><?= !empty($accessory['barcode']) ? 'Barcode: '.e($accessory['barcode']) : 'No barcode assigned' ?></span>
+                        </div>
+                    </div>
+                    <div class="accessory-product-stock">
+                        <small><?= $isOwner ? 'All Branches Stock' : 'Your Branch Stock' ?></small>
+                        <strong><?= number_format((int)$accessory['available_stock']) ?></strong>
+                    </div>
+                    <span class="status-pill <?= (int)$accessory['is_active'] ? 'available' : 'low' ?>"><?= (int)$accessory['is_active'] ? 'Active' : 'Archived' ?></span>
+                    <?php if ((int)$accessory['is_active'] && $canQuickReceive): ?>
+                        <a class="btn btn-outline btn-sm accessory-product-receive" href="<?= e(app_url('stock-in', ['product_id'=>(int)$accessory['id']])) ?>"><?= icon('stock') ?> Receive Stock</a>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+        </div>
+        <?php else: ?>
+            <div class="empty-state small accessory-products-empty"><strong>No products in this category</strong><span>Add an accessory product and assign it to <?= e($selectedCategory['name']) ?>.</span></div>
+        <?php endif; ?>
+    </section>
+    <?php endif; ?>
 
     <?php if ($isOwner): ?>
         <div class="master-card-footer"><a href="<?= e(product_master_url(['status' => $showArchived ? null : 'archived'])) ?>"><?= $showArchived ? 'Back to Active' : 'View Archived' ?></a></div>
@@ -892,7 +1017,7 @@ function product_master_url(array $overrides = []): string
                         </label>
                         <label class="field">
                             <span>Color <b>*</b></span>
-                            <input type="text" name="color" maxlength="80" data-uppercase data-variant-color-field placeholder="E.G. DEEP BLUE" required>
+                            <input type="text" name="color" maxlength="80" data-uppercase data-variant-color-field list="variantExistingColors" autocomplete="off" placeholder="E.G. DEEP BLUE" required><small>Choose an existing color when available to avoid duplicate spelling.</small>
                         </label>
                         <?php if ($variantEditType === 'tablet'): ?>
                             <label class="field">
@@ -972,6 +1097,12 @@ function product_master_url(array $overrides = []): string
     </div>
 </div>
 
+<?php if ($selectedModel): ?>
+<datalist id="variantExistingColors">
+    <?php foreach ($existingModelColors as $existingColor): ?><option value="<?= e($existingColor) ?>"></option><?php endforeach; ?>
+</datalist>
+<?php endif; ?>
+
 <div class="modal product-flow-modal quick-variant-modal" id="quickVariantStockModal" hidden
      data-model-id="<?= (int)$selectedModel['id'] ?>"
      data-model-label="<?= e($selectedModel['brand_name'].' '.$selectedModel['name']) ?>"
@@ -1020,7 +1151,22 @@ function product_master_url(array $overrides = []): string
                             <input class="custom-spec-input" type="text" name="storage_custom" data-custom-spec-input="storage" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE STORAGE, E.G. 32GB / 3TB" aria-label="Custom storage" hidden disabled>
                             <small class="custom-spec-hint" data-custom-spec-hint="storage" hidden>Enter the exact storage capacity for this variant.</small>
                         </label>
-                        <label class="field"><span>Color <b>*</b></span><input type="text" name="color" data-uppercase maxlength="80" placeholder="E.G. DEEP BLUE" required></label>
+                        <?php if ($existingModelColors): ?>
+                        <label class="field quick-controlled-color-field">
+                            <span>Color <b>*</b></span>
+                            <select name="color" data-controlled-color-select required>
+                                <option value="">Select color</option>
+                                <?php foreach ($existingModelColors as $existingColor): ?>
+                                <option value="<?= e($existingColor) ?>"><?= e($existingColor) ?></option>
+                                <?php endforeach; ?>
+                                <option value="__new__">+ Add New Color</option>
+                            </select>
+                            <input class="custom-spec-input" type="text" name="color_custom" data-controlled-color-input data-uppercase maxlength="80" autocomplete="off" placeholder="TYPE NEW COLOR" aria-label="New color" hidden disabled>
+                            <small data-controlled-color-hint>Existing colors are locked choices. Choose Add New Color only for a real new color.</small>
+                        </label>
+                        <?php else: ?>
+                        <label class="field"><span>Color <b>*</b></span><input type="text" name="color" data-uppercase maxlength="80" autocomplete="off" placeholder="E.G. DEEP BLUE" required><small>This first color becomes a reusable locked choice for the next variant.</small></label>
+                        <?php endif; ?>
                         <?php if ($quickType === 'tablet'): ?>
                         <label class="field"><span>Connectivity <b>*</b></span><select name="connectivity" data-quick-connectivity required><option value="">Select connectivity</option><option value="Wi-Fi">Wi-Fi</option><option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option></select></label>
                         <?php endif; ?>

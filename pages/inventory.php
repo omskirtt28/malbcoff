@@ -5,6 +5,9 @@ $canForwardStock = in_array($inventoryRole, ['branch_manager','inventory'], true
 $userBranchId = Auth::branchId() ?: null;
 $ownerScope = Auth::isOwner() ? current_branch_scope() : null;
 
+// Repair legacy duplicate product ids before building stock rows.
+variant_repair_live_device_duplicates();
+
 $brand = filter_input(INPUT_GET, 'brand', FILTER_VALIDATE_INT) ?: null;
 $type = (string)($_GET['type'] ?? '');
 $search = trim((string)($_GET['q'] ?? ''));

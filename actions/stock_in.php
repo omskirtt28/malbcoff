@@ -396,7 +396,12 @@ function create_receive_variant(array $input):array{
     if(strtolower(trim($ramRaw))==='__other__')$ramRaw=(string)($input['ram_custom']??'');
     $storage=normalize_receive_capacity($storageRaw);
     $ram=$isApple?null:normalize_receive_capacity($ramRaw);
-    $color=clean_receive_text($input['color']??'',80,true);
+    $colorResult=variant_color_canonicalize($modelId,$input['color']??'');
+    if(count($colorResult['suggestions']??[])>1){
+        throw new RuntimeException('Color is too similar to existing colors: '.implode(', ',$colorResult['suggestions']).'. Please choose the exact existing color.');
+    }
+    $color=(string)($colorResult['value']??'');
+    $colorCorrectedFrom=$colorResult['corrected_from']??null;
     $connectivity=$type==='tablet'?clean_receive_text($input['connectivity']??'',40,false):null;
     $selling=max(0,(float)($input['selling_price']??0));
     $requestedBranch=filter_var($input['branch_id']??null,FILTER_VALIDATE_INT)?:0;
@@ -408,19 +413,24 @@ function create_receive_variant(array $input):array{
     if($type==='tablet'&&!in_array($connectivity,['Wi-Fi','Wi-Fi + Cellular'],true)) throw new RuntimeException('Select the tablet connectivity.');
     if($selling<=0) throw new RuntimeException('Enter a valid selling price.');
 
-    $existing=Database::query(
-        "SELECT id,is_active,selling_price,cost_price FROM products
-         WHERE product_type=? AND brand_id=? AND model_id=?
-           AND COALESCE(ram,'')=COALESCE(?,'') AND storage=?
-           AND COALESCE(color,'')=COALESCE(?,'') AND COALESCE(connectivity,'')=COALESCE(?,'')
-         LIMIT 1",
-        [$type,(int)$model['brand_id'],$modelId,$ram,$storage,$color,$connectivity]
-    )->fetch();
+    // Repair old duplicate ids first, then reuse an existing variant by the
+    // same visible specification. This also catches historical rows where a
+    // single capacity was stored in a different legacy column.
+    variant_repair_live_device_duplicates();
+    $existing=variant_find_semantic_existing(
+        $type,
+        (int)$model['brand_id'],
+        $modelId,
+        $ram,
+        $storage,
+        $connectivity,
+        $color
+    );
     if($existing){
         if(!(int)$existing['is_active']) throw new RuntimeException('This variant already exists but is archived. Ask the Owner to restore it.');
         $existingId=(int)$existing['id'];
         $branchPrice=$priceBranchId?branch_selling_price($existingId,$priceBranchId,(float)$existing['selling_price']):(float)$existing['selling_price'];
-        return receive_variant_payload($existingId,$type,$ram,$storage,$color,$connectivity,$branchPrice,(float)($existing['cost_price']??0));
+        return receive_variant_payload($existingId,$type,$ram,$storage,$color,$connectivity,$branchPrice,(float)($existing['cost_price']??0),$colorCorrectedFrom);
     }
 
     $pdo=Database::connection();
@@ -434,15 +444,15 @@ function create_receive_variant(array $input):array{
         $id=(int)$pdo->lastInsertId();
         if($priceBranchId>0 && branch_pricing_ready()) save_branch_selling_price($id,$priceBranchId,$selling,(int)Auth::user()['id']);
         if($started)$pdo->commit();
-        return receive_variant_payload($id,$type,$ram,$storage,$color,$connectivity,$selling,0.0);
+        return receive_variant_payload($id,$type,$ram,$storage,$color,$connectivity,$selling,0.0,$colorCorrectedFrom);
     }catch(Throwable $e){
         if($started&&$pdo->inTransaction())$pdo->rollBack();
         throw $e;
     }
 }
-function receive_variant_payload(int $id,string $type,?string $ram,string $storage,?string $color,?string $connectivity,float $selling,float $cost=0.0):array{
+function receive_variant_payload(int $id,string $type,?string $ram,string $storage,?string $color,?string $connectivity,float $selling,float $cost=0.0,?string $colorCorrectedFrom=null):array{
     $parts=[];foreach([$ram,$storage,$connectivity,$color] as $v)if($v!==null&&$v!=='')$parts[]=$v;
-    return ['id'=>$id,'type'=>$type,'specs'=>$parts?implode(' • ',$parts):'Standard','selling'=>$selling,'prices'=>[],'cost'=>$cost,'costReady'=>$cost>0];
+    return ['id'=>$id,'type'=>$type,'specs'=>$parts?implode(' • ',$parts):'Standard','selling'=>$selling,'prices'=>[],'cost'=>$cost,'costReady'=>$cost>0,'color'=>$color,'color_corrected_from'=>$colorCorrectedFrom];
 }
 function normalize_receive_capacity(mixed $value):string{
     $value=strtoupper(preg_replace('/\s+/','',trim((string)$value))??'');

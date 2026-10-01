@@ -9,6 +9,9 @@ final class StockMonitoringReport
         }
 
         $isOwner = Auth::isOwner();
+
+        // Consolidate legacy duplicate product ids before report aggregation.
+        variant_repair_live_device_duplicates();
         $branches = Database::query('SELECT id,name,code FROM branches WHERE is_active=1 ORDER BY id')->fetchAll();
         $brands = Database::query('SELECT id,name FROM brands WHERE is_active=1 ORDER BY name')->fetchAll();
 

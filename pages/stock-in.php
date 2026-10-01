@@ -22,6 +22,9 @@ if ($successRaw) {
 $models = $variants = $accessories = $branches = [];
 $branchPrices = [];
 $canEditSelling = in_array($role, ['owner','branch_manager'], true);
+
+// Keep legacy typo variants consolidated before users receive more stock.
+variant_cleanup_truncated_color_duplicates_once();
 try {
     $models = Database::query(
         "SELECT pm.id,pm.name,pm.device_type,b.id brand_id,b.name brand_name
@@ -93,6 +96,7 @@ foreach ($variants as $variant) {
         'cost' => $isOwner ? (float)$variant['cost_price'] : null,
         'costReady' => (float)$variant['cost_price'] > 0,
         'type' => $variant['product_type'],
+        'color' => variant_color_normalize($variant['color'] ?? ''),
     ];
 }
 $itemPayload = array_values($modelPayload);
@@ -283,7 +287,12 @@ if (!empty($successData['product_id'])) {
                     <input class="custom-spec-input" id="variantStorageCustom" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE STORAGE, E.G. 32GB / 3TB" aria-label="Custom storage" hidden disabled>
                     <small class="custom-spec-hint" id="variantStorageCustomHint" hidden>Enter the exact storage capacity for this variant.</small>
                 </label>
-                <label class="field hidden" id="variantColorField"><span>Color <b>*</b></span><input id="variantColor" data-uppercase maxlength="80" placeholder="E.G. BLACK TITANIUM"></label>
+                <label class="field hidden" id="variantColorField">
+                    <span>Color <b>*</b></span>
+                    <select id="variantColorSelect" hidden disabled><option value="">Select color</option></select>
+                    <input id="variantColor" data-uppercase maxlength="80" autocomplete="off" placeholder="TYPE NEW COLOR">
+                    <small id="variantColorHint">The first color becomes a reusable locked choice for this model.</small>
+                </label>
                 <label class="field hidden" id="variantConnectivityField"><span>Connectivity <b>*</b></span><select id="variantConnectivity"><option value="">Select connectivity</option><option>Wi-Fi</option><option>Wi-Fi + Cellular</option></select></label>
                 <?php if ($isOwner): ?><label class="field"><span>Cost Price / Unit <b>*</b></span><div class="money-input"><span>₱</span><input id="variantCostPrice" type="number" min="0.01" step="0.01" placeholder="0.00"></div><small>Owner-only cost for newly received units.</small></label><?php endif; ?>
                 <label class="field <?= $isOwner ? '' : 'span-2' ?>"><span>Selling Price <b>*</b></span><div class="money-input"><span>₱</span><input id="variantSellingPrice" type="number" min="0.01" step="0.01" placeholder="0.00"></div><small>Starting POS price for this branch.</small></label>
@@ -527,22 +536,60 @@ function variantSpecValue(selectId,inputId){
   const select=$(selectId), input=$(inputId);
   return select?.value==='__other__' ? (input?.value||'').trim().toUpperCase() : (select?.value||'');
 }
+function refreshVariantColorOptions(){
+  const select=$('variantColorSelect'), input=$('variantColor'), hint=$('variantColorHint');
+  if(!select||!input)return;
+  const colors=[]; const seen=new Set();
+  for(const variant of (selectedItem?.variants||[])){
+    const color=String(variant.color||'').trim().toUpperCase();
+    if(!color||seen.has(color))continue;
+    seen.add(color); colors.push(color);
+  }
+  colors.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
+  select.innerHTML='<option value="">Select color</option>';
+  for(const color of colors){const option=document.createElement('option');option.value=color;option.textContent=color;select.appendChild(option);}
+  if(colors.length){
+    const add=document.createElement('option');add.value='__new__';add.textContent='+ Add New Color';select.appendChild(add);
+    select.hidden=false;select.disabled=false;select.required=true;
+    input.hidden=true;input.disabled=true;input.required=false;input.value='';
+    if(hint)hint.textContent='Existing colors are locked choices. Use Add New Color only for a real new color.';
+  }else{
+    select.hidden=true;select.disabled=true;select.required=false;
+    input.hidden=false;input.disabled=false;input.required=true;
+    if(hint)hint.textContent='The first color becomes a reusable locked choice for this model.';
+  }
+}
+function syncVariantColorChoice(focus=false){
+  const select=$('variantColorSelect'), input=$('variantColor'); if(!select||!input||select.disabled)return;
+  const isNew=select.value==='__new__';
+  input.hidden=!isNew;input.disabled=!isNew;input.required=isNew;
+  if(!isNew)input.value='';
+  if(isNew&&focus)setTimeout(()=>input.focus(),0);
+}
+function variantColorValue(){
+  const select=$('variantColorSelect'), input=$('variantColor');
+  if(select&&!select.disabled){return select.value==='__new__'?(input?.value||'').trim().toUpperCase():(select.value||'');}
+  return (input?.value||'').trim().toUpperCase();
+}
+
 function openVariant(){
   if(!selectedItem || selectedItem.kind!=='model')return;
   $('variantModalModel').textContent=selectedItem.label;
+  refreshVariantColorOptions();
   $('variantError').classList.add('hidden'); $('variantError').textContent='';
-  $('variantRam').value=''; $('variantStorage').value=''; $('variantRamCustom').value=''; $('variantStorageCustom').value=''; $('variantColor').value=''; $('variantConnectivity').value=''; $('variantSellingPrice').value=''; if($('variantCostPrice')) $('variantCostPrice').value='';
+  $('variantRam').value=''; $('variantStorage').value=''; $('variantRamCustom').value=''; $('variantStorageCustom').value=''; $('variantColor').value=''; if($('variantColorSelect')) $('variantColorSelect').value=''; $('variantConnectivity').value=''; $('variantSellingPrice').value=''; if($('variantCostPrice')) $('variantCostPrice').value='';
   syncVariantCustomSpec('variantRam','variantRamCustom','variantRamCustomHint');
   syncVariantCustomSpec('variantStorage','variantStorageCustom','variantStorageCustomHint');
   const apple=isApple(selectedItem), tablet=selectedItem.type==='tablet';
   $('variantRamField').classList.toggle('hidden',apple);
-  $('variantColorField').classList.toggle('hidden',!(apple && !tablet));
+  $('variantColorField').classList.remove('hidden');
   $('variantConnectivityField').classList.toggle('hidden',!tablet);
   variantModal.hidden=false; document.body.classList.add('modal-open');
 }
 $('openAddVariant').addEventListener('click',openVariant); $('openAddVariantEmpty').addEventListener('click',openVariant);
 $('variantRam').addEventListener('change',()=>syncVariantCustomSpec('variantRam','variantRamCustom','variantRamCustomHint',$('variantRam').value==='__other__'));
 $('variantStorage').addEventListener('change',()=>syncVariantCustomSpec('variantStorage','variantStorageCustom','variantStorageCustomHint',$('variantStorage').value==='__other__'));
+$('variantColorSelect').addEventListener('change',()=>syncVariantColorChoice($('variantColorSelect').value==='__new__'));
 $('variantRamCustom').addEventListener('input',()=>{$('variantRamCustom').value=$('variantRamCustom').value.toUpperCase();});
 $('variantStorageCustom').addEventListener('input',()=>{$('variantStorageCustom').value=$('variantStorageCustom').value.toUpperCase();});
 document.querySelectorAll('[data-variant-close]').forEach(b=>b.addEventListener('click',()=>{variantModal.hidden=true;document.body.classList.remove('modal-open');}));
@@ -553,7 +600,9 @@ $('saveVariantBtn').addEventListener('click',async()=>{
   const apple=isApple(selectedItem);
   if(!apple&&!ramValue){$('variantError').textContent='Enter the custom RAM capacity.';$('variantError').classList.remove('hidden');$('variantRamCustom').focus();return;}
   if(!storageValue){$('variantError').textContent='Enter the custom storage capacity.';$('variantError').classList.remove('hidden');$('variantStorageCustom').focus();return;}
-  const payload=new URLSearchParams({ajax_action:'create_variant',_csrf:csrf,model_id:String(selectedItem.id),storage:storageValue,ram:ramValue,color:$('variantColor').value,connectivity:$('variantConnectivity').value,selling_price:$('variantSellingPrice').value,cost_price:$('variantCostPrice')?.value||'',branch_id:String(activeBranchId()||'')});
+  const colorValue=variantColorValue();
+  if(!colorValue){$('variantError').textContent='Choose an existing color or enter the new color.';$('variantError').classList.remove('hidden');($('variantColor').hidden?$('variantColorSelect'):$('variantColor')).focus();return;}
+  const payload=new URLSearchParams({ajax_action:'create_variant',_csrf:csrf,model_id:String(selectedItem.id),storage:storageValue,ram:ramValue,color:colorValue,connectivity:$('variantConnectivity').value,selling_price:$('variantSellingPrice').value,cost_price:$('variantCostPrice')?.value||'',branch_id:String(activeBranchId()||'')});
   const btn=$('saveVariantBtn'); btn.disabled=true; btn.textContent='Saving…';
   try{
     const res=await fetch('actions/stock_in.php',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8','Accept':'application/json'},body:payload.toString()});

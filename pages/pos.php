@@ -87,7 +87,7 @@ function pos_payment_label(string $method): string {
     <section class="pos-catalog-column">
         <div class="card pos-search-card">
             <div class="pos-section-heading"><div><span class="eyebrow">ADD TO CART</span><h2>Find an item</h2><p>Scan an IMEI, Serial Number or barcode, or search by brand and model.</p></div><div class="pos-search-hint"><?= icon('barcode') ?><span>Scanner ready</span></div></div>
-            <label class="pos-search-input"><?= icon('search') ?><input type="search" autocomplete="off" data-pos-search placeholder="Scan or search product…"><kbd>Enter</kbd></label>
+            <label class="pos-search-input"><?= icon('search') ?><input type="search" autocomplete="off" data-pos-search aria-label="Search or scan an item" placeholder="Scan or search product…"><kbd>Enter</kbd></label>
             <button class="btn btn-outline shared-scan-launch" type="button" data-device-scan data-scan-target="[data-pos-search]" data-scan-mode="auto" data-scan-label="Scan Item">Scan with Camera</button>
             <div class="pos-search-status" data-pos-search-status>Start typing or scan an item to search this branch.</div>
             <div class="pos-results" data-pos-results></div>
@@ -95,7 +95,7 @@ function pos_payment_label(string $method): string {
 
         <div class="card pos-recent-card">
             <div class="pos-section-heading compact"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent Sales</h2></div><?php if(Auth::isOwner() || in_array($role, ['branch_manager','cashier'], true)): ?><a class="btn btn-ghost btn-sm" href="<?= e(app_url('sales-records', Auth::isOwner() && $activeBranch ? ['branch' => (int)$activeBranch['id']] : [])) ?>">View All</a><?php else: ?><span class="mini-chip"><?= count($recentSales) ?> shown</span><?php endif; ?></div>
-            <?php if(!$recentSales): ?><div class="pos-recent-empty">No completed sales yet for this branch.</div><?php else: ?><div class="pos-recent-list"><?php foreach($recentSales as $sale): ?><div class="pos-recent-row"><div class="pos-recent-icon"><?= icon('receipt') ?></div><div><strong><?= e($sale['sale_no']) ?></strong><span><?= e(date('M d, Y • h:i A', strtotime($sale['created_at']))) ?> • <?= e($sale['cashier_name']) ?></span></div><div><strong><?= peso($sale['total']) ?></strong><span><?= e(pos_payment_label($sale['payment_method'])) ?></span></div></div><?php endforeach; ?></div><?php endif; ?>
+            <?php if(!$recentSales): ?><div class="pos-recent-empty"><div class="empty-icon"><?= icon('receipt') ?></div><strong>No completed sales yet</strong><span>Completed sales will appear here for quick access to transaction history.</span></div><?php else: ?><div class="pos-recent-list"><?php foreach($recentSales as $sale): ?><div class="pos-recent-row"><div class="pos-recent-icon"><?= icon('receipt') ?></div><div><strong><?= e($sale['sale_no']) ?></strong><span><?= e(date('M d, Y • h:i A', strtotime($sale['created_at']))) ?> • <?= e($sale['cashier_name']) ?></span></div><div><strong><?= peso($sale['total']) ?></strong><span><?= e(pos_payment_label($sale['payment_method'])) ?></span></div></div><?php endforeach; ?></div><?php endif; ?>
         </div>
     </section>
 
@@ -138,7 +138,7 @@ function pos_payment_label(string $method): string {
 <div class="modal" id="posConfirmModal" hidden>
     <div class="modal-backdrop" data-pos-confirm-close></div>
     <div class="modal-dialog pos-confirm-dialog">
-        <div class="modal-header"><div><span class="eyebrow">CONFIRM SALE</span><h2>Complete this transaction?</h2><p class="modal-subtitle">Stock will be deducted immediately after confirmation.</p></div><button type="button" class="icon-button" data-pos-confirm-close>×</button></div>
+        <div class="modal-header"><div><span class="eyebrow">CONFIRM SALE</span><h2>Complete this transaction?</h2><p class="modal-subtitle">Stock will be deducted immediately after confirmation.</p></div><button type="button" class="icon-button" data-pos-confirm-close aria-label="Close sale confirmation">×</button></div>
         <div class="pos-confirm-body"><div class="pos-confirm-row"><span>Branch</span><strong><?= e($activeBranch['name']) ?></strong></div><div class="pos-confirm-row"><span>Items</span><strong data-confirm-items>0</strong></div><div class="pos-confirm-row"><span>Payment</span><strong data-confirm-payment>Cash</strong></div><div class="pos-confirm-row total"><span>Total</span><strong data-confirm-total><?= peso(0) ?></strong></div></div>
         <div class="pos-confirm-actions"><button class="btn btn-secondary" type="button" data-pos-confirm-close>Review Cart</button><button class="btn btn-primary" type="button" data-pos-confirm-submit><?= icon('receipt') ?> Confirm & Complete Sale</button></div>
     </div>

@@ -461,3 +461,18 @@ A UI patch is complete when:
 - Scanner/OCR has manual fallback.
 - No protected data is revealed to unauthorized roles.
 - The patch does not visually regress existing screens.
+
+
+## September 30, 2026 — Approved POS and Stock Monitoring refinement
+
+- Approved visual targets: the September 30 POS responsive preview and the Stock Monitoring preview with brand logos.
+- Preserve the current navigation, blue/white design tokens, role visibility, database values and transaction flow.
+- POS retains Find Item → Cart → Payment → Complete Sale → Recent Sales on tablet/phone, and the existing two-column laptop arrangement.
+- Increase POS body and control text, keep five payment choices, and make Clear, Remove and quantity actions comfortable to tap.
+- Stock Monitoring uses 14–15px model/number text, 13px table headings, 16px brand headings and 28px existing brand-logo assets. Labels wrap instead of hiding model identity.
+- Align Date, Brand, Search, Apply, Reset and Export in responsive rows; Owner also retains Branch.
+- Stock reports have dedicated responsive rules. Do not apply the generic table-to-card converter: brand heading rows and footer totals need their own treatment.
+- On phones (up to 640px), show existing report values as labelled model records, including each branch column in Owner view. Preserve brand subtotals and the grand total.
+- Retain collapse/expand by brand, existing export parameters and fallback initials for brands without supplied logos.
+- Illustrative numbers and any nonfunctional decoration in mockups must not be copied into production.
+- Verification was not run for this patch at the user's explicit request; user will perform deployment testing.

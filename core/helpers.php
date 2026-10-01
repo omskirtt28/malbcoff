@@ -314,3 +314,502 @@ function safe_exception_message(Throwable $e, string $fallback): string
     if (class_exists('Security')) Security::reportException($e, 'user_facing_exception');
     return $fallback;
 }
+
+/**
+ * Normalize a user-entered color label for consistent variant matching.
+ * Keeps human-readable spacing while standardizing case.
+ */
+function variant_color_normalize(mixed $value, int $max = 80): string
+{
+    $value = trim((string)$value);
+    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    $value = function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
+    return mb_substr($value, 0, $max);
+}
+
+/**
+ * Compact comparison key used only for typo detection, never for display.
+ */
+function variant_color_key(mixed $value): string
+{
+    $value = variant_color_normalize($value);
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
+    return $value;
+}
+
+/**
+ * Return a canonical existing color for a model when the new entry is an
+ * unambiguous one-character typo. If multiple near matches exist, block the
+ * save and ask the user to choose an exact existing value.
+ */
+function variant_color_canonicalize(int $modelId, mixed $value, ?int $excludeProductId = null): array
+{
+    $input = variant_color_normalize($value);
+    if ($input === '' || $modelId <= 0) {
+        return ['value' => $input, 'corrected_from' => null, 'suggestions' => []];
+    }
+
+    $sql = "SELECT id,color,created_at FROM products
+            WHERE model_id=? AND product_type IN ('phone','tablet')
+              AND color IS NOT NULL AND TRIM(color)<>''";
+    $params = [$modelId];
+    if ($excludeProductId) {
+        $sql .= ' AND id<>?';
+        $params[] = $excludeProductId;
+    }
+    try {
+        if (Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch()) {
+            $sql .= ' AND catalog_deleted_at IS NULL';
+        }
+    } catch (Throwable $e) {
+    }
+    $sql .= ' ORDER BY created_at ASC,id ASC';
+
+    $rows = Database::query($sql, $params)->fetchAll();
+    $byLabel = [];
+    foreach ($rows as $row) {
+        $label = variant_color_normalize($row['color'] ?? '');
+        if ($label === '') continue;
+        if (!isset($byLabel[$label])) $byLabel[$label] = $row;
+    }
+
+    if (isset($byLabel[$input])) {
+        return ['value' => $input, 'corrected_from' => null, 'suggestions' => []];
+    }
+
+    $inputKey = variant_color_key($input);
+    if (strlen($inputKey) < 4) {
+        return ['value' => $input, 'corrected_from' => null, 'suggestions' => []];
+    }
+
+    $near = [];
+    foreach ($byLabel as $label => $row) {
+        $candidateKey = variant_color_key($label);
+        if (strlen($candidateKey) < 4) continue;
+        $distance = levenshtein($inputKey, $candidateKey);
+        if ($distance <= 1) {
+            $near[$label] = ['label' => $label, 'distance' => $distance, 'id' => (int)$row['id']];
+        }
+    }
+
+    if (count($near) === 1) {
+        $candidate = reset($near);
+        return [
+            'value' => $candidate['label'],
+            'corrected_from' => $input,
+            'suggestions' => [$candidate['label']],
+        ];
+    }
+
+    if (count($near) > 1) {
+        $labels = array_keys($near);
+        sort($labels, SORT_NATURAL | SORT_FLAG_CASE);
+        return ['value' => $input, 'corrected_from' => null, 'suggestions' => $labels];
+    }
+
+    return ['value' => $input, 'corrected_from' => null, 'suggestions' => []];
+}
+
+/**
+ * Determines whether two existing variant colors are close enough to be shown
+ * as a possible spelling duplicate. The actual merge action re-validates all
+ * other specs server-side before touching data.
+ */
+function variant_colors_are_probable_typo(mixed $a, mixed $b): bool
+{
+    $ka = variant_color_key($a);
+    $kb = variant_color_key($b);
+    if ($ka === '' || $kb === '' || $ka === $kb || strlen($ka) < 4 || strlen($kb) < 4) return false;
+    return levenshtein($ka, $kb) <= 1;
+}
+
+/**
+ * Production-safe semantic key for device variant values.
+ * This mirrors what users actually see in Inventory/Stock Monitoring so
+ * historical rows that render identically can be consolidated even when an
+ * older release stored the single capacity in a different column.
+ */
+function variant_semantic_value_key(mixed $value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    $value = preg_replace('/[\x{00A0}\s]+/u', ' ', $value) ?? $value;
+    $value = function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
+    return trim($value);
+}
+
+/**
+ * Non-color device specs exactly in the same order shown to users.
+ * Empty columns are intentionally skipped. Example: an old row with
+ * RAM=NULL, STORAGE=128GB and another old row with RAM=128GB, STORAGE=NULL
+ * both resolve to the same visible signature: 128GB.
+ */
+function variant_visible_non_color_signature(array $row): string
+{
+    $parts = [];
+    foreach (['ram', 'storage', 'connectivity'] as $field) {
+        $value = variant_semantic_value_key($row[$field] ?? '');
+        if ($value !== '') $parts[] = $value;
+    }
+    return implode('|', $parts);
+}
+
+function variant_visible_signature(array $row): string
+{
+    $parts = [];
+    $specs = variant_visible_non_color_signature($row);
+    if ($specs !== '') $parts[] = $specs;
+    $color = variant_color_key($row['color'] ?? '');
+    if ($color !== '') $parts[] = $color;
+    return implode('|', $parts);
+}
+
+/**
+ * Accept only exact color duplicates or obvious truncated completions.
+ * Covers the production cases requested by the client:
+ * MIDNIGH -> MIDNIGHT, SILV/SILVE -> SILVER.
+ */
+function variant_colors_can_auto_merge(mixed $a, mixed $b): bool
+{
+    $ka = variant_color_key($a);
+    $kb = variant_color_key($b);
+    if ($ka === '' || $kb === '') return false;
+    if ($ka === $kb) return true;
+
+    $short = strlen($ka) <= strlen($kb) ? $ka : $kb;
+    $long = strlen($ka) <= strlen($kb) ? $kb : $ka;
+    $difference = strlen($long) - strlen($short);
+
+    if (strlen($short) < 4 || $difference < 1 || $difference > 2) return false;
+    return str_starts_with($long, $short);
+}
+
+function variant_semantic_specs_match(array $a, array $b): bool
+{
+    foreach (['product_type', 'brand_id', 'model_id'] as $field) {
+        if ((string)($a[$field] ?? '') !== (string)($b[$field] ?? '')) return false;
+    }
+    return variant_visible_non_color_signature($a) === variant_visible_non_color_signature($b);
+}
+
+/**
+ * Merge one legacy duplicate variant into the canonical product row.
+ * The source product is archived rather than deleted so any future/unknown
+ * historical foreign keys remain valid. Critical stock references are moved
+ * transactionally, which makes the visible quantity become the true combined
+ * quantity (for example 1 + 2 = 3).
+ */
+function variant_merge_live_duplicate(int $sourceId, int $targetId): void
+{
+    if ($sourceId <= 0 || $targetId <= 0 || $sourceId === $targetId) {
+        throw new RuntimeException('Invalid duplicate variant merge request.');
+    }
+
+    $pdo = Database::connection();
+    $started = !$pdo->inTransaction();
+    if ($started) $pdo->beginTransaction();
+
+    try {
+        $source = Database::query(
+            "SELECT id,product_type,brand_id,model_id,ram,storage,connectivity,color,cost_price,selling_price,is_active,created_at
+             FROM products WHERE id=? LIMIT 1 FOR UPDATE",
+            [$sourceId]
+        )->fetch();
+        $target = Database::query(
+            "SELECT id,product_type,brand_id,model_id,ram,storage,connectivity,color,cost_price,selling_price,is_active,created_at
+             FROM products WHERE id=? LIMIT 1 FOR UPDATE",
+            [$targetId]
+        )->fetch();
+
+        if (!$source || !$target || !(int)$source['is_active'] || !(int)$target['is_active']) {
+            throw new RuntimeException('The duplicate variant is no longer active.');
+        }
+        if (!variant_semantic_specs_match($source, $target)) {
+            throw new RuntimeException('The variants do not represent the same visible model/specification.');
+        }
+        if (!variant_colors_can_auto_merge($source['color'] ?? '', $target['color'] ?? '')) {
+            throw new RuntimeException('The variants do not represent the same color.');
+        }
+
+        // Quantity-based balance rows (normally accessories, but handled here
+        // defensively for historical device data as well).
+        $balances = Database::query(
+            'SELECT branch_id,quantity FROM inventory_balances WHERE product_id=? FOR UPDATE',
+            [$sourceId]
+        )->fetchAll();
+        foreach ($balances as $balance) {
+            Database::query(
+                'INSERT INTO inventory_balances (product_id,branch_id,quantity) VALUES (?,?,?) '
+                . 'ON DUPLICATE KEY UPDATE quantity=inventory_balances.quantity+VALUES(quantity)',
+                [$targetId, (int)$balance['branch_id'], (int)$balance['quantity']]
+            );
+        }
+        Database::query('DELETE FROM inventory_balances WHERE product_id=?', [$sourceId]);
+
+        // Branch price rows have a unique product+branch key. Canonical target
+        // pricing wins when both variants already have a price for the branch.
+        if (branch_pricing_ready()) {
+            $prices = Database::query(
+                'SELECT branch_id,selling_price,updated_by FROM branch_product_prices WHERE product_id=? FOR UPDATE',
+                [$sourceId]
+            )->fetchAll();
+            foreach ($prices as $price) {
+                $exists = Database::query(
+                    'SELECT 1 FROM branch_product_prices WHERE product_id=? AND branch_id=? LIMIT 1',
+                    [$targetId, (int)$price['branch_id']]
+                )->fetchColumn();
+                if (!$exists) {
+                    Database::query(
+                        'INSERT INTO branch_product_prices (product_id,branch_id,selling_price,updated_by) VALUES (?,?,?,?)',
+                        [
+                            $targetId,
+                            (int)$price['branch_id'],
+                            (float)$price['selling_price'],
+                            $price['updated_by'] !== null ? (int)$price['updated_by'] : null,
+                        ]
+                    );
+                }
+            }
+            Database::query('DELETE FROM branch_product_prices WHERE product_id=?', [$sourceId]);
+        }
+
+        // These two tables are the source of truth for the screens shown by the
+        // client. They are mandatory: any failure rolls the whole merge back.
+        Database::query('UPDATE inventory_units SET product_id=? WHERE product_id=?', [$targetId, $sourceId]);
+        Database::query('UPDATE stock_movements SET product_id=? WHERE product_id=?', [$targetId, $sourceId]);
+
+        // Optional historical modules. They should follow the canonical product
+        // when available, but older installations may not have these tables yet.
+        foreach (['sale_items', 'inventory_transfers'] as $table) {
+            try {
+                Database::query("UPDATE `{$table}` SET product_id=? WHERE product_id=?", [$targetId, $sourceId]);
+            } catch (PDOException $e) {
+                // Optional table missing on an older live database.
+            }
+        }
+
+        // Preserve useful master pricing when the canonical target is blank.
+        Database::query(
+            'UPDATE products SET '
+            . 'cost_price=CASE WHEN cost_price<=0 THEN ? ELSE cost_price END, '
+            . 'selling_price=CASE WHEN selling_price<=0 THEN ? ELSE selling_price END '
+            . 'WHERE id=?',
+            [(float)$source['cost_price'], (float)$source['selling_price'], $targetId]
+        );
+
+        // Verify the critical rows really moved before hiding the source record.
+        $leftUnits = (int)Database::query(
+            'SELECT COUNT(*) FROM inventory_units WHERE product_id=?',
+            [$sourceId]
+        )->fetchColumn();
+        $leftMovements = (int)Database::query(
+            'SELECT COUNT(*) FROM stock_movements WHERE product_id=?',
+            [$sourceId]
+        )->fetchColumn();
+        if ($leftUnits > 0 || $leftMovements > 0) {
+            throw new RuntimeException('Critical stock references are still linked to the duplicate variant.');
+        }
+
+        $catalogDeleteReady = (bool)Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
+        if ($catalogDeleteReady) {
+            Database::query(
+                'UPDATE products SET is_active=0,catalog_deleted_at=COALESCE(catalog_deleted_at,NOW()) WHERE id=?',
+                [$sourceId]
+            );
+        } else {
+            Database::query('UPDATE products SET is_active=0 WHERE id=?', [$sourceId]);
+        }
+
+        if ($started) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($started && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Repair legacy production duplicates on demand.
+ * No migration flag is used: the function is idempotent and can safely check
+ * again after a deployment because already-merged sources are inactive.
+ */
+function variant_repair_live_device_duplicates(): array
+{
+    static $result = null;
+    if (is_array($result)) return $result;
+    $result = ['merged' => 0, 'errors' => 0];
+
+    try {
+        $catalogDeleteReady = (bool)Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
+        $deletedFilter = $catalogDeleteReady ? ' AND catalog_deleted_at IS NULL' : '';
+        $rows = Database::query(
+            "SELECT id,product_type,brand_id,model_id,ram,storage,connectivity,color,cost_price,selling_price,is_active,created_at
+             FROM products
+             WHERE is_active=1 AND product_type IN ('phone','tablet'){$deletedFilter}
+             ORDER BY brand_id,model_id,created_at ASC,id ASC"
+        )->fetchAll();
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $key = implode('|', [
+                (string)($row['product_type'] ?? ''),
+                (int)($row['brand_id'] ?? 0),
+                (int)($row['model_id'] ?? 0),
+                variant_visible_non_color_signature($row),
+            ]);
+            $groups[$key][] = $row;
+        }
+
+        foreach ($groups as $groupRows) {
+            if (count($groupRows) < 2) continue;
+
+            // Correct/longest color wins; if spelling length is equal, the oldest
+            // row wins. This keeps MIDNIGHT over MIDNIGH and SILVER over SILVE/SILV.
+            usort($groupRows, static function (array $a, array $b): int {
+                $len = strlen(variant_color_key($b['color'] ?? '')) <=> strlen(variant_color_key($a['color'] ?? ''));
+                if ($len !== 0) return $len;
+                $created = strcmp((string)($a['created_at'] ?? ''), (string)($b['created_at'] ?? ''));
+                if ($created !== 0) return $created;
+                return ((int)$a['id']) <=> ((int)$b['id']);
+            });
+
+            $removed = [];
+            foreach ($groupRows as $target) {
+                $targetId = (int)$target['id'];
+                if ($targetId <= 0 || isset($removed[$targetId])) continue;
+
+                foreach ($groupRows as $source) {
+                    $sourceId = (int)$source['id'];
+                    if ($sourceId <= 0 || $sourceId === $targetId || isset($removed[$sourceId])) continue;
+                    if (!variant_semantic_specs_match($source, $target)) continue;
+                    if (!variant_colors_can_auto_merge($source['color'] ?? '', $target['color'] ?? '')) continue;
+
+                    try {
+                        variant_merge_live_duplicate($sourceId, $targetId);
+                        $removed[$sourceId] = true;
+                        $result['merged']++;
+                        if (class_exists('Security')) {
+                            Security::audit('catalog.variant_auto_consolidated', 'product', $targetId, [
+                                'source_variant_id' => $sourceId,
+                                'source_color' => (string)($source['color'] ?? ''),
+                                'target_color' => (string)($target['color'] ?? ''),
+                                'visible_specs' => variant_visible_non_color_signature($target),
+                            ]);
+                        }
+                    } catch (Throwable $mergeError) {
+                        $result['errors']++;
+                        if (class_exists('Security')) {
+                            Security::reportException($mergeError, 'variant_auto_consolidation');
+                        }
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $result['errors']++;
+        if (class_exists('Security')) Security::reportException($e, 'variant_auto_consolidation_scan');
+    }
+
+    return $result;
+}
+
+/**
+ * Find an existing device variant by what the user actually sees, not only by
+ * the historical storage column layout. Used by Receive Stock/Add Variant so
+ * future entries reuse the canonical product id instead of creating another row.
+ */
+function variant_find_semantic_existing(
+    string $type,
+    int $brandId,
+    int $modelId,
+    mixed $ram,
+    mixed $storage,
+    mixed $connectivity,
+    mixed $color,
+    ?int $excludeProductId = null
+): ?array {
+    $sql = "SELECT id,product_type,brand_id,model_id,ram,storage,connectivity,color,is_active,cost_price,selling_price,created_at
+            FROM products
+            WHERE product_type=? AND brand_id=? AND model_id=?";
+    $params = [$type, $brandId, $modelId];
+    if ($excludeProductId) {
+        $sql .= ' AND id<>?';
+        $params[] = $excludeProductId;
+    }
+    try {
+        if (Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch()) {
+            $sql .= ' AND catalog_deleted_at IS NULL';
+        }
+    } catch (Throwable $e) {
+    }
+    $sql .= ' ORDER BY is_active DESC,created_at ASC,id ASC';
+
+    $needle = [
+        'product_type' => $type,
+        'brand_id' => $brandId,
+        'model_id' => $modelId,
+        'ram' => $ram,
+        'storage' => $storage,
+        'connectivity' => $connectivity,
+        'color' => $color,
+    ];
+    $needleSpecs = variant_visible_non_color_signature($needle);
+    $needleColor = variant_color_key($color);
+
+    foreach (Database::query($sql, $params)->fetchAll() as $row) {
+        if (variant_visible_non_color_signature($row) !== $needleSpecs) continue;
+        $rowColor = variant_color_key($row['color'] ?? '');
+        if ($rowColor === $needleColor || variant_colors_can_auto_merge($row['color'] ?? '', $color)) {
+            return $row;
+        }
+    }
+    return null;
+}
+
+/*
+ * Backward-compatibility bridge for the earlier controlled-variant UI patch.
+ * Some live pages from that patch still call these helper names. Keeping these
+ * aliases prevents a fatal "undefined function" while routing all merge work
+ * through the current production-safe semantic merge implementation above.
+ */
+function variant_color_is_truncated_typo(mixed $shortValue, mixed $longValue): bool
+{
+    $short = variant_color_key($shortValue);
+    $long = variant_color_key($longValue);
+    if ($short === '' || $long === '' || strlen($short) < 4 || strlen($long) <= strlen($short)) {
+        return false;
+    }
+
+    $gap = strlen($long) - strlen($short);
+    return $gap <= 2 && str_starts_with($long, $short);
+}
+
+function variant_color_is_likely_completion(mixed $shortValue, mixed $longValue): bool
+{
+    if (!variant_color_is_truncated_typo($shortValue, $longValue)) {
+        return false;
+    }
+
+    $short = variant_color_key($shortValue);
+    $long = variant_color_key($longValue);
+    $suffix = substr($long, strlen($short));
+    $last = substr($short, -1);
+
+    // Reject repeated trailing-key mistakes such as SILVER -> SILVERR.
+    if ($suffix !== '' && trim($suffix, $last) === '') {
+        return false;
+    }
+
+    return true;
+}
+
+function variant_merge_product_records(int $sourceId, int $targetId): void
+{
+    variant_merge_live_duplicate($sourceId, $targetId);
+}
+
+function variant_cleanup_truncated_color_duplicates_once(): void
+{
+    // Current repair routine is idempotent, transaction-safe per merge, and
+    // catches/report merge failures instead of breaking page rendering.
+    variant_repair_live_device_duplicates();
+}

@@ -39,9 +39,7 @@ $resetUrl = app_url('stock-monitoring');
             ? 'View and compare daily stock levels across all branches.'
             : 'Monitor your branch’s daily opening, movements, and ending stock per model.' ?></p>
     </div>
-    <a class="btn btn-outline stock-monitoring-export" href="<?= e($exportUrl) ?>">
-        <?= icon('stock') ?><span>Export to Excel</span>
-    </a>
+    <span class="branch-chip stock-monitoring-scope"><?= icon('branch') ?><span><?= e($isOwner ? (string)($report['selected_branch_name'] ?? 'All Branches') : (string)(Auth::user()['branch_name'] ?? 'Assigned Branch')) ?></span></span>
 </section>
 
 <?php if ($stockMonitorError !== ''): ?>
@@ -97,9 +95,16 @@ $resetUrl = app_url('stock-monitoring');
         </select>
     </label>
 
-    <label class="search-box stock-monitoring-search">
-        <?= icon('search') ?>
-        <input type="search" name="q" value="<?= e($search) ?>" placeholder="Search model (e.g. Redmi, X9D, Poco...)" autocomplete="off">
+    <a class="btn btn-outline stock-monitoring-export" href="<?= e($exportUrl) ?>">
+        <?= icon('stock') ?><span>Export to Excel</span>
+    </a>
+
+    <label class="stock-monitoring-search-field">
+        <span>Search model</span>
+        <div class="search-box stock-monitoring-search">
+            <?= icon('search') ?>
+            <input type="search" name="q" value="<?= e($search) ?>" placeholder="Search model (e.g. Redmi, X9D, Poco...)" autocomplete="off">
+        </div>
     </label>
 
     <button class="btn btn-primary stock-monitoring-apply" type="submit">Apply</button>
@@ -146,24 +151,24 @@ $resetUrl = app_url('stock-monitoring');
                     $rowOverall = 0;
                 ?>
                 <tr class="stock-monitoring-model-row" data-stock-brand-item="<?= e($groupKey) ?>">
-                    <td class="stock-monitoring-model-cell"><?= e(StockMonitoringReport::displayModel($row)) ?></td>
+                    <td class="stock-monitoring-model-cell" data-label="Model"><?= e(StockMonitoringReport::displayModel($row)) ?></td>
                     <?php foreach ($displayBranches as $branch):
                         $bid = (int)$branch['id'];
                         $qty = (int)($branchEnding[$pid][$bid] ?? 0);
                         $groupBranchTotals[$bid] += $qty;
                         $rowOverall += $qty;
                     ?>
-                        <td class="num"><?= number_format($qty) ?></td>
+                        <td class="num" data-label="<?= e((string)$branch['name']) ?>"><?= number_format($qty) ?></td>
                     <?php endforeach; ?>
-                    <td class="num stock-monitoring-overall-cell"><?= number_format($rowOverall) ?></td>
+                    <td class="num stock-monitoring-overall-cell" data-label="Overall Total"><?= number_format($rowOverall) ?></td>
                 </tr>
                 <?php $groupOverall += $rowOverall; endforeach; ?>
                 <tr class="stock-monitoring-total-row">
                     <td><?= e(strtoupper((string)$groupName)) ?> TOTAL</td>
                     <?php foreach ($displayBranches as $branch): ?>
-                        <td class="num"><?= number_format((int)($groupBranchTotals[(int)$branch['id']] ?? 0)) ?></td>
+                        <td class="num" data-label="<?= e((string)$branch['name']) ?>"><?= number_format((int)($groupBranchTotals[(int)$branch['id']] ?? 0)) ?></td>
                     <?php endforeach; ?>
-                    <td class="num"><?= number_format($groupOverall) ?></td>
+                    <td class="num stock-monitoring-overall-cell" data-label="Overall Total"><?= number_format($groupOverall) ?></td>
                 </tr>
             </tbody>
             <?php endforeach; ?>
@@ -171,9 +176,9 @@ $resetUrl = app_url('stock-monitoring');
                 <tr>
                     <th>GRAND TOTAL (All Brands)</th>
                     <?php foreach ($displayBranches as $branch): ?>
-                        <th class="num"><?= number_format((int)($branchTotals[(int)$branch['id']] ?? 0)) ?></th>
+                        <th class="num" data-label="<?= e((string)$branch['name']) ?>"><?= number_format((int)($branchTotals[(int)$branch['id']] ?? 0)) ?></th>
                     <?php endforeach; ?>
-                    <th class="num"><?= number_format((int)($totals['ending'] ?? 0)) ?></th>
+                    <th class="num" data-label="Overall Total"><?= number_format((int)($totals['ending'] ?? 0)) ?></th>
                 </tr>
             </tfoot>
         </table>
@@ -213,32 +218,32 @@ $resetUrl = app_url('stock-monitoring');
                     $groupTotal['ending'] += (int)$row['ending_stock'];
                 ?>
                 <tr class="stock-monitoring-model-row" data-stock-brand-item="<?= e($groupKey) ?>">
-                    <td class="stock-monitoring-model-cell"><?= e(StockMonitoringReport::displayModel($row)) ?></td>
-                    <td class="num"><?= number_format((int)$row['opening_stock']) ?></td>
-                    <td class="num"><?= number_format((int)$row['in_qty']) ?></td>
-                    <td class="num"><?= number_format((int)$row['out_qty']) ?></td>
-                    <td class="num"><?= number_format((int)$row['sold_qty']) ?></td>
-                    <td class="num stock-monitoring-overall-cell"><?= number_format((int)$row['ending_stock']) ?></td>
+                    <td class="stock-monitoring-model-cell" data-label="Model"><?= e(StockMonitoringReport::displayModel($row)) ?></td>
+                    <td class="num" data-label="Opening Stock"><?= number_format((int)$row['opening_stock']) ?></td>
+                    <td class="num" data-label="IN"><?= number_format((int)$row['in_qty']) ?></td>
+                    <td class="num" data-label="OUT"><?= number_format((int)$row['out_qty']) ?></td>
+                    <td class="num" data-label="SOLD"><?= number_format((int)$row['sold_qty']) ?></td>
+                    <td class="num stock-monitoring-overall-cell" data-label="Ending Stock"><?= number_format((int)$row['ending_stock']) ?></td>
                 </tr>
                 <?php endforeach; ?>
                 <tr class="stock-monitoring-total-row">
                     <td><?= e(strtoupper((string)$groupName)) ?> TOTAL</td>
-                    <td class="num"><?= number_format($groupTotal['opening']) ?></td>
-                    <td class="num"><?= number_format($groupTotal['in']) ?></td>
-                    <td class="num"><?= number_format($groupTotal['out']) ?></td>
-                    <td class="num"><?= number_format($groupTotal['sold']) ?></td>
-                    <td class="num"><?= number_format($groupTotal['ending']) ?></td>
+                    <td class="num" data-label="Opening Stock"><?= number_format($groupTotal['opening']) ?></td>
+                    <td class="num" data-label="IN"><?= number_format($groupTotal['in']) ?></td>
+                    <td class="num" data-label="OUT"><?= number_format($groupTotal['out']) ?></td>
+                    <td class="num" data-label="SOLD"><?= number_format($groupTotal['sold']) ?></td>
+                    <td class="num" data-label="Ending Stock"><?= number_format($groupTotal['ending']) ?></td>
                 </tr>
             </tbody>
             <?php endforeach; ?>
             <tfoot>
                 <tr>
                     <th>GRAND TOTAL (All Brands)</th>
-                    <th class="num"><?= number_format((int)($totals['opening'] ?? 0)) ?></th>
-                    <th class="num"><?= number_format((int)($totals['in'] ?? 0)) ?></th>
-                    <th class="num"><?= number_format((int)($totals['out'] ?? 0)) ?></th>
-                    <th class="num"><?= number_format((int)($totals['sold'] ?? 0)) ?></th>
-                    <th class="num"><?= number_format((int)($totals['ending'] ?? 0)) ?></th>
+                    <th class="num" data-label="Opening Stock"><?= number_format((int)($totals['opening'] ?? 0)) ?></th>
+                    <th class="num" data-label="IN"><?= number_format((int)($totals['in'] ?? 0)) ?></th>
+                    <th class="num" data-label="OUT"><?= number_format((int)($totals['out'] ?? 0)) ?></th>
+                    <th class="num" data-label="SOLD"><?= number_format((int)($totals['sold'] ?? 0)) ?></th>
+                    <th class="num" data-label="Ending Stock"><?= number_format((int)($totals['ending'] ?? 0)) ?></th>
                 </tr>
             </tfoot>
         </table>

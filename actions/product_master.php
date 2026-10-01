@@ -11,6 +11,7 @@ if (!Csrf::verify($_POST['_csrf'] ?? null)) {
 $role = Auth::user()['role'] ?? '';
 $canAddEdit = in_array($role, ['branch_manager', 'inventory'], true);
 $isOwner = Auth::isOwner();
+$canMergeVariant = $isOwner || (method_exists('Auth','actorIsSystemAdmin') && Auth::actorIsSystemAdmin());
 $entity = (string)($_POST['entity'] ?? '');
 $action = (string)($_POST['action'] ?? '');
 $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT) ?: null;
@@ -21,7 +22,7 @@ $returnUrl = $returnArchive
     ? app_url('archive')
     : app_url('products', array_filter(['view' => $returnView, 'model' => $returnModel ?: null], static fn($v) => $v !== null && $v !== ''), $returnModel ? 'variants' : '');
 
-if (!in_array($entity, ['brand','model','category','configuration'], true) || !in_array($action, ['add','edit','archive','restore','delete'], true)) {
+if (!in_array($entity, ['brand','model','category','configuration'], true) || !in_array($action, ['add','edit','archive','restore','delete','merge_typo'], true)) {
     flash('error', 'Invalid Product Master request.');
     redirect(app_url('products'));
 }
@@ -31,6 +32,10 @@ if (in_array($action, ['add','edit'], true) && !$canAddEdit) {
 }
 if (in_array($action, ['archive','restore','delete'], true) && !$isOwner) {
     flash('error', 'Only the Owner can archive, restore or permanently delete Product Master records.');
+    redirect(app_url('products'));
+}
+if ($action === 'merge_typo' && !$canMergeVariant) {
+    flash('error', 'Only the Owner or System Admin can merge spelling-duplicate variants.');
     redirect(app_url('products'));
 }
 if ($entity === 'configuration' && $action === 'edit' && !in_array($role, ['branch_manager'], true)) {
@@ -210,7 +215,11 @@ function handle_configuration(string $action, ?int $id): void {
             $isApple = strcasecmp(trim((string)$config['brand_name']), 'APPLE') === 0;
             $storage = normalize_variant_capacity($_POST['storage'] ?? '');
             $ram = $isApple ? null : normalize_variant_capacity($_POST['ram'] ?? '');
-            $color = clean_variant_value($_POST['color'] ?? '', 80, true);
+            $colorResult = variant_color_canonicalize((int)$config['model_id'], $_POST['color'] ?? '', (int)$id);
+            if (count($colorResult['suggestions'] ?? []) > 1) {
+                throw new RuntimeException('Color is too similar to existing colors: '.implode(', ', $colorResult['suggestions']).'. Please choose the exact existing color.');
+            }
+            $color = (string)($colorResult['value'] ?? '');
             $connectivity = ($config['product_type'] === 'tablet') ? clean_variant_value($_POST['connectivity'] ?? '', 40, false) : null;
 
             if ($storage === '') throw new RuntimeException('Storage is required.');
@@ -220,19 +229,16 @@ function handle_configuration(string $action, ?int $id): void {
                 throw new RuntimeException('Please select tablet connectivity.');
             }
 
-            $deletedFilter = Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch()
-                ? ' AND catalog_deleted_at IS NULL'
-                : '';
-            $duplicate = Database::query(
-                "SELECT id,is_active FROM products
-                 WHERE id<>? AND product_type=? AND brand_id=? AND model_id=?
-                   AND COALESCE(ram,'')=COALESCE(?,'')
-                   AND storage=?
-                   AND COALESCE(color,'')=COALESCE(?,'')
-                   AND COALESCE(connectivity,'')=COALESCE(?,''){$deletedFilter}
-                 LIMIT 1",
-                [$id,$config['product_type'],$config['brand_id'],$config['model_id'],$ram,$storage,$color,$connectivity]
-            )->fetch();
+            $duplicate = variant_find_semantic_existing(
+                (string)$config['product_type'],
+                (int)$config['brand_id'],
+                (int)$config['model_id'],
+                $ram,
+                $storage,
+                $connectivity,
+                $color,
+                (int)$id
+            );
             if ($duplicate) {
                 throw new RuntimeException((int)$duplicate['is_active']
                     ? 'Another variant already uses the same RAM, storage, color and connectivity.'
@@ -268,6 +274,36 @@ function handle_configuration(string $action, ?int $id): void {
         } else {
             throw new RuntimeException('Your account cannot update variants.');
         }
+    } elseif ($action === 'merge_typo') {
+        $targetId = filter_var($_POST['target_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
+        if (!$targetId || $targetId === (int)$id) throw new RuntimeException('Choose a valid target variant.');
+        $target = Database::query(
+            "SELECT p.id,p.brand_id,p.model_id,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,p.is_active,
+                    pm.name model_name,b.name brand_name
+             FROM products p
+             JOIN product_models pm ON pm.id=p.model_id
+             JOIN brands b ON b.id=p.brand_id
+             WHERE p.id=? AND p.product_type IN ('phone','tablet') LIMIT 1",
+            [$targetId]
+        )->fetch();
+        if (!$target || !(int)$target['is_active']) throw new RuntimeException('The target variant is not active.');
+        if ((int)$target['brand_id'] !== (int)$config['brand_id'] || (int)$target['model_id'] !== (int)$config['model_id'] || (string)$target['product_type'] !== (string)$config['product_type']) {
+            throw new RuntimeException('Only variants of the same model can be merged.');
+        }
+        foreach (['ram','storage','connectivity'] as $field) {
+            if (trim((string)($target[$field] ?? '')) !== trim((string)($config[$field] ?? ''))) {
+                throw new RuntimeException('Only variants with the same RAM, storage and connectivity can be merged.');
+            }
+        }
+        if (!variant_colors_are_probable_typo($config['color'] ?? '', $target['color'] ?? '')) {
+            throw new RuntimeException('These colors are not close enough to be treated as a spelling duplicate.');
+        }
+        merge_variant_typo_records((int)$id, $targetId);
+        Security::audit('catalog.variant_typo_merged', 'product', $targetId, [
+            'source_variant_id' => (int)$id,
+            'source_color' => (string)($config['color'] ?? ''),
+            'target_color' => (string)($target['color'] ?? ''),
+        ]);
     } elseif ($action === 'archive') {
         $available = (int)Database::query("SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status='available'", [$id])->fetchColumn();
         if ($available > 0) throw new RuntimeException('This variant still has available stock. Sell, transfer or adjust those units before archiving it.');
@@ -305,6 +341,11 @@ function handle_configuration(string $action, ?int $id): void {
         throw new RuntimeException('Invalid variant action.');
     }
 }
+
+function merge_variant_typo_records(int $sourceId, int $targetId): void {
+    variant_merge_live_duplicate($sourceId, $targetId);
+}
+
 
 function clean_variant_value(mixed $value, int $max, bool $uppercase=true): string {
     $value = trim((string)$value);
@@ -357,6 +398,7 @@ function success_message(string $entity, string $action): string {
         'archive' => $label.' archived. Existing inventory/history was preserved.',
         'restore' => $label.' restored.',
         'delete' => $label.' deleted from Product Setup. Historical transactions were preserved when required.',
+        'merge_typo' => 'Spelling duplicate merged into the correct variant. Inventory and history were preserved.',
         default => 'Product Master updated.',
     };
 }

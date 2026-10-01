@@ -13,6 +13,8 @@
   const errorBox = modal.querySelector('[data-quick-error]');
   const progress = modal.querySelector('[data-scan-progress]');
   const connectivity = modal.querySelector('[data-quick-connectivity]');
+  const controlledColorSelect = form.querySelector('[data-controlled-color-select]');
+  const controlledColorInput = form.querySelector('[data-controlled-color-input]');
   const modelId = Number(modal.dataset.modelId || 0);
   const modelLabel = modal.dataset.modelLabel || 'Selected Model';
   const productType = modal.dataset.productType || 'phone';
@@ -48,6 +50,23 @@
     const selected = String(original.get(name) || '').trim();
     if (selected !== '__other__') return selected;
     return String(original.get(`${name}_custom`) || '').trim().toUpperCase();
+  }
+
+  function syncControlledColor(focus = false) {
+    if (!controlledColorSelect || !controlledColorInput) return;
+    const isNew = controlledColorSelect.value === '__new__';
+    controlledColorInput.hidden = !isNew;
+    controlledColorInput.disabled = !isNew;
+    controlledColorInput.required = isNew;
+    if (!isNew) controlledColorInput.value = '';
+    if (isNew && focus) setTimeout(() => controlledColorInput.focus({preventScroll:false}), 0);
+  }
+
+  function resolvedColorValue(original) {
+    if (!controlledColorSelect) return String(original.get('color') || '').trim().toUpperCase();
+    const selected = String(original.get('color') || '').trim();
+    if (selected !== '__new__') return selected;
+    return String(original.get('color_custom') || '').trim().toUpperCase();
   }
 
 
@@ -259,7 +278,13 @@
     createData.set('model_id', String(modelId));
     createData.set('ram', ramValue);
     createData.set('storage', storageValue);
-    createData.set('color', String(original.get('color') || ''));
+    const colorValue = resolvedColorValue(original);
+    if (!colorValue) {
+      setError('Choose an existing color or enter the new color.');
+      controlledColorInput?.focus({preventScroll:false});
+      return;
+    }
+    createData.set('color', colorValue);
     createData.set('connectivity', String(original.get('connectivity') || ''));
     createData.set('selling_price', String(original.get('selling_price') || ''));
     createData.set('branch_id', String(original.get('branch_id') || modal.dataset.defaultBranchId || ''));
@@ -290,6 +315,7 @@
   function resetForm() {
     form.reset();
     customSpecNames.forEach(name => syncCustomSpec(name));
+    syncControlledColor();
     identifierMode = isApple ? 'serial' : 'imei';
     if (quantityInput) quantityInput.value = '1';
     modal.querySelector('[data-quick-product-id]').value = '';
@@ -331,6 +357,15 @@
   });
 
   form.addEventListener('submit', submitQuickSetup);
+  controlledColorSelect?.addEventListener('change', () => {
+    syncControlledColor(controlledColorSelect.value === '__new__');
+    setError('');
+  });
+  controlledColorInput?.addEventListener('input', () => {
+    controlledColorInput.value = controlledColorInput.value.toUpperCase();
+    setError('');
+  });
+  syncControlledColor();
   customSpecNames.forEach(name => {
     const {select, input} = customSpecParts(name);
     select?.addEventListener('change', () => syncCustomSpec(name, select.value === '__other__'));

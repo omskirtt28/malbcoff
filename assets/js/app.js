@@ -109,6 +109,7 @@
 
   // Convert wide data tables into readable labelled cards on phones without touching backend markup.
   qsa('table.data-table').forEach(table => {
+    if (table.hasAttribute('data-stock-monitoring-table')) return;
     const headers = qsa('thead th', table).map(th => th.textContent.trim());
     if (!headers.length) return;
 
