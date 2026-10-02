@@ -2532,3 +2532,175 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .variant-typo-warning{width:auto;max-width:240px;white-space:normal;}
   .variant-merge-btn span{white-space:normal;text-align:left;}
 }
+
+/* P2-034 — Stock safety confirmation + System Admin adjustment */
+.stock-confirm-dialog{width:min(720px,calc(100vw - 32px));max-height:90vh;overflow:auto}
+.confirm-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.confirm-summary-grid>div{border:1px solid var(--border);border-radius:12px;background:#fbfcfe;padding:12px 13px;min-width:0}
+.confirm-summary-grid span,.confirm-summary-grid strong,.confirm-summary-grid small{display:block}
+.confirm-summary-grid span{font-size:10px;font-weight:750;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.confirm-summary-grid strong{font-size:13px;margin-top:4px;overflow-wrap:anywhere}
+.confirm-imeis{border:1px solid #dbe7f7;border-radius:12px;background:#f7faff;padding:12px 13px;margin-top:12px}
+.confirm-imeis strong,.confirm-imeis span{display:block}
+.confirm-imeis strong{font-size:11.5px;color:#344054;margin-bottom:4px}.confirm-imeis span{font-size:11px;color:#667085;line-height:1.5;overflow-wrap:anywhere}
+.stock-confirm-acknowledgement{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px 13px;border:1px solid #cfe0f7;border-radius:12px;background:#f8fbff;cursor:pointer}
+.stock-confirm-acknowledgement input{width:18px;height:18px;margin-top:1px;accent-color:var(--blue);flex:0 0 auto}
+.stock-confirm-acknowledgement span,.stock-confirm-acknowledgement strong,.stock-confirm-acknowledgement small{display:block}.stock-confirm-acknowledgement strong{font-size:12px;color:#344054}.stock-confirm-acknowledgement small{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+#systemStockAdjustModal .variant-adjust-reason{margin-top:14px}
+#systemStockAdjustModal [data-system-adjust-devices]{margin-top:14px}
+#systemStockAdjustModal [data-system-adjust-accessory]{margin-top:14px}
+#systemStockAdjustModal .variant-adjust-units{margin-top:10px}
+#systemStockAdjustModal [data-system-adjust-selected-count]{font-size:11px;color:var(--blue);white-space:nowrap}
+@media(max-width:640px){.confirm-summary-grid{grid-template-columns:1fr}.stock-confirm-dialog{width:min(100%,calc(100vw - 20px))}.stock-confirm-acknowledgement{padding:11px}}
+
+/* P2-047 — Inventory Devices / Accessories switch + accessory-safe actions */
+.inventory-view-tabs{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin:-6px 0 16px;
+}
+.inventory-view-tab{
+  min-width:92px;
+  height:38px;
+  padding:0 16px;
+  border:1px solid #dce5f0;
+  border-radius:10px;
+  background:#fff;
+  color:#475467;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+  box-shadow:0 2px 5px rgba(16,24,40,.03);
+  transition:.15s ease;
+}
+.inventory-view-tab:hover{border-color:#a9c9fb;color:var(--blue);background:#fbfdff}
+.inventory-view-tab.active{border-color:var(--blue);background:var(--blue);color:#fff;box-shadow:0 6px 14px rgba(23,105,232,.18)}
+.inventory-identifier-text{display:block;color:#344054;font-size:10.8px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.accessory-stock-dialog{width:min(760px,100%)}
+.accessory-stock-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.accessory-stock-summary-grid>div{border:1px solid #e6ebf2;border-radius:12px;background:#fbfcfe;padding:12px;min-width:0}
+.accessory-stock-summary-grid span,.accessory-stock-summary-grid strong{display:block}
+.accessory-stock-summary-grid span{font-size:9px;font-weight:800;color:#8a94a6;text-transform:uppercase;letter-spacing:.25px}
+.accessory-stock-summary-grid strong{margin-top:5px;font-size:12px;color:#172033;overflow-wrap:anywhere}
+
+@media (min-width:1101px){
+  .inventory-table-devices .col-product{width:22%}
+  .inventory-table-devices .col-specs{width:15%}
+  .inventory-table-devices .col-stock{width:9%}
+  .inventory-table-devices .col-location{width:13%}
+  .inventory-table-devices .col-date{width:14%}
+  .inventory-table-devices .col-status{width:9%}
+  .inventory-table-devices .col-action{width:18%}
+
+  .inventory-table-accessories .col-product{width:18%}
+  .inventory-table-accessories .col-category{width:10%}
+  .inventory-table-accessories .col-identifier{width:12%}
+  .inventory-table-accessories .col-stock{width:8%}
+  .inventory-table-accessories .col-location{width:11%}
+  .inventory-table-accessories .col-date{width:11%}
+  .inventory-table-accessories .col-status{width:7%}
+  .inventory-table-accessories .col-action{width:23%}
+
+  .inventory-table-accessories .inventory-row-actions{gap:4px;justify-content:flex-start}
+  .inventory-table-accessories .inventory-row-actions .btn{height:36px;min-height:36px;padding-inline:9px;font-size:10px}
+  .inventory-table-accessories .inventory-row-actions .inventory-view-btn{min-width:88px;padding-inline:8px}
+  .inventory-table-accessories .inventory-row-actions .inventory-adjust-btn{min-width:54px}
+  .inventory-table-accessories .inventory-row-actions .inventory-forward-btn{min-width:66px;padding-inline:10px}
+  .inventory-table-devices .inventory-row-actions .inventory-forward-btn{margin-left:0}
+}
+
+@media (max-width:1100px){
+  .inventory-view-tabs{margin-top:-2px}
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .inventory-view-tabs{width:100%;margin:0 0 12px}
+  .inventory-view-tab{flex:1;min-width:0;height:42px}
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory,
+  .inventory-row-actions-accessory{grid-template-columns:1fr 1fr}
+  .inventory-row-actions-accessory .inventory-forward-btn{grid-column:1/-1}
+  .accessory-stock-summary-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:480px){
+  .accessory-stock-summary-grid{grid-template-columns:1fr}
+}
+
+/* Accessory receiving now mirrors device quantity: one identifier entry per unit. */
+.identifier-entry-accessory{align-items:start}
+.identifier-entry-accessory .identifier-entry-number{margin-top:24px}
+@media(max-width:760px){
+  .identifier-entry-accessory{grid-column:1/-1}
+}
+
+
+/* P2-048 — Branch Manager stock correction + locked variant unlock */
+.variant-unlock-actions{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border:1px solid #d6e4f8;border-radius:11px;background:#f8fbff}
+.variant-unlock-actions .btn{flex:0 0 auto;white-space:nowrap}
+.variant-unlock-actions small{font-size:10.5px;line-height:1.45;color:#667085}
+.variant-spec-lock-note.unlocked{border-color:#b7d4ff;background:#f0f6ff;color:#175cd3}
+.stock-adjust-accessory-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+
+@media (min-width:1101px){
+  .inventory-table-devices .col-product{width:20%}
+  .inventory-table-devices .col-specs{width:14%}
+  .inventory-table-devices .col-stock{width:8%}
+  .inventory-table-devices .col-location{width:12%}
+  .inventory-table-devices .col-date{width:12%}
+  .inventory-table-devices .col-status{width:8%}
+  .inventory-table-devices .col-action{width:26%}
+  .inventory-table-devices .inventory-row-actions{display:grid;grid-template-columns:minmax(90px,1fr) minmax(58px,.65fr) minmax(72px,.8fr);gap:5px;width:100%}
+  .inventory-table-devices .inventory-row-actions .btn{width:100%;min-width:0;height:36px;min-height:36px;padding-inline:8px;font-size:10px;white-space:nowrap}
+  .inventory-table-devices .inventory-row-actions .inventory-view-btn{padding-inline:7px}
+  .inventory-table-devices .inventory-row-actions .inventory-forward-btn{min-width:0;padding-inline:8px}
+
+  .inventory-table-accessories .col-product{width:17%}
+  .inventory-table-accessories .col-category{width:9%}
+  .inventory-table-accessories .col-identifier{width:11%}
+  .inventory-table-accessories .col-stock{width:7%}
+  .inventory-table-accessories .col-location{width:10%}
+  .inventory-table-accessories .col-date{width:10%}
+  .inventory-table-accessories .col-status{width:7%}
+  .inventory-table-accessories .col-action{width:29%}
+  .inventory-table-accessories .inventory-row-actions{display:grid;grid-template-columns:minmax(88px,1fr) minmax(58px,.65fr) minmax(70px,.8fr);gap:5px;width:100%}
+  .inventory-table-accessories .inventory-row-actions .btn{width:100%;min-width:0;height:36px;min-height:36px;padding-inline:8px;font-size:10px;white-space:nowrap}
+}
+@media (max-width:1100px){
+  .inventory-table.is-responsive-table .inventory-row-actions-device,
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .inventory-table.is-responsive-table .inventory-row-actions-device .inventory-forward-btn,
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory .inventory-forward-btn{grid-column:auto}
+}
+@media (max-width:760px){
+  .stock-adjust-accessory-grid{grid-template-columns:1fr}
+  .variant-unlock-actions{align-items:stretch;flex-direction:column}
+  .variant-unlock-actions .btn{width:100%}
+  .inventory-table.is-responsive-table .inventory-row-actions-device,
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory,
+  .inventory-row-actions-device,
+  .inventory-row-actions-accessory{grid-template-columns:1fr 1fr}
+  .inventory-row-actions-device .inventory-forward-btn,
+  .inventory-row-actions-accessory .inventory-forward-btn{grid-column:1/-1}
+}
+
+/* P2-049 — Device adjustment unit selection + IMEI/Serial correction */
+.stock-adjust-device-mode-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:12px}
+#systemStockAdjustModal [data-system-device-remove],
+#systemStockAdjustModal [data-system-device-correct]{margin-top:10px}
+#systemStockAdjustModal .variant-unit-toolbar>span{font-size:11px;color:#667085;line-height:1.45}
+.system-correct-unit-list .variant-adjust-unit{grid-template-columns:18px 38px minmax(0,1fr)}
+.device-identifier-correction{margin-top:14px;border:1px solid #dbe7f7;border-radius:13px;background:#f8fbff;padding:14px}
+.device-identifier-current{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid #e1eaf6}
+.device-identifier-current span{font-size:10px;font-weight:800;color:#667085;text-transform:uppercase;letter-spacing:.04em}
+.device-identifier-current strong{font-size:12px;color:#172033;overflow-wrap:anywhere;text-align:right}
+.device-identifier-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.device-identifier-grid .field{margin:0}
+.device-identifier-help{display:block;margin-top:10px;color:#667085;font-size:10.5px;line-height:1.45}
+#systemStockAdjustModal .variant-adjust-unit-copy small{white-space:normal;line-height:1.35}
+@media(max-width:760px){
+  .device-identifier-grid{grid-template-columns:1fr}
+  .device-identifier-current{align-items:flex-start;flex-direction:column}
+  .device-identifier-current strong{text-align:left}
+}

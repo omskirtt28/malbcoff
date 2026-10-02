@@ -7,9 +7,9 @@ if (!Auth::check()) {
     echo json_encode(['error' => 'Please sign in again.']);
     exit;
 }
-if (!Auth::isOwner()) {
+if (!Auth::actorIsSystemAdmin()) {
     http_response_code(403);
-    echo json_encode(['error' => 'Only the Owner can manage inventory adjustments.']);
+    echo json_encode(['error' => 'Only System Admin can manage inventory adjustments.']);
     exit;
 }
 
@@ -36,26 +36,48 @@ try {
         exit;
     }
 
-    $branches = Database::query(
-        "SELECT b.id,b.name,b.code,
-                COUNT(iu.id) AS available_count
-         FROM branches b
-         LEFT JOIN inventory_units iu
-           ON iu.branch_id=b.id AND iu.product_id=? AND iu.status='available'
-         WHERE b.is_active=1
-         GROUP BY b.id,b.name,b.code
-         ORDER BY b.id",
-        [$productId]
-    )->fetchAll();
-
-    $units = Database::query(
-        "SELECT iu.id,iu.branch_id,iu.serial_no,iu.imei,iu.imei2,iu.created_at
-         FROM inventory_units iu
-         JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
-         WHERE iu.product_id=? AND iu.status='available'
-         ORDER BY iu.branch_id,iu.created_at,iu.id",
-        [$productId]
-    )->fetchAll();
+    $scopeBranchId = (!Auth::isOwner() && !Auth::isSystemAdmin()) ? (Auth::branchId() ?: 0) : 0;
+    if ($scopeBranchId > 0) {
+        $branches = Database::query(
+            "SELECT b.id,b.name,b.code,
+                    COUNT(iu.id) AS available_count
+             FROM branches b
+             LEFT JOIN inventory_units iu
+               ON iu.branch_id=b.id AND iu.product_id=? AND iu.status='available'
+             WHERE b.is_active=1 AND b.id=?
+             GROUP BY b.id,b.name,b.code
+             ORDER BY b.id",
+            [$productId,$scopeBranchId]
+        )->fetchAll();
+        $units = Database::query(
+            "SELECT iu.id,iu.branch_id,iu.serial_no,iu.imei,iu.imei2,iu.created_at
+             FROM inventory_units iu
+             JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
+             WHERE iu.product_id=? AND iu.status='available' AND iu.branch_id=?
+             ORDER BY iu.branch_id,iu.created_at,iu.id",
+            [$productId,$scopeBranchId]
+        )->fetchAll();
+    } else {
+        $branches = Database::query(
+            "SELECT b.id,b.name,b.code,
+                    COUNT(iu.id) AS available_count
+             FROM branches b
+             LEFT JOIN inventory_units iu
+               ON iu.branch_id=b.id AND iu.product_id=? AND iu.status='available'
+             WHERE b.is_active=1
+             GROUP BY b.id,b.name,b.code
+             ORDER BY b.id",
+            [$productId]
+        )->fetchAll();
+        $units = Database::query(
+            "SELECT iu.id,iu.branch_id,iu.serial_no,iu.imei,iu.imei2,iu.created_at
+             FROM inventory_units iu
+             JOIN branches b ON b.id=iu.branch_id AND b.is_active=1
+             WHERE iu.product_id=? AND iu.status='available'
+             ORDER BY iu.branch_id,iu.created_at,iu.id",
+            [$productId]
+        )->fetchAll();
+    }
 
     $unitsByBranch = [];
     foreach ($units as $unit) {

@@ -1,6 +1,7 @@
 <?php
 $role = Auth::user()['role'] ?? '';
 $isOwner = Auth::isOwner();
+$canSystemAdjustInventory = Auth::actorIsSystemAdmin();
 $canMergeVariant = $isOwner || (method_exists('Auth','actorIsSystemAdmin') && Auth::actorIsSystemAdmin());
 $canAddMaster = in_array($role, ['owner', 'branch_manager', 'inventory'], true);
 $canQuickReceive = $canAddMaster;
@@ -12,13 +13,11 @@ $canEditModel = $canAddMaster;
 $canEditBrand = $isOwner;
 $canEditCategory = $canAddMaster;
 $canEditVariantPrice = in_array($role, ['owner','branch_manager'], true);
+$canUnlockVariantSpecs = $role === 'branch_manager';
 $priceBranchId = $isOwner ? current_branch_scope() : (Auth::branchId() ?: null);
 $priceBranches = [];
 $priceMap = [];
 $pricingReady = false;
-
-// Clean up already-existing truncated spelling duplicates before rendering Product Master.
-variant_cleanup_truncated_color_duplicates_once();
 
 $selectedBrandId = filter_input(INPUT_GET, 'brand', FILTER_VALIDATE_INT) ?: null;
 $selectedModelId = filter_input(INPUT_GET, 'model', FILTER_VALIDATE_INT) ?: null;
@@ -241,9 +240,11 @@ if ($selectedModel && $configurations) {
                 && trim((string)($a['connectivity'] ?? '')) === trim((string)($b['connectivity'] ?? ''));
             if (!$sameSpecs || !variant_colors_are_probable_typo($a['color'] ?? '', $b['color'] ?? '')) continue;
 
+            $aKey = variant_color_key($a['color'] ?? '');
+            $bKey = variant_color_key($b['color'] ?? '');
             $source = null; $target = null;
-            if (variant_color_is_likely_completion($a['color'] ?? '', $b['color'] ?? '')) { $source = $a; $target = $b; }
-            elseif (variant_color_is_likely_completion($b['color'] ?? '', $a['color'] ?? '')) { $source = $b; $target = $a; }
+            if (strlen($aKey) + 1 === strlen($bKey) && str_starts_with($bKey, $aKey)) { $source = $a; $target = $b; }
+            elseif (strlen($bKey) + 1 === strlen($aKey) && str_starts_with($aKey, $bKey)) { $source = $b; $target = $a; }
             else {
                 $aTime = strtotime((string)($a['created_at'] ?? '')) ?: PHP_INT_MAX;
                 $bTime = strtotime((string)($b['created_at'] ?? '')) ?: PHP_INT_MAX;
@@ -973,7 +974,7 @@ sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
             <button type="button" class="icon-button" data-master-close aria-label="Close">×</button>
         </div>
 
-        <?php if ($isOwner): ?>
+        <?php if ($canSystemAdjustInventory): ?>
             <div class="variant-edit-tabs" role="tablist" aria-label="Variant management">
                 <button type="button" class="variant-edit-tab active" data-variant-tab="pricing" role="tab" aria-selected="true">Pricing</button>
                 <button type="button" class="variant-edit-tab" data-variant-tab="inventory" role="tab" aria-selected="false">Inventory</button>
@@ -988,6 +989,7 @@ sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
                 <input type="hidden" name="return_model" value="<?= (int)($selectedModel['id'] ?? 0) ?>">
                 <input type="hidden" name="action" value="edit" data-action-field>
                 <input type="hidden" name="id" value="" data-id-field>
+                <input type="hidden" name="unlock_specs" value="0" data-variant-unlock-field>
 
                 <?php
                     $variantEditType = $selectedModel['device_type'] ?? 'phone';
@@ -1031,6 +1033,12 @@ sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
                         <?php endif; ?>
                     </div>
                     <div class="variant-spec-lock-note" data-variant-spec-note>Specs can be edited while this variant has no stock or history.</div>
+                    <?php if ($canUnlockVariantSpecs): ?>
+                        <div class="variant-unlock-actions" data-variant-unlock-actions hidden>
+                            <button type="button" class="btn btn-outline btn-sm" data-variant-unlock>Unlock Variant</button>
+                            <small>Branch Manager can unlock this variant to correct RAM, storage, color or connectivity. Existing sales and transfer history will remain protected.</small>
+                        </div>
+                    <?php endif; ?>
                 </section>
 
                 <?php if ($isOwner): ?>
@@ -1061,7 +1069,7 @@ sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
             </form>
         </div>
 
-        <?php if ($isOwner): ?>
+        <?php if ($canSystemAdjustInventory): ?>
             <div class="variant-inventory-panel" data-variant-panel="inventory" hidden>
                 <div class="variant-inventory-loading" data-variant-inventory-body>
                     <div class="loading-state">Loading inventory…</div>
@@ -1151,22 +1159,7 @@ sort($existingModelColors, SORT_NATURAL | SORT_FLAG_CASE);
                             <input class="custom-spec-input" type="text" name="storage_custom" data-custom-spec-input="storage" data-uppercase maxlength="30" autocomplete="off" placeholder="TYPE STORAGE, E.G. 32GB / 3TB" aria-label="Custom storage" hidden disabled>
                             <small class="custom-spec-hint" data-custom-spec-hint="storage" hidden>Enter the exact storage capacity for this variant.</small>
                         </label>
-                        <?php if ($existingModelColors): ?>
-                        <label class="field quick-controlled-color-field">
-                            <span>Color <b>*</b></span>
-                            <select name="color" data-controlled-color-select required>
-                                <option value="">Select color</option>
-                                <?php foreach ($existingModelColors as $existingColor): ?>
-                                <option value="<?= e($existingColor) ?>"><?= e($existingColor) ?></option>
-                                <?php endforeach; ?>
-                                <option value="__new__">+ Add New Color</option>
-                            </select>
-                            <input class="custom-spec-input" type="text" name="color_custom" data-controlled-color-input data-uppercase maxlength="80" autocomplete="off" placeholder="TYPE NEW COLOR" aria-label="New color" hidden disabled>
-                            <small data-controlled-color-hint>Existing colors are locked choices. Choose Add New Color only for a real new color.</small>
-                        </label>
-                        <?php else: ?>
-                        <label class="field"><span>Color <b>*</b></span><input type="text" name="color" data-uppercase maxlength="80" autocomplete="off" placeholder="E.G. DEEP BLUE" required><small>This first color becomes a reusable locked choice for the next variant.</small></label>
-                        <?php endif; ?>
+                        <label class="field"><span>Color <b>*</b></span><input type="text" name="color" data-uppercase maxlength="80" list="variantExistingColors" autocomplete="off" placeholder="E.G. DEEP BLUE" required><small>Use an existing color name when available. Close spellings are corrected server-side.</small></label>
                         <?php if ($quickType === 'tablet'): ?>
                         <label class="field"><span>Connectivity <b>*</b></span><select name="connectivity" data-quick-connectivity required><option value="">Select connectivity</option><option value="Wi-Fi">Wi-Fi</option><option value="Wi-Fi + Cellular">Wi-Fi + Cellular</option></select></label>
                         <?php endif; ?>

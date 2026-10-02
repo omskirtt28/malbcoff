@@ -123,6 +123,21 @@ if(!Csrf::verify($_POST['_csrf']??null)){
     flash('error','Your session expired. Please submit the Receive Stock form again.');redirect(app_url('stock-in'));
 }
 
+$receiveNonce='';
+if(!$isQuickReceive){
+    if((string)($_POST['confirmed']??'0')!=='1'){
+        flash('error','Review and confirm the stock-in before saving. Nothing was added.');
+        redirect(app_url('stock-in'));
+    }
+    $receiveNonce=trim((string)($_POST['receive_nonce']??''));
+    $knownNonces=$_SESSION['stock_receive_nonces']??[];
+    $createdAt=is_array($knownNonces)?($knownNonces[$receiveNonce]??null):null;
+    if($receiveNonce==='' || !is_int($createdAt) || (time()-$createdAt)>7200){
+        flash('error','This stock-in review expired or was already used. Review the stock again before saving.');
+        redirect(app_url('stock-in'));
+    }
+}
+
 $productId=filter_var($_POST['product_id']??null,FILTER_VALIDATE_INT)?:0;
 $requestedBranch=filter_var($_POST['branch_id']??null,FILTER_VALIDATE_INT)?:0;
 $branchId=Auth::isOwner()?$requestedBranch:(Auth::branchId()?:0);
@@ -161,9 +176,56 @@ try{
     $userId=(int)Auth::user()['id'];$type=$product['product_type'];$reference=generate_stock_reference((string)$branch['code']);
 
     if($type==='accessory'){
-        $quantity=max(1,min(100000,(int)($_POST['quantity']??1)));
+        // Accessories remain quantity-based in inventory, but receiving now requires one
+        // confirmed Barcode / Serial entry per physical unit, matching the device workflow.
+        $quantity=max(1,min(100,(int)($_POST['quantity']??1)));
+        $identifierTypes=(array)($_POST['identifier_types']??[]);
+        $identifierValues=(array)($_POST['identifiers']??[]);
+        $savedBarcode=normalize_stock_identifier($product['barcode']??'');
+        $canonicalBarcode=$savedBarcode;
+        $serialSeen=[];
+        $identifierSummary=[];
+
+        for($i=0;$i<$quantity;$i++){
+            $identifierType=strtolower(trim((string)($identifierTypes[$i]??'')));
+            $identifier=normalize_stock_identifier($identifierValues[$i]??'');
+
+            if(!in_array($identifierType,['barcode','serial'],true)){
+                throw new RuntimeException('Choose Product Barcode or Serial Number for accessory unit '.($i+1).'.');
+            }
+            if($identifier===''){
+                throw new RuntimeException('Scan or enter the Barcode / Serial Number for accessory unit '.($i+1).'.');
+            }
+            if($identifierType==='barcode'){
+                if(!preg_match('/^[\x21-\x7e]{1,120}$/D',$identifier)){
+                    throw new RuntimeException('Accessory barcode values must contain 1 to 120 printable characters without spaces.');
+                }
+                if($canonicalBarcode!=='' && $canonicalBarcode!==$identifier){
+                    throw new RuntimeException('Barcode on accessory unit '.($i+1).' does not match the barcode saved for this product.');
+                }
+                if($canonicalBarcode==='')$canonicalBarcode=$identifier;
+                $identifierSummary[]='Barcode '.$identifier;
+                continue;
+            }
+
+            if(!preg_match('/^[A-Z0-9._\/-]{1,80}$/D',$identifier) || !preg_match('/[A-Z0-9]/',$identifier)){
+                throw new RuntimeException('Enter a valid serial number for accessory unit '.($i+1).' using letters, numbers, dot, dash, underscore or slash.');
+            }
+            if(isset($serialSeen[$identifier])){
+                throw new RuntimeException('Serial Number '.$identifier.' is duplicated in this receiving batch.');
+            }
+            $serialSeen[$identifier]=true;
+            $identifierSummary[]='Serial '.$identifier;
+        }
+
+        if($savedBarcode==='' && $canonicalBarcode!==''){
+            Database::query("UPDATE products SET barcode=? WHERE id=? AND product_type='accessory' AND (barcode IS NULL OR barcode='')",[$canonicalBarcode,$productId]);
+            $product['barcode']=$canonicalBarcode;
+        }
+
+        $movementNote=trim(($notes!==''?$notes:'Accessory stock received').' | Identifiers: '.implode(', ',$identifierSummary));
         Database::query('INSERT INTO inventory_balances (product_id,branch_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)',[$productId,$branchId,$quantity]);
-        Database::query('INSERT INTO stock_movements (product_id,branch_id,movement_type,quantity,reference_no,notes,unit_cost,unit_selling_price,created_by) VALUES (?,?,?,?,?,?,?,?,?)',[$productId,$branchId,'stock_in',$quantity,$reference,stock_note($notes,'Accessory stock received'),$cost,$selling,$userId]);
+        Database::query('INSERT INTO stock_movements (product_id,branch_id,movement_type,quantity,reference_no,notes,unit_cost,unit_selling_price,created_by) VALUES (?,?,?,?,?,?,?,?,?)',[$productId,$branchId,'stock_in',$quantity,$reference,stock_note($movementNote,'Accessory stock received'),$cost,$selling,$userId]);
     }else{
         $conditionType='brand_new';
         $isPreloved=false;
@@ -301,6 +363,9 @@ try{
     }
 
     $pdo->commit();
+    if(!$isQuickReceive && $receiveNonce!==''){
+        unset($_SESSION['stock_receive_nonces'][$receiveNonce]);
+    }
     Security::audit('inventory.stock_in', 'product', $productId, ['reference_no' => $reference, 'branch_id' => $branchId, 'quantity' => $quantity]);
     $successPayload=['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId];
     if($isQuickReceive){

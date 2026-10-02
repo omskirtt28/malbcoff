@@ -19,8 +19,24 @@ if ($successRaw) {
     if (is_array($decoded)) $successData = $decoded;
 }
 
+// One-time receive token prevents accidental double-submit/replay from scanner Enter keys.
+if (!isset($_SESSION['stock_receive_nonces']) || !is_array($_SESSION['stock_receive_nonces'])) {
+    $_SESSION['stock_receive_nonces'] = [];
+}
+$now = time();
+foreach ($_SESSION['stock_receive_nonces'] as $nonce => $createdAt) {
+    if (!is_int($createdAt) || ($now - $createdAt) > 7200) unset($_SESSION['stock_receive_nonces'][$nonce]);
+}
+if (count($_SESSION['stock_receive_nonces']) > 20) {
+    asort($_SESSION['stock_receive_nonces']);
+    $_SESSION['stock_receive_nonces'] = array_slice($_SESSION['stock_receive_nonces'], -20, null, true);
+}
+$receiveNonce = bin2hex(random_bytes(16));
+$_SESSION['stock_receive_nonces'][$receiveNonce] = $now;
+
 $models = $variants = $accessories = $branches = [];
 $branchPrices = [];
+$branchStocks = [];
 $canEditSelling = in_array($role, ['owner','branch_manager'], true);
 
 // Keep legacy typo variants consolidated before users receive more stock.
@@ -59,6 +75,28 @@ try {
             : Database::query('SELECT product_id,branch_id,selling_price FROM branch_product_prices WHERE branch_id=?', [$assignedBranchId ?: 0])->fetchAll();
         foreach ($priceRows as $priceRow) $branchPrices[(int)$priceRow['product_id']][(int)$priceRow['branch_id']] = (float)$priceRow['selling_price'];
     }
+
+    $stockProductIds = array_values(array_unique(array_merge(
+        array_map(static fn(array $row): int => (int)$row['id'], $variants),
+        array_map(static fn(array $row): int => (int)$row['id'], $accessories)
+    )));
+    if ($stockProductIds) {
+        $marks = implode(',', array_fill(0, count($stockProductIds), '?'));
+        $unitRows = Database::query(
+            "SELECT product_id,branch_id,COUNT(*) quantity FROM inventory_units WHERE product_id IN ($marks) AND status='available' GROUP BY product_id,branch_id",
+            $stockProductIds
+        )->fetchAll();
+        foreach ($unitRows as $stockRow) {
+            $branchStocks[(int)$stockRow['product_id']][(int)$stockRow['branch_id']] = (int)$stockRow['quantity'];
+        }
+        $balanceRows = Database::query(
+            "SELECT product_id,branch_id,quantity FROM inventory_balances WHERE product_id IN ($marks)",
+            $stockProductIds
+        )->fetchAll();
+        foreach ($balanceRows as $stockRow) {
+            $branchStocks[(int)$stockRow['product_id']][(int)$stockRow['branch_id']] = (int)$stockRow['quantity'];
+        }
+    }
 } catch (Throwable $e) {
     flash('error', 'Unable to load products for receiving.');
 }
@@ -93,6 +131,7 @@ foreach ($variants as $variant) {
         'specs' => receive_specs($variant),
         'selling' => (float)$variant['selling_price'],
         'prices' => $branchPrices[(int)$variant['id']] ?? [],
+        'stocks' => $branchStocks[(int)$variant['id']] ?? [],
         'cost' => $isOwner ? (float)$variant['cost_price'] : null,
         'costReady' => (float)$variant['cost_price'] > 0,
         'type' => $variant['product_type'],
@@ -109,6 +148,7 @@ foreach ($accessories as $accessory) {
         'barcode' => $accessory['barcode'] ?? '',
         'selling' => (float)$accessory['selling_price'],
         'prices' => $branchPrices[(int)$accessory['id']] ?? [],
+        'stocks' => $branchStocks[(int)$accessory['id']] ?? [],
         'cost' => $isOwner ? (float)$accessory['cost_price'] : null,
         'costReady' => (float)$accessory['cost_price'] > 0,
         'type' => 'accessory',
@@ -171,6 +211,7 @@ if (!empty($successData['product_id'])) {
     <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
     <input type="hidden" name="product_id" id="productId" value="">
     <input type="hidden" name="confirmed" id="confirmedField" value="0">
+    <input type="hidden" name="receive_nonce" value="<?= e($receiveNonce) ?>">
 
     <section class="receive-step">
         <div class="receive-step-number">1</div>
@@ -400,9 +441,22 @@ if (!empty($successData['product_id'])) {
 <div class="modal" id="stockConfirmModal" hidden>
     <div class="modal-backdrop" data-confirm-close></div>
     <div class="modal-dialog stock-confirm-dialog">
-        <div class="modal-header"><div><span class="eyebrow">REVIEW STOCK</span><h2>Check before saving</h2><p class="modal-subtitle">Confirm the item, branch, quantity and selling price.</p></div><button type="button" class="icon-button" data-confirm-close>×</button></div>
-        <div class="modal-body"><div class="confirm-summary-grid"><div><span>Item</span><strong id="confirmProduct">—</strong></div><div><span>Branch</span><strong id="confirmBranch">—</strong></div><div><span>Quantity</span><strong id="confirmQuantity">—</strong></div><?php if ($isOwner): ?><div><span>Cost / Unit</span><strong id="confirmCost">—</strong></div><?php endif; ?><div><span>Selling Price</span><strong id="confirmSelling">—</strong></div></div><div class="restore-review-note hidden" id="confirmRestoreNotice"><strong>Restore existing unit</strong><span>Previously removed stock-correction units will be reactivated using the same Serial Number / IMEI. No duplicate record will be created.</span></div><div class="confirm-imeis hidden" id="confirmIdentifiers"></div></div>
-        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-confirm-close>Go Back</button><button class="btn btn-primary" type="button" id="confirmStockIn">Confirm & Save</button></div>
+        <div class="modal-header"><div><span class="eyebrow">FINAL REVIEW</span><h2>Confirm Stock In</h2><p class="modal-subtitle">Nothing is added until you confirm this final review.</p></div><button type="button" class="icon-button" data-confirm-close>×</button></div>
+        <div class="modal-body">
+            <div class="confirm-summary-grid">
+                <div><span>Item</span><strong id="confirmProduct">—</strong></div>
+                <div><span>Branch</span><strong id="confirmBranch">—</strong></div>
+                <div><span>Quantity to Receive</span><strong id="confirmQuantity">—</strong></div>
+                <div><span>Current Stock</span><strong id="confirmCurrentStock">—</strong></div>
+                <div><span>Stock After Receive</span><strong id="confirmNewStock">—</strong></div>
+                <?php if ($isOwner): ?><div><span>Cost / Unit</span><strong id="confirmCost">—</strong></div><?php endif; ?>
+                <div><span>Selling Price</span><strong id="confirmSelling">—</strong></div>
+            </div>
+            <div class="restore-review-note hidden" id="confirmRestoreNotice"><strong>Restore existing unit</strong><span>Previously removed stock-correction units will be reactivated using the same Serial Number / IMEI. No duplicate record will be created.</span></div>
+            <div class="confirm-imeis hidden" id="confirmIdentifiers"></div>
+            <label class="stock-confirm-acknowledgement"><input type="checkbox" id="confirmStockAcknowledgement"><span><strong>I checked the quantity and identifiers above.</strong><small>This confirmation prevents accidental stock entries from scanner or keyboard Enter keys.</small></span></label>
+        </div>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-confirm-close>Back &amp; Edit</button><button class="btn btn-primary" type="button" id="confirmStockIn" disabled>Confirm Stock In</button></div>
     </div>
 </div>
 
@@ -458,6 +512,7 @@ function isApple(item){ return item?.appleSerial === true; }
 function itemMatches(item,q){ q=q.toLowerCase(); return [item.label,item.category,item.barcode,item.type].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)); }
 function activeBranchId(){ return isOwner ? Number($('branchSelect')?.value||0) : assignedBranchId; }
 function variantSelling(v){ const bid=activeBranchId(); return Number((v?.prices&&v.prices[bid]!==undefined)?v.prices[bid]:v?.selling||0); }
+function variantCurrentStock(v){ const bid=activeBranchId(); return Number((v?.stocks&&v.stocks[bid]!==undefined)?v.stocks[bid]:0); }
 function syncPriceFields(){ if(!selectedVariant)return; const selling=variantSelling(selectedVariant); if(canEditSelling&&$('sellingPriceInput')) $('sellingPriceInput').value=selling>0?selling.toFixed(2):''; if($('sellingPriceDisplay')) $('sellingPriceDisplay').textContent=money(selling); if(isOwner&&$('costPriceDisplay')) $('costPriceDisplay').textContent=selectedVariant.costReady?money(selectedVariant.cost):'Pending'; const warning=$('costNotReady'); if(warning){ warning.classList.toggle('hidden',!isOwner || !!selectedVariant.costReady); if(isOwner && !selectedVariant.costReady){ warning.querySelector('strong').textContent='Cost Price is still pending.'; warning.querySelector('span').textContent='You can receive this stock now and complete the protected cost later.'; } } }
 
 function renderResults(){
@@ -491,7 +546,7 @@ function selectItem(item){
   $('receiveSearchWrap').classList.add('hidden');
   if(item.kind==='accessory'){
     variantStep.classList.add('hidden');
-    selectVariant({id:item.id,specs:item.category||'Accessory',selling:item.selling,prices:item.prices||{},cost:item.cost,costReady:item.costReady,type:'accessory'},true);
+    selectVariant({id:item.id,specs:item.category||'Accessory',selling:item.selling,prices:item.prices||{},stocks:item.stocks||{},cost:item.cost,costReady:item.costReady,type:'accessory'},true);
   } else {
     variantStep.classList.remove('hidden'); renderVariants(); stockStep.classList.add('hidden'); actions.classList.add('hidden');
   }
@@ -512,8 +567,8 @@ variantGrid.addEventListener('click',e=>{ const btn=e.target.closest('[data-vari
 function selectVariant(v,isAccessory=false){
   selectedVariant=v; productId.value=v.id; if(!isAccessory) renderVariants();
   stockStep.classList.remove('hidden'); actions.classList.remove('hidden');
-  quantity.max = selectedVariant.type==='accessory' ? '100000' : '100';
-  $('quantityHint').textContent = selectedVariant.type==='accessory' ? 'Enter how many accessory units arrived.' : 'Enter how many devices arrived. We will create one Serial Number / IMEI field for each unit.';
+  quantity.max = '100';
+  $('quantityHint').textContent = selectedVariant.type==='accessory' ? 'Enter how many accessory units arrived. One Barcode / Serial field will appear for each unit.' : 'Enter how many devices arrived. We will create one Serial Number / IMEI field for each unit.';
   $('stockStepNumber').textContent = isAccessory ? '2' : '3';
   $('selectedVariantSummary').innerHTML=`<div><small>${isAccessory?'Selected item':'Selected variant'}</small><strong>${esc(selectedItem.label)}</strong><span>${esc(v.specs||'')}</span></div><div><small>Branch Selling Price</small><strong id="summarySellingPrice">${money(variantSelling(v))}</strong></div>`;
   syncPriceFields();
@@ -615,7 +670,9 @@ $('saveVariantBtn').addEventListener('click',async()=>{
 });
 
 function identifierKind(){
-  if(!selectedItem || selectedItem.kind!=='model')return null;
+  if(!selectedItem)return null;
+  if(selectedItem.kind==='accessory')return 'barcode';
+  if(selectedItem.kind!=='model')return null;
   if(isApple(selectedItem))return 'serial';
   if(selectedItem.type==='tablet' && selectedVariant && /Wi-Fi$/i.test(selectedVariant.specs) && !/Cellular/i.test(selectedVariant.specs))return 'serial';
   return 'imei';
@@ -634,6 +691,7 @@ function applyIdentifierType(row,kind){
   const primary=row.querySelector('[data-identifier-primary]');
   const secondary=row.querySelector('[data-identifier-secondary]');
   const selector=row.querySelector('[data-identifier-type]');
+  const accessory=selectedItem?.kind==='accessory';
   const barcode=kind==='barcode';
   if(barcode && secondary?.value.trim()){
     selector.value='imei';
@@ -641,7 +699,9 @@ function applyIdentifierType(row,kind){
     return false;
   }
   selector.value=kind;
-  const label=barcode?'Serial / Barcode':kind==='serial'?'Serial Number':usesDualImei()?'IMEI 1':'IMEI';
+  const label=accessory
+    ? (barcode?'Product Barcode':'Serial Number')
+    : (barcode?'Serial / Barcode':kind==='serial'?'Serial Number':usesDualImei()?'IMEI 1':'IMEI');
   primary.inputMode=kind==='imei'?'numeric':'text';
   primary.maxLength=barcode?120:kind==='imei'?15:80;
   if(kind==='imei')primary.setAttribute('pattern','[0-9]*');else primary.removeAttribute('pattern');
@@ -664,15 +724,23 @@ function applyIdentifierType(row,kind){
   return true;
 }
 function configureIdentifiers(){
-  if(!selectedVariant || selectedVariant.type==='accessory'){
+  if(!selectedVariant){
     identifierPanel.classList.add('hidden');
     scanOverview?.classList.add('hidden');
     syncReceiveProgress();
     return;
   }
   identifierPanel.classList.remove('hidden');
-  scanOverview?.classList.remove('hidden');
+  const accessory=selectedVariant.type==='accessory';
+  scanOverview?.classList.toggle('hidden',accessory);
   const kind=identifierKind();
+  if(accessory){
+    $('identifierPanelTitle').textContent='Accessory Serial Number / Barcode';
+    $('identifierPanelHint').textContent='Scan or enter the product barcode or printed serial number for this accessory stock.';
+    $('openPasteIdentifiers').textContent='Paste Multiple';
+    renderIdentifierRows();
+    return;
+  }
   if(usesDualImei()){
     $('identifierPanelHint').textContent='IMEI 1 is required. IMEI 2 is optional for dual-SIM phones.';
   }else{
@@ -683,9 +751,17 @@ function configureIdentifiers(){
   renderIdentifierRows();
 }
 function identifierFieldHtml({name,value,placeholder,label,required=false,secondary=false,numeric=false,includeCamera=true,kind=identifierKind()}){
-  const scanLabel=label || (identifierKind()==='serial'?'Serial Number':'IMEI');
+  const accessory=selectedItem?.kind==='accessory';
+  const scanLabel=label || (accessory?(kind==='serial'?'Serial Number':'Product Barcode'):(identifierKind()==='serial'?'Serial Number':'IMEI'));
+  const typeControl=secondary
+    ? ''
+    : accessory
+      ? `<label class="field"><span>Identifier type</span><select name="identifier_types[]" data-identifier-type><option value="barcode" ${kind==='barcode'?'selected':''}>Product Barcode</option><option value="serial" ${kind==='serial'?'selected':''}>Serial Number</option></select></label>`
+      : isApple(selectedItem)
+        ? '<input type="hidden" name="identifier_types[]" data-identifier-type value="serial">'
+        : `<label class="field"><span>Identifier type</span><select name="identifier_types[]" data-identifier-type><option value="${identifierKind()}" ${kind===identifierKind()?'selected':''}>${identifierKind()==='imei'?'IMEI':'Serial Number'}</option><option value="barcode" ${kind==='barcode'?'selected':''}>Serial / Barcode (no IMEI)</option></select></label>`;
   return `<div class="identifier-field-wrap">
-    ${secondary?'':isApple(selectedItem)?'<input type="hidden" name="identifier_types[]" data-identifier-type value="serial">':`<label class="field"><span>Identifier type</span><select name="identifier_types[]" data-identifier-type><option value="${identifierKind()}" ${kind===identifierKind()?'selected':''}>${identifierKind()==='imei'?'IMEI':'Serial Number'}</option><option value="barcode" ${kind==='barcode'?'selected':''}>Serial / Barcode (no IMEI)</option></select></label>`}
+    ${typeControl}
     ${label?`<span class="identifier-field-label">${esc(label)}${required?' <b>*</b>':''}</span>`:''}
     <div class="identifier-input-row ${includeCamera?'':'identifier-input-row-solo'}">
       <input name="${name}" value="${esc(value||'')}" autocomplete="off" placeholder="${esc(placeholder)}"
@@ -704,14 +780,43 @@ function renderIdentifierRows(){
   const count=Math.max(1,Math.min(100,Number(quantity.value)||1));
   const kind=identifierKind();
   const dual=usesDualImei();
+  const accessory=selectedItem?.kind==='accessory';
 
-  const mode=dual?'dual-imei':kind;
+  const mode=accessory?'accessory-identifier':(dual?'dual-imei':kind);
   if(identifierRows.dataset.mode && identifierRows.dataset.mode!==mode)identifierRows.innerHTML='';
   identifierRows.dataset.mode=mode;
 
   const existingPrimary=[...identifierRows.querySelectorAll('[data-identifier-primary]')].map(i=>i.value);
   const existingSecondary=[...identifierRows.querySelectorAll('[data-identifier-secondary]')].map(i=>i.value);
   const existingTypes=[...identifierRows.querySelectorAll('[data-identifier-type]')].map(i=>i.value);
+
+  if(accessory){
+    const presetBarcode=String(selectedItem?.barcode||'').trim().toUpperCase();
+    $('identifierPanelTitle').textContent=count===1?'Accessory Serial Number / Barcode':'Accessory Serial Numbers / Barcodes';
+    $('identifierPanelHint').textContent=count===1
+      ? 'Scan or enter the product barcode or printed serial number for this accessory unit.'
+      : `Scan or enter one barcode / serial entry for each of the ${count} accessory units.`;
+    identifierRows.innerHTML=Array.from({length:count},(_,i)=>{
+      const existingType=existingTypes[i]||existingTypes[0]||'barcode';
+      const existingValue=existingPrimary[i]||((existingType==='barcode')?presetBarcode:'');
+      return `
+        <div class="identifier-entry identifier-entry-accessory">
+          <span class="identifier-entry-number">${i+1}</span>
+          ${identifierFieldHtml({name:'identifiers[]',value:existingValue,placeholder:'SCAN OR ENTER PRODUCT BARCODE / SERIAL NUMBER',label:existingType==='serial'?'Serial Number':'Product Barcode',required:true,numeric:false,kind:existingType})}
+        </div>`;
+    }).join('');
+    identifierRows.querySelectorAll('.identifier-entry').forEach(row=>{
+      const selector=row.querySelector('[data-identifier-type]');
+      applyIdentifierType(row,selector?.value||'barcode');
+    });
+    $('openPasteIdentifiers').classList.toggle('hidden',count===1);
+    countBadge.classList.toggle('hidden',count===1);
+    bindIdentifierInputs();
+    updateIdentifierCount();
+    updateScannerBadge('ready');
+    if(document.activeElement!==quantity)scheduleScannerFocus();
+    return;
+  }
 
   if(dual){
     $('identifierPanelTitle').textContent='IMEI Numbers';
@@ -754,9 +859,18 @@ function renderIdentifierRows(){
   updateScannerBadge('ready');
   if(document.activeElement!==quantity) scheduleScannerFocus();
 }
-quantity.addEventListener('input',()=>{if(Number(quantity.value)>100 && selectedVariant?.type!=='accessory')quantity.value=100;if(Number(quantity.value)<1)quantity.value=1;renderIdentifierRows();syncReceiveProgress();});
+quantity.addEventListener('input',()=>{if(Number(quantity.value)>100)quantity.value=100;if(Number(quantity.value)<1)quantity.value=1;renderIdentifierRows();syncReceiveProgress();});
 quantity.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusFirstEmptyIdentifier();}});
 quantity.addEventListener('change',()=>setTimeout(focusFirstEmptyIdentifier,60));
+
+// Never let Enter silently commit the Receive Stock form. Scanner Enter may only
+// move between fields or open the review step; final saving requires the modal button.
+form.addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  if(e.target?.matches?.('[data-identifier-input], #quantityInput'))return;
+  if(e.target===reviewStockButton)return;
+  e.preventDefault();
+});
 
 function setIdentifierState(input,state,message=''){
   const wrap=input.closest('.identifier-field-wrap') || input.closest('.identifier-entry');
@@ -853,8 +967,13 @@ function configureCameraType(kind=identifierInputKind(cameraTargetInput)){
   const select=$('cameraIdentifierType'),base=identifierKind();
   select.replaceChildren();
   const add=(value,label)=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.appendChild(option);};
-  add(base,base==='imei'?'IMEI':'Serial Number');
-  if(canReadStockBarcode())add('barcode','Serial / Barcode');
+  if(selectedItem?.kind==='accessory'){
+    add('barcode','Product Barcode');
+    add('serial','Serial Number');
+  }else{
+    add(base,base==='imei'?'IMEI':'Serial Number');
+    if(canReadStockBarcode())add('barcode','Serial / Barcode');
+  }
   select.value=kind;
   $('cameraIdentifierTypeWrap').classList.toggle('hidden',!canReadStockBarcode());
   resetSerialSelection();
@@ -2525,23 +2644,24 @@ $('focusScannerBtn')?.addEventListener('click',focusFirstEmptyIdentifier);
 function syncReceiveProgress(){
   if(!selectedVariant)return;
   const qty=Math.max(1,Number(quantity.value)||1);
-  const serialized=selectedVariant.type!=='accessory';
-  const required=serialized?[...identifierRows.querySelectorAll('[data-identifier-primary]')]:[];
+  const accessory=selectedVariant.type==='accessory';
+  const required=[...identifierRows.querySelectorAll('[data-identifier-primary]')];
   const done=required.filter(input=>input.value.trim()!=='').length;
-  const remaining=Math.max(0,qty-done);
-  const percent=serialized?Math.min(100,Math.round((done/qty)*100)):100;
+  const expected=qty;
+  const remaining=Math.max(0,expected-done);
+  const percent=Math.min(100,Math.round((done/expected)*100));
 
   if(expectedUnitCount)expectedUnitCount.textContent=String(qty);
-  if(scannedUnitCount)scannedUnitCount.textContent=serialized?String(done):'—';
-  if(remainingUnitCount)remainingUnitCount.textContent=serialized?String(remaining):'—';
+  if(scannedUnitCount)scannedUnitCount.textContent=String(done);
+  if(remainingUnitCount)remainingUnitCount.textContent=String(remaining);
   if(scanProgressBar)scanProgressBar.style.width=percent+'%';
   if(scanProgressText){
-    scanProgressText.textContent=serialized
-      ? (remaining===0?`${done} / ${qty} scanned — ready to review.`:`${done} / ${qty} scanned • ${remaining} remaining.`)
-      : `${qty} accessory unit${qty===1?'':'s'} ready to review.`;
+    scanProgressText.textContent=remaining===0
+      ? `${done} / ${qty} scanned — ready to review.`
+      : `${done} / ${qty} scanned • ${remaining} remaining.`;
   }
   if(reviewStockButton){
-    const ready=!serialized || (done===qty && qty>0);
+    const ready=done===expected && expected>0;
     reviewStockButton.disabled=!ready;
     reviewStockButton.classList.toggle('is-ready',ready);
     if(receiveReadyNote)receiveReadyNote.textContent=ready?'Ready for final review.':`Scan ${remaining} more unit${remaining===1?'':'s'} to continue.`;
@@ -2567,6 +2687,12 @@ async function checkIdentifier(input){
   if(!v){clearRestoreState(input);setIdentifierState(input,'','');updateScannerBadge('ready');return input.dataset.identifierSecondary==='1';}
   if(kind==='barcode' && !validStockBarcode(v)){
     clearRestoreState(input);setIdentifierState(input,'error','Enter a barcode value up to 120 characters');updateScannerBadge('error');return false;
+  }
+  if(selectedItem?.kind==='accessory'){
+    if(kind==='serial' && (!/^[A-Z0-9._\/-]{1,80}$/.test(v) || !/[A-Z0-9]/.test(v))){
+      clearRestoreState(input);setIdentifierState(input,'error','Enter the printed serial number using letters, numbers, dot, dash, underscore or slash');updateScannerBadge('error');return false;
+    }
+    clearRestoreState(input);setIdentifierState(input,'valid','Ready');updateScannerBadge('ready');return true;
   }
   if(isApple(selectedItem) && !MalbcoffImeiReader.validSerial(v)){
     clearRestoreState(input);setIdentifierState(input,'error','Enter the alphanumeric Serial Number (S/N), not the IMEI');updateScannerBadge('error');return false;
@@ -2631,8 +2757,21 @@ async function validateIdentifiers(){
       ok=false;
     }
   }
+  if(selectedItem?.kind==='accessory'){
+    const barcodeInputs=required.filter(input=>input.value && identifierInputKind(input)==='barcode');
+    const savedBarcode=String(selectedItem?.barcode||'').replace(/\s+/g,'').trim().toUpperCase();
+    const canonicalBarcode=savedBarcode || (barcodeInputs[0]?.value||'');
+    for(const input of barcodeInputs){
+      if(canonicalBarcode && input.value!==canonicalBarcode){
+        setIdentifierState(input,'error','Barcode must match this accessory product');
+        ok=false;
+      }
+    }
+  }
   for(const input of all){
     if(!input.value)continue;
+    const repeatableAccessoryBarcode=selectedItem?.kind==='accessory' && input.dataset.identifierSecondary!=='1' && identifierInputKind(input)==='barcode';
+    if(repeatableAccessoryBarcode)continue;
     if(seen.has(input.value)){
       setIdentifierState(input,'error','Duplicate in list');
       setIdentifierState(seen.get(input.value),'error','Duplicate in list');
@@ -2652,8 +2791,9 @@ async function validateIdentifiers(){
 $('openPasteIdentifiers').addEventListener('click',()=>{
   const dual=usesDualImei();
   const kind=identifierKind();
-  const label=dual?'IMEI 1 / IMEI 2':(kind==='serial'?'Serial Numbers':'IMEIs');
-  const singular=kind==='serial'?'serial number':'IMEI';
+  const accessory=selectedItem?.kind==='accessory';
+  const label=accessory?'Accessory Barcodes / Serials':(dual?'IMEI 1 / IMEI 2':(kind==='serial'?'Serial Numbers':'IMEIs'));
+  const singular=accessory?'barcode or serial number':(kind==='serial'?'serial number':'IMEI');
   $('pasteIdentifiersTitle').textContent='Paste '+label;
   $('pasteIdentifiersLabel').textContent=label;
   const help=$('pasteIdentifiersHelp');
@@ -2746,10 +2886,16 @@ form.addEventListener('submit',async e=>{
   if(isOwner && !$('branchSelect').value){$('branchSelect').focus();return;}
   if(canEditSelling&&$('sellingPriceInput')&&Number($('sellingPriceInput').value||0)<=0){$('sellingPriceInput').focus();return;}
   if(!(await validateIdentifiers()))return;
+  const receiveQty=Math.max(1,Number(quantity.value)||1);
+  const currentStock=variantCurrentStock(selectedVariant);
   $('confirmProduct').textContent=selectedItem.kind==='accessory'?selectedItem.label:`${selectedItem.label} • ${selectedVariant.specs}`;
   $('confirmBranch').textContent=isOwner?$('branchSelect').selectedOptions[0]?.textContent||'—':assignedBranchName;
-  $('confirmQuantity').textContent=(Number(quantity.value)||1)+' unit'+((Number(quantity.value)||1)===1?'':'s');
-  if(isOwner && $('confirmCost')) $('confirmCost').textContent=selectedVariant.costReady?money(selectedVariant.cost):'Not set'; const salePrice=canEditSelling&&$('sellingPriceInput')?Number($('sellingPriceInput').value||0):variantSelling(selectedVariant); $('confirmSelling').textContent=money(salePrice);
+  $('confirmQuantity').textContent=receiveQty+' unit'+(receiveQty===1?'':'s');
+  $('confirmCurrentStock').textContent=currentStock.toLocaleString();
+  $('confirmNewStock').textContent=(currentStock+receiveQty).toLocaleString();
+  if(isOwner && $('confirmCost')) $('confirmCost').textContent=selectedVariant.costReady?money(selectedVariant.cost):'Not set';
+  const salePrice=canEditSelling&&$('sellingPriceInput')?Number($('sellingPriceInput').value||0):variantSelling(selectedVariant);
+  $('confirmSelling').textContent=money(salePrice);
   const identifierInputs=[...document.querySelectorAll('[data-identifier-primary]')];
   const box=$('confirmIdentifiers');
   let identifierSummary=[];
@@ -2764,12 +2910,35 @@ form.addEventListener('submit',async e=>{
     identifierSummary=identifierInputs.map(i=>i.value.trim().toUpperCase()).filter(Boolean);
   }
   box.classList.toggle('hidden',!identifierSummary.length);
-  box.innerHTML=identifierSummary.length?`<strong>Device Identifiers</strong><span>${identifierSummary.map(esc).join(' • ')}</span>`:'';
-  const restoreCount=identifierInputs.filter(i=>i.dataset.restoreApproved==='1'&&i.dataset.restoreUnitId).length; const restoreNotice=$('confirmRestoreNotice'); restoreNotice?.classList.toggle('hidden',restoreCount===0); if(restoreCount>0){restoreNotice.querySelector('strong').textContent=`Restore ${restoreCount} existing unit${restoreCount===1?'':'s'}`;}
-  confirmModal.hidden=false; document.body.classList.add('modal-open');
+  box.innerHTML=identifierSummary.length?`<strong>${selectedItem.kind==='accessory'?'Accessory Identifier':'Device Identifiers'}</strong><span>${identifierSummary.map(esc).join(' • ')}</span>`:'';
+  const restoreCount=identifierInputs.filter(i=>i.dataset.restoreApproved==='1'&&i.dataset.restoreUnitId).length;
+  const restoreNotice=$('confirmRestoreNotice');
+  restoreNotice?.classList.toggle('hidden',restoreCount===0);
+  if(restoreCount>0)restoreNotice.querySelector('strong').textContent=`Restore ${restoreCount} existing unit${restoreCount===1?'':'s'}`;
+  $('confirmedField').value='0';
+  $('confirmStockAcknowledgement').checked=false;
+  $('confirmStockIn').disabled=true;
+  confirmModal.hidden=false;
+  document.body.classList.add('modal-open');
 });
-document.querySelectorAll('[data-confirm-close]').forEach(b=>b.addEventListener('click',()=>{confirmModal.hidden=true;document.body.classList.remove('modal-open');}));
-$('confirmStockIn').addEventListener('click',()=>{$('confirmedField').value='1';form.submit();});
+function closeStockConfirmation(){
+  confirmModal.hidden=true;
+  $('confirmedField').value='0';
+  $('confirmStockAcknowledgement').checked=false;
+  $('confirmStockIn').disabled=true;
+  document.body.classList.remove('modal-open');
+}
+document.querySelectorAll('[data-confirm-close]').forEach(b=>b.addEventListener('click',closeStockConfirmation));
+$('confirmStockAcknowledgement').addEventListener('change',e=>{$('confirmStockIn').disabled=!e.target.checked;});
+$('confirmStockIn').addEventListener('click',()=>{
+  if(!$('confirmStockAcknowledgement').checked)return;
+  const button=$('confirmStockIn');
+  button.disabled=true;
+  button.textContent='Saving…';
+  $('confirmedField').value='1';
+  if(typeof form.requestSubmit==='function')form.requestSubmit();
+  else form.submit();
+});
 
 if(presetProductId){
   for(const item of items){

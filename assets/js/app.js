@@ -284,7 +284,11 @@
       const colorField = form.querySelector('[data-variant-color-field]');
       const connectivityField = form.querySelector('[data-variant-connectivity-field]');
       const specNote = form.querySelector('[data-variant-spec-note]');
+      const unlockField = form.querySelector('[data-variant-unlock-field]');
+      const unlockActions = form.querySelector('[data-variant-unlock-actions]');
       const specsLocked = button.dataset.specsLocked === '1';
+      if (unlockField) unlockField.value = '0';
+      if (unlockActions) unlockActions.hidden = !specsLocked;
 
       const setSelectValue = (field, value='') => {
         if (!field) return;
@@ -311,9 +315,10 @@
         field.closest('.field')?.classList.toggle('field-locked', specsLocked);
       });
       if (specNote) {
+        specNote.classList.remove('unlocked');
         specNote.classList.toggle('locked', specsLocked);
         specNote.textContent = specsLocked
-          ? 'Variant specs are locked while active or sold units still use this variant. Remove or complete those units before changing the specs.'
+          ? 'Variant specs are locked because stock or history is attached. Branch Manager can use Unlock Variant to correct the specs without rewriting protected sales/transfer history.'
           : 'RAM, storage, color and connectivity can be corrected because no active or sold units are attached to this variant.';
       }
 
@@ -456,6 +461,31 @@
         setModelStep(modal, 1);
         modal.querySelector('[data-name-field]')?.focus();
       }
+      return;
+    }
+
+    const unlockButton = event.target.closest('[data-variant-unlock]');
+    if (unlockButton) {
+      const modal = unlockButton.closest('#masterConfigurationModal');
+      const form = modal?.querySelector('form');
+      if (!modal || !form) return;
+      event.preventDefault();
+      if (!window.confirm('Unlock this variant for correction? Existing sales and transfer history will remain protected.')) return;
+      const unlockField = form.querySelector('[data-variant-unlock-field]');
+      const specNote = form.querySelector('[data-variant-spec-note]');
+      if (unlockField) unlockField.value = '1';
+      form.querySelectorAll('[data-variant-ram-field],[data-variant-storage-field],[data-variant-color-field],[data-variant-connectivity-field]').forEach(field => {
+        field.disabled = false;
+        field.closest('.field')?.classList.remove('field-locked');
+      });
+      const actions = form.querySelector('[data-variant-unlock-actions]');
+      if (actions) actions.hidden = true;
+      if (specNote) {
+        specNote.classList.remove('locked');
+        specNote.classList.add('unlocked');
+        specNote.textContent = 'Unlocked for correction. Save Changes to apply the corrected specs. Protected historical units will stay linked to the old variant when needed.';
+      }
+      form.querySelector('[data-variant-ram-field],[data-variant-storage-field],[data-variant-color-field],[data-variant-connectivity-field]')?.focus();
       return;
     }
 
@@ -721,6 +751,7 @@
         headers: {'Content-Type':'application/json','Accept':'application/json'},
         body: JSON.stringify({
           _csrf: csrfToken(),
+          confirmed: true,
           product_id: productId,
           branch_id: activeBranchId,
           unit_ids: unitIds,

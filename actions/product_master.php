@@ -189,7 +189,7 @@ function handle_category(string $action, ?int $id): void {
 function handle_configuration(string $action, ?int $id): void {
     if (!$id) throw new RuntimeException('Variant not found.');
     $config = Database::query(
-        "SELECT p.id,p.brand_id,p.model_id,p.is_active,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,
+        "SELECT p.id,p.brand_id,p.model_id,p.category_id,p.product_name,p.barcode,p.low_stock_threshold,p.is_active,p.product_type,p.ram,p.storage,p.color,p.connectivity,p.cost_price,p.selling_price,
                 pm.device_type,b.name AS brand_name
          FROM products p
          JOIN product_models pm ON pm.id=p.model_id
@@ -202,16 +202,25 @@ function handle_configuration(string $action, ?int $id): void {
     if ($action === 'edit') {
         $role = Auth::user()['role'] ?? '';
         $userId = (int)(Auth::user()['id'] ?? 0);
+        $unlockRequested = in_array(strtolower(trim((string)($_POST['unlock_specs'] ?? '0'))), ['1','true','yes'], true);
+        $canUnlockSpecs = $role === 'branch_manager';
 
-        // Specs stay locked only while operational or sold units still depend on this variant.
-        // Adjustment-out / defective / returned units remain in audit history but no longer block correcting specs.
+        // Specs are normally locked while operational/historical units depend on this variant.
+        // A Branch Manager may explicitly unlock a correction. The correction helper protects
+        // sold/transferred history by splitting active stock into a corrected canonical variant
+        // when rewriting the current product row would alter protected historical records.
         $lockedUnitCount = (int)Database::query(
             "SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status IN ('available','reserved','sold','transferred')",
             [$id]
         )->fetchColumn();
         $specsLocked = $lockedUnitCount > 0;
 
-        if (!$specsLocked) {
+        $shouldProcessSpecs = !$specsLocked || ($unlockRequested && $canUnlockSpecs);
+        if ($unlockRequested && !$canUnlockSpecs) {
+            throw new RuntimeException('Only the Branch Manager can unlock a locked variant for correction.');
+        }
+
+        if ($shouldProcessSpecs) {
             $isApple = strcasecmp(trim((string)$config['brand_name']), 'APPLE') === 0;
             $storage = normalize_variant_capacity($_POST['storage'] ?? '');
             $ram = $isApple ? null : normalize_variant_capacity($_POST['ram'] ?? '');
@@ -229,26 +238,36 @@ function handle_configuration(string $action, ?int $id): void {
                 throw new RuntimeException('Please select tablet connectivity.');
             }
 
-            $duplicate = variant_find_semantic_existing(
-                (string)$config['product_type'],
-                (int)$config['brand_id'],
-                (int)$config['model_id'],
-                $ram,
-                $storage,
-                $connectivity,
-                $color,
-                (int)$id
-            );
-            if ($duplicate) {
-                throw new RuntimeException((int)$duplicate['is_active']
-                    ? 'Another variant already uses the same RAM, storage, color and connectivity.'
-                    : 'The same variant already exists in Archived Products. Restore that variant instead.');
-            }
+            $sameSpecs = variant_specs_match_values($config, $ram, $storage, $connectivity, $color);
+            if (!$sameSpecs) {
+                $duplicate = variant_find_semantic_existing(
+                    (string)$config['product_type'],
+                    (int)$config['brand_id'],
+                    (int)$config['model_id'],
+                    $ram,
+                    $storage,
+                    $connectivity,
+                    $color,
+                    (int)$id
+                );
 
-            Database::query(
-                'UPDATE products SET ram=?,storage=?,color=?,connectivity=? WHERE id=?',
-                [$ram,$storage,$color,$connectivity,$id]
-            );
+                if ($duplicate && !(int)$duplicate['is_active']) {
+                    throw new RuntimeException('The corrected variant already exists in Archived Products. Ask the Owner to restore it first.');
+                }
+
+                if ($specsLocked && $unlockRequested) {
+                    $id = apply_locked_variant_correction($config, $duplicate ?: null, $ram, $storage, $connectivity, $color, $userId);
+                    $config['id'] = $id;
+                } else {
+                    if ($duplicate) {
+                        throw new RuntimeException('Another active variant already uses the same RAM, storage, color and connectivity.');
+                    }
+                    Database::query(
+                        'UPDATE products SET ram=?,storage=?,color=?,connectivity=? WHERE id=?',
+                        [$ram,$storage,$color,$connectivity,$id]
+                    );
+                }
+            }
         }
 
         if (Auth::isOwner()) {
@@ -340,6 +359,124 @@ function handle_configuration(string $action, ?int $id): void {
     } else {
         throw new RuntimeException('Invalid variant action.');
     }
+}
+
+function variant_specs_match_values(array $config, ?string $ram, string $storage, ?string $connectivity, string $color): bool {
+    $norm = static fn($value): string => mb_strtoupper(trim((string)$value), 'UTF-8');
+    return $norm($config['ram'] ?? '') === $norm($ram ?? '')
+        && $norm($config['storage'] ?? '') === $norm($storage)
+        && $norm($config['connectivity'] ?? '') === $norm($connectivity ?? '')
+        && $norm($config['color'] ?? '') === $norm($color);
+}
+
+function apply_locked_variant_correction(array $source, ?array $existingTarget, ?string $ram, string $storage, ?string $connectivity, string $color, int $userId): int {
+    $sourceId = (int)$source['id'];
+
+    $protectedHistory = (int)Database::query(
+        "SELECT
+            (SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND status IN ('sold','transferred')) +
+            (SELECT COUNT(*) FROM sale_items WHERE product_id=?) +
+            (SELECT COUNT(*) FROM inventory_transfers WHERE product_id=?)",
+        [$sourceId,$sourceId,$sourceId]
+    )->fetchColumn();
+
+    // When there is no protected sold/transfer history and no canonical target already
+    // exists, correcting the current row is safe and keeps current unit IDs untouched.
+    if ($protectedHistory === 0 && !$existingTarget) {
+        Database::query(
+            'UPDATE products SET ram=?,storage=?,color=?,connectivity=? WHERE id=?',
+            [$ram,$storage,$color,$connectivity,$sourceId]
+        );
+        Security::audit('catalog.variant_unlocked_corrected', 'product', $sourceId, [
+            'mode' => 'in_place',
+            'old_specs' => [
+                'ram' => $source['ram'] ?? null,
+                'storage' => $source['storage'] ?? null,
+                'color' => $source['color'] ?? null,
+                'connectivity' => $source['connectivity'] ?? null,
+            ],
+            'new_specs' => compact('ram','storage','color','connectivity'),
+        ]);
+        return $sourceId;
+    }
+
+    $targetId = $existingTarget ? (int)$existingTarget['id'] : 0;
+    if ($targetId <= 0) {
+        Database::query(
+            'INSERT INTO products (product_type,brand_id,model_id,category_id,product_name,ram,storage,connectivity,color,barcode,cost_price,selling_price,low_stock_threshold,is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)',
+            [
+                $source['product_type'],
+                $source['brand_id'],
+                $source['model_id'],
+                $source['category_id'] ?? null,
+                $source['product_name'] ?? null,
+                $ram,
+                $storage,
+                $connectivity,
+                $color,
+                $source['barcode'] ?? null,
+                $source['cost_price'] ?? 0,
+                $source['selling_price'] ?? 0,
+                $source['low_stock_threshold'] ?? 5,
+            ]
+        );
+        $targetId = (int)Database::connection()->lastInsertId();
+
+        $priceRows = Database::query('SELECT branch_id,selling_price FROM branch_product_prices WHERE product_id=?', [$sourceId])->fetchAll();
+        foreach ($priceRows as $priceRow) {
+            save_branch_selling_price($targetId, (int)$priceRow['branch_id'], (float)$priceRow['selling_price'], $userId ?: null);
+        }
+    }
+
+    // Move only operational units to the corrected canonical variant. Sold and
+    // transferred units stay on the historical source variant.
+    $moveRows = Database::query(
+        "SELECT id FROM inventory_units WHERE product_id=? AND status IN ('available','reserved') FOR UPDATE",
+        [$sourceId]
+    )->fetchAll();
+    $moveIds = array_values(array_map(static fn($row) => (int)$row['id'], $moveRows));
+
+    if ($moveIds) {
+        $marks = implode(',', array_fill(0, count($moveIds), '?'));
+        Database::query(
+            "UPDATE inventory_units SET product_id=? WHERE id IN ($marks)",
+            array_merge([$targetId], $moveIds)
+        );
+        Database::query(
+            "UPDATE stock_movements SET product_id=? WHERE unit_id IN ($marks)",
+            array_merge([$targetId], $moveIds)
+        );
+    }
+
+    // If the target already existed, preserve any branch price not yet configured there.
+    $priceRows = Database::query('SELECT branch_id,selling_price FROM branch_product_prices WHERE product_id=?', [$sourceId])->fetchAll();
+    foreach ($priceRows as $priceRow) {
+        $exists = Database::query('SELECT id FROM branch_product_prices WHERE product_id=? AND branch_id=? LIMIT 1', [$targetId,(int)$priceRow['branch_id']])->fetchColumn();
+        if (!$exists) save_branch_selling_price($targetId, (int)$priceRow['branch_id'], (float)$priceRow['selling_price'], $userId ?: null);
+    }
+
+    $catalogDeletedReady = (bool)Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
+    if ($catalogDeletedReady) {
+        Database::query('UPDATE products SET is_active=0,catalog_deleted_at=COALESCE(catalog_deleted_at,NOW()),catalog_deleted_by=COALESCE(catalog_deleted_by,?) WHERE id=?', [$userId ?: null,$sourceId]);
+    } else {
+        Database::query('UPDATE products SET is_active=0 WHERE id=?', [$sourceId]);
+    }
+
+    Security::audit('catalog.variant_unlocked_corrected', 'product', $targetId, [
+        'mode' => $existingTarget ? 'merged_into_existing' : 'split_for_history',
+        'source_variant_id' => $sourceId,
+        'moved_active_unit_count' => count($moveIds),
+        'protected_history_count' => $protectedHistory,
+        'old_specs' => [
+            'ram' => $source['ram'] ?? null,
+            'storage' => $source['storage'] ?? null,
+            'color' => $source['color'] ?? null,
+            'connectivity' => $source['connectivity'] ?? null,
+        ],
+        'new_specs' => compact('ram','storage','color','connectivity'),
+    ]);
+
+    return $targetId;
 }
 
 function merge_variant_typo_records(int $sourceId, int $targetId): void {
