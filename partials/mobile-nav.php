@@ -6,6 +6,7 @@ if ($isSystemAdminControl) {
         ['system-admin-dashboard','dashboard','Home'],
         ['system-admin-users','users','Accounts'],
         ['system-admin-history','movement','History'],
+        ['system-admin-deleted-records','trash','Deleted'],
         ['system-admin-data-reset','trash','Data Reset'],
         ['security-logs','shield','Logs'],
     ];

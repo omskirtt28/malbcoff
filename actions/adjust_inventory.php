@@ -46,7 +46,7 @@ $quantity = filter_var($payload['quantity'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $direction = strtolower(trim((string)($payload['direction'] ?? 'decrease')));
 $direction = in_array($direction, ['increase','decrease'], true) ? $direction : 'decrease';
 $actionMode = strtolower(trim((string)($payload['action_mode'] ?? 'remove_units')));
-$actionMode = in_array($actionMode, ['quantity_adjustment','remove_units','correct_identifier'], true) ? $actionMode : 'remove_units';
+$actionMode = in_array($actionMode, ['quantity_adjustment','remove_units','edit_serial','correct_identifier'], true) ? $actionMode : 'remove_units';
 $correctionUnitId = filter_var($payload['unit_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $correctedImei = normalize_adjust_identifier($payload['imei'] ?? '');
 $correctedImei2 = normalize_adjust_identifier($payload['imei2'] ?? '');
@@ -69,17 +69,17 @@ if ($productId <= 0 || $branchId <= 0) {
     echo json_encode(['error' => 'Select a valid product and branch.']);
     exit;
 }
-if (!isset($reasons[$reason])) {
+if ($actionMode !== 'edit_serial' && !isset($reasons[$reason])) {
     http_response_code(422);
     echo json_encode(['error' => 'Select a reason for the inventory adjustment.']);
     exit;
 }
-if ($reason === 'other' && $notes === '') {
+if ($actionMode !== 'edit_serial' && $reason === 'other' && $notes === '') {
     http_response_code(422);
     echo json_encode(['error' => 'Add a short note when using Other as the reason.']);
     exit;
 }
-if ($direction === 'increase' && !in_array($reason, ['stock_correction','other'], true)) {
+if ($actionMode !== 'edit_serial' && $direction === 'increase' && !in_array($reason, ['stock_correction','other'], true)) {
     http_response_code(422);
     echo json_encode(['error' => 'Use Stock Correction or Other when increasing accessory stock.']);
     exit;
@@ -122,13 +122,16 @@ try {
     if (!$branch) throw new RuntimeException('Branch not found.');
 
     $reference = 'ADJ-' . date('Ymd-His') . '-' . strtoupper(bin2hex(random_bytes(2)));
-    $reasonLabel = $reasons[$reason]['label'];
+    $reasonLabel = $actionMode === 'edit_serial' ? 'Serial Correction' : $reasons[$reason]['label'];
     $directionLabel = $direction === 'increase' ? 'Increase' : 'Decrease';
-    $movementNote = $directionLabel . ' — ' . $reasonLabel . ($notes !== '' ? ' — ' . $notes : '');
+    $movementNote = $actionMode === 'edit_serial'
+        ? 'Serial Correction'
+        : $directionLabel . ' — ' . $reasonLabel . ($notes !== '' ? ' — ' . $notes : '');
     $actorId = Auth::actorId() ?: (int)(Auth::user()['id'] ?? 0);
     $effectiveUserId = (int)(Auth::user()['id'] ?? 0);
     $changed = 0;
     $identifierCorrected = false;
+    $serialCorrected = false;
     $correctionChanges = [];
     $correctedUnitId = 0;
     $productType = (string)$product['product_type'];
@@ -173,7 +176,72 @@ try {
             $changed = $quantity;
         }
     } elseif (in_array($productType, ['phone','tablet'], true)) {
-        if ($actionMode === 'correct_identifier') {
+        if ($actionMode === 'edit_serial') {
+            if ($correctionUnitId <= 0) {
+                throw new RuntimeException('Select one available device unit to correct.');
+            }
+            if ($correctedSerial === '') {
+                throw new RuntimeException('Enter the corrected Serial Number.');
+            }
+
+            $row = Database::query(
+                "SELECT id,status,serial_no,imei,imei2
+                 FROM inventory_units
+                 WHERE id=? AND product_id=? AND branch_id=?
+                 LIMIT 1 FOR UPDATE",
+                [$correctionUnitId, $productId, $branchId]
+            )->fetch();
+
+            if (!$row) {
+                throw new RuntimeException('The selected unit no longer belongs to this branch or product. Refresh and try again.');
+            }
+            if (($row['status'] ?? '') !== 'available') {
+                throw new RuntimeException('Only an available unit can have its Serial Number corrected.');
+            }
+
+            $oldSerial = normalize_adjust_identifier($row['serial_no'] ?? '');
+            $oldImei = normalize_adjust_identifier($row['imei'] ?? '');
+            $oldImei2 = normalize_adjust_identifier($row['imei2'] ?? '');
+            if ($oldSerial === $correctedSerial) {
+                throw new RuntimeException('Enter a different Serial Number before saving.');
+            }
+            if ($correctedSerial === $oldImei || $correctedSerial === $oldImei2) {
+                throw new RuntimeException('Serial Number must not duplicate this unit’s IMEI.');
+            }
+
+            $duplicateId = Database::query(
+                "SELECT id
+                 FROM inventory_units
+                 WHERE id<>?
+                   AND (imei=? OR imei2=? OR serial_no=?)
+                 LIMIT 1 FOR UPDATE",
+                [$correctionUnitId, $correctedSerial, $correctedSerial, $correctedSerial]
+            )->fetchColumn();
+            if ($duplicateId) {
+                throw new RuntimeException('Serial Number is already assigned to another inventory unit.');
+            }
+
+            $updated = Database::query(
+                "UPDATE inventory_units
+                 SET serial_no=?
+                 WHERE id=? AND product_id=? AND branch_id=? AND status='available'",
+                [$correctedSerial, $correctionUnitId, $productId, $branchId]
+            );
+            if ($updated->rowCount() !== 1) {
+                throw new RuntimeException('Inventory changed while you were correcting the Serial Number. Refresh and try again.');
+            }
+
+            $correctionChanges[] = 'Serial: ' . ($oldSerial !== '' ? $oldSerial : '—') . ' -> ' . $correctedSerial;
+            $correctionNote = 'Serial Correction — ' . implode(' | ', $correctionChanges);
+            Database::query(
+                'INSERT INTO stock_movements (product_id,unit_id,branch_id,movement_type,quantity,reference_no,notes,created_by) VALUES (?,?,?,?,?,?,?,?)',
+                [$productId,$correctionUnitId,$branchId,'adjustment',0,$reference,$correctionNote,$actorId]
+            );
+
+            $serialCorrected = true;
+            $correctedUnitId = $correctionUnitId;
+            $changed = 0;
+        } elseif ($actionMode === 'correct_identifier') {
             if ($correctionUnitId <= 0) {
                 throw new RuntimeException('Select one available device unit to correct.');
             }
@@ -314,21 +382,26 @@ try {
 
     $pdo->commit();
 
-    Security::audit($identifierCorrected ? 'inventory.identifier_corrected' : 'inventory.adjusted', 'product', $productId, [
+    $auditEvent = $serialCorrected
+        ? 'inventory.serial_corrected'
+        : ($identifierCorrected ? 'inventory.identifier_corrected' : 'inventory.adjusted');
+    Security::audit($auditEvent, 'product', $productId, [
         'reference_no' => $reference,
         'branch_id' => $branchId,
-        'action_mode' => $identifierCorrected ? 'correct_identifier' : ($productType === 'accessory' ? 'quantity_adjustment' : 'remove_units'),
-        'direction' => $identifierCorrected ? 'none' : $direction,
+        'action_mode' => $serialCorrected ? 'edit_serial' : ($identifierCorrected ? 'correct_identifier' : ($productType === 'accessory' ? 'quantity_adjustment' : 'remove_units')),
+        'direction' => ($serialCorrected || $identifierCorrected) ? 'none' : $direction,
         'quantity' => $changed,
-        'unit_id' => $identifierCorrected ? $correctedUnitId : null,
-        'identifier_changes' => $identifierCorrected ? $correctionChanges : null,
-        'reason' => $reason,
+        'unit_id' => ($serialCorrected || $identifierCorrected) ? $correctedUnitId : null,
+        'identifier_changes' => ($serialCorrected || $identifierCorrected) ? $correctionChanges : null,
+        'reason' => $serialCorrected ? null : $reason,
         'actor_user_id' => $actorId,
         'effective_user_id' => $effectiveUserId,
         'effective_role' => $effectiveRole,
     ]);
 
-    if ($identifierCorrected) {
+    if ($serialCorrected) {
+        $message = 'Device Serial Number corrected. Available stock quantity was not changed.';
+    } elseif ($identifierCorrected) {
         $message = 'Device IMEI / Serial corrected. Available stock quantity was not changed.';
     } else {
         $verb = $direction === 'increase' ? 'added to' : 'removed from';

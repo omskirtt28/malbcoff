@@ -41,6 +41,16 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         unset($params['status']);
     }
 
+    // Deleted Records intentionally reuses the already-established /system-admin
+    // route. Some production hosts keep an older .htaccess during patch-only
+    // uploads, which can make a brand-new clean URL return Apache 404 before
+    // PHP is reached. Using the existing System Admin route avoids that
+    // dependency while preserving a clean browser URL.
+    if ($route === 'system-admin-deleted-records') {
+        $route = 'system-admin-dashboard';
+        $params = ['view' => 'deleted-records'] + $params;
+    }
+
     $paths = [
         'dashboard' => '/',
         'pos' => '/pos',
@@ -58,6 +68,7 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         'system-admin-dashboard' => '/system-admin',
         'system-admin-users' => '/system-admin-users',
         'system-admin-history' => '/system-admin-history',
+        'system-admin-deleted-records' => '/system-admin-deleted-records',
         'security-logs' => '/security-logs',
         'system-admin-data-reset' => '/system-admin-data-reset',
         'login' => '/login',

@@ -19,6 +19,7 @@ $allowedPages = [
     'system-admin-dashboard' => 'System Admin',
     'system-admin-users' => 'User Accounts',
     'system-admin-history' => 'Impersonation History',
+    'system-admin-deleted-records' => 'Deleted Records',
     'security-logs' => 'Security Logs',
     'system-admin-data-reset' => 'Data Reset',
 ];
@@ -38,6 +39,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && is_legacy_script_request('index.php'
 }
 
 $requestedPage = (string)($_GET['page'] ?? '');
+
+// Deleted Records is served through the established /system-admin route so it
+// keeps working even when production .htaccess has not yet been refreshed with
+// a dedicated rewrite rule.
+if (
+    $requestedPage === 'system-admin-dashboard'
+    && (string)($_GET['view'] ?? '') === 'deleted-records'
+) {
+    $requestedPage = 'system-admin-deleted-records';
+}
+
 if (Auth::isSystemAdmin() && !Auth::isImpersonating() && ($requestedPage === '' || $requestedPage === 'dashboard')) {
     $requestedPage = 'system-admin-dashboard';
 }
@@ -62,6 +74,7 @@ $pageRoles = [
     'system-admin-dashboard' => ['system_admin'],
     'system-admin-users' => ['system_admin'],
     'system-admin-history' => ['system_admin'],
+    'system-admin-deleted-records' => ['system_admin'],
     'security-logs' => ['system_admin'],
     'system-admin-data-reset' => ['system_admin'],
 ];

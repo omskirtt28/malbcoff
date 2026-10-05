@@ -5,6 +5,7 @@ $canForwardStock = in_array($inventoryRole, ['branch_manager','inventory'], true
 $canSystemAdjustInventory = Auth::actorIsSystemAdmin();
 $canBranchAdjustInventory = $inventoryRole === 'branch_manager' && (Auth::branchId() ?: 0) > 0;
 $canAdjustInventory = $canSystemAdjustInventory || $canBranchAdjustInventory;
+$canDeleteDeviceInventory = $canAdjustInventory;
 $userBranchId = Auth::branchId() ?: null;
 $ownerScope = Auth::isOwner() ? current_branch_scope() : null;
 
@@ -321,6 +322,7 @@ $resetHref = app_url('inventory', $resetParams);
     $typeLabel = inventory_type_label($row['product_type']);
     $isOwnBranch = !$userBranchId ? false : ((int)$row['branch_id'] === (int)$userBranchId);
     $canAdjustThisRow = $canAdjustInventory && (Auth::isSystemAdmin() || $isOwnBranch) && in_array((string)$row['product_type'], ['phone','tablet','accessory'], true);
+    $canDeleteThisRow = $canDeleteDeviceInventory && (Auth::isSystemAdmin() || $isOwnBranch) && in_array((string)$row['product_type'], ['phone','tablet'], true);
     $stockDateParts = inventory_stock_date_parts($row['last_stock_in'] ?? null);
     $statusLabel = $low ? 'Low Stock' : 'In Stock';
 ?>
@@ -366,6 +368,7 @@ $resetHref = app_url('inventory', $resetParams);
             <?php endif; ?>
         <?php else: ?><span class="table-subtext">Summary only</span><?php endif; ?>
         <?php if($canAdjustThisRow): ?><button type="button" class="btn btn-outline btn-sm inventory-adjust-btn" data-system-stock-adjust data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e((string)$row['product_type']) ?>" data-branch-id="<?= (int)$row['branch_id'] ?>" data-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Adjust</button><?php endif; ?>
+        <?php if($canDeleteThisRow): ?><button type="button" class="btn btn-danger-outline btn-sm inventory-delete-btn" data-delete-device-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>" data-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Delete</button><?php endif; ?>
         <?php if($canForwardStock && $isOwnBranch): ?><button type="button" class="btn btn-primary btn-sm inventory-forward-btn" data-forward-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-name="<?= e($mainName) ?>" data-brand="<?= e($brandName) ?>" data-model="<?= e($row['product_type']==='accessory' ? $mainName : (string)$row['model_name']) ?>" data-specs="<?= e(inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e($row['product_type']) ?>" data-source-branch-id="<?= (int)$row['branch_id'] ?>" data-source-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Forward</button><?php endif; ?>
     </div>
 </td>
@@ -572,6 +575,7 @@ $resetHref = app_url('inventory', $resetParams);
                     <div class="stock-adjust-device-mode-grid">
                         <label class="field"><span>Adjustment Type <b>*</b></span><select data-system-adjust-device-mode>
                             <option value="remove_units">Remove Incorrectly Received Unit</option>
+                            <option value="edit_serial">Edit Serial Number</option>
                             <option value="correct_identifier">Correct IMEI / Serial</option>
                         </select><small>Remove only the exact wrong unit, or correct its identifier without changing stock quantity.</small></label>
                     </div>
@@ -594,22 +598,31 @@ $resetHref = app_url('inventory', $resetParams);
                         <div class="variant-adjust-units system-correct-unit-list" data-system-correct-unit-list>
                             <div class="loading-state">Loading available units…</div>
                         </div>
-                        <div class="device-identifier-correction" data-system-correct-fields hidden>
-                            <div class="device-identifier-current">
-                                <span>Selected Unit</span>
-                                <strong data-system-correct-current-label>—</strong>
+                        <div data-system-correct-fields hidden>
+                            <div class="device-serial-correction" data-system-serial-correction hidden>
+                                <div class="device-serial-grid">
+                                    <label class="field"><span>Current Serial Number</span><input type="text" data-system-current-serial readonly></label>
+                                    <label class="field"><span>New Serial Number <b>*</b></span><input type="text" maxlength="120" autocomplete="off" data-system-new-serial placeholder="Enter corrected Serial Number"></label>
+                                </div>
+                                <div class="serial-correction-info"><strong>Serial correction only</strong><span>This updates the selected device unit only. Available stock quantity will not change. Duplicate Serial Numbers are blocked and the correction is recorded in the audit trail.</span></div>
                             </div>
-                            <div class="device-identifier-grid">
-                                <label class="field"><span>IMEI 1</span><input type="text" maxlength="80" autocomplete="off" data-system-correct-imei placeholder="IMEI 1"></label>
-                                <label class="field"><span>IMEI 2</span><input type="text" maxlength="80" autocomplete="off" data-system-correct-imei2 placeholder="IMEI 2 (optional)"></label>
-                                <label class="field"><span>Serial Number</span><input type="text" maxlength="120" autocomplete="off" data-system-correct-serial placeholder="Serial Number"></label>
+                            <div class="device-identifier-correction" data-system-identifier-correction hidden>
+                                <div class="device-identifier-current">
+                                    <span>Selected Unit</span>
+                                    <strong data-system-correct-current-label>—</strong>
+                                </div>
+                                <div class="device-identifier-grid">
+                                    <label class="field"><span>IMEI 1</span><input type="text" maxlength="80" autocomplete="off" data-system-correct-imei placeholder="IMEI 1"></label>
+                                    <label class="field"><span>IMEI 2</span><input type="text" maxlength="80" autocomplete="off" data-system-correct-imei2 placeholder="IMEI 2 (optional)"></label>
+                                    <label class="field"><span>Serial Number</span><input type="text" maxlength="120" autocomplete="off" data-system-correct-serial placeholder="Serial Number"></label>
+                                </div>
+                                <small class="device-identifier-help">Stock quantity will not change. The corrected identifier will stay attached to the same inventory unit and history.</small>
                             </div>
-                            <small class="device-identifier-help">Stock quantity will not change. The corrected identifier will stay attached to the same inventory unit and history.</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="variant-adjust-reason">
+                <div class="variant-adjust-reason" data-system-adjust-reason-block>
                     <label class="field"><span>Reason <b>*</b></span><select data-system-adjust-reason>
                         <option value="">Select reason</option>
                         <option value="stock_correction">Stock Correction</option>
@@ -678,7 +691,8 @@ $resetHref = app_url('inventory', $resetParams);
     return (state.units||[]).find(unit=>Number(unit.unit_id)===id)||null;
   }
   function deviceMode(){
-    return q('[data-system-adjust-device-mode]')?.value==='correct_identifier'?'correct_identifier':'remove_units';
+    const value=q('[data-system-adjust-device-mode]')?.value||'remove_units';
+    return ['remove_units','edit_serial','correct_identifier'].includes(value)?value:'remove_units';
   }
   function adjustmentCount(){
     if(!state)return 0;
@@ -705,12 +719,22 @@ $resetHref = app_url('inventory', $resetParams);
   }
   function syncDeviceMode(){
     if(!state||state.type==='accessory')return;
-    const correction=deviceMode()==='correct_identifier';
+    const mode=deviceMode();
+    const correction=mode!=='remove_units';
+    const serialOnly=mode==='edit_serial';
     q('[data-system-device-remove]').hidden=correction;
     q('[data-system-device-correct]').hidden=!correction;
-    q('[data-system-adjust-subtitle]').textContent=correction
-      ?'Select one available unit, then correct its IMEI or Serial Number. Stock quantity will stay the same.'
-      :'Select the exact IMEI/Serial units that were entered incorrectly.';
+    q('[data-system-serial-correction]').hidden=!serialOnly;
+    q('[data-system-identifier-correction]').hidden=serialOnly||!correction;
+    q('[data-system-adjust-reason-block]').hidden=serialOnly;
+    q('#systemAdjustTitle').textContent=serialOnly?'Device Serial Correction':'Device Stock Adjustment';
+    q('[data-system-adjust-subtitle]').textContent=serialOnly
+      ?'Correct the exact Serial Number entered incorrectly without changing stock quantity.'
+      :(mode==='correct_identifier'
+        ?'Select one available unit, then correct its IMEI or Serial Number. Stock quantity will stay the same.'
+        :'Select the exact IMEI/Serial units that were entered incorrectly.');
+    q('[data-system-adjust-review-button]').textContent=serialOnly?'Review Serial Correction':'Review Adjustment';
+    q('[data-system-adjust-confirm]').textContent=serialOnly?'Confirm Serial Correction':'Confirm Stock Adjustment';
     setError('',false);
   }
   function populateCorrectionFields(){
@@ -725,10 +749,13 @@ $resetHref = app_url('inventory', $resetParams);
     const currentLabel=unit.serial_no||unit.imei||unit.imei2||('Unit #'+unit.unit_id);
     if(label)label.textContent=currentLabel;
     q('[data-system-correct-current-label]').textContent=currentLabel;
+    q('[data-system-current-serial]').value=unit.serial_no||'—';
+    q('[data-system-new-serial]').value=unit.serial_no||'';
     q('[data-system-correct-imei]').value=unit.imei||'';
     q('[data-system-correct-imei2]').value=unit.imei2||'';
     q('[data-system-correct-serial]').value=unit.serial_no||'';
     fields.hidden=false;
+    syncDeviceMode();
   }
   function renderDeviceUnits(rows){
     state.units=rows||[];
@@ -787,6 +814,8 @@ $resetHref = app_url('inventory', $resetParams);
     q('[data-system-adjust-ack]').checked=false;
     q('[data-system-adjust-confirm]').disabled=true;
     q('[data-system-adjust-confirm]').textContent='Confirm Stock Adjustment';
+    q('[data-system-adjust-review-button]').textContent='Review Adjustment';
+    if(state&&state.type!=='accessory')syncDeviceMode();
     setError('',false);setError('',true);
   }
   function close(){
@@ -823,6 +852,8 @@ $resetHref = app_url('inventory', $resetParams);
     qty.value='1';qty.max=String(Math.max(1,state.available));
     q('[data-system-correct-fields]').hidden=true;
     q('[data-system-correct-selected-label]').textContent='No unit selected';
+    q('[data-system-current-serial]').value='';
+    q('[data-system-new-serial]').value='';
     syncAccessoryDirection();
     syncDeviceMode();
     showEditor();
@@ -850,16 +881,18 @@ $resetHref = app_url('inventory', $resetParams);
     if(!state)return;
     setError('',false);
     state.pendingCorrection=null;
+    const mode=state.type==='accessory'?'quantity_adjustment':deviceMode();
+    const serialOnly=mode==='edit_serial';
     const reason=q('[data-system-adjust-reason]').value;
     const note=q('[data-system-adjust-note]').value.trim();
-    if(!reason){q('[data-system-adjust-reason]').focus();setError('Select a reason before reviewing the adjustment.');return;}
-    if(reason==='other'&&!note){q('[data-system-adjust-note]').focus();setError('Add a short note when using Other.');return;}
+    if(!serialOnly&&!reason){q('[data-system-adjust-reason]').focus();setError('Select a reason before reviewing the adjustment.');return;}
+    if(!serialOnly&&reason==='other'&&!note){q('[data-system-adjust-note]').focus();setError('Add a short note when using Other.');return;}
 
     const reasonSelect=q('[data-system-adjust-reason]');
     q('[data-system-review-product]').textContent=state.product;
     q('[data-system-review-branch]').textContent=state.branch;
     q('[data-system-review-current]').textContent=state.available.toLocaleString();
-    q('[data-system-review-reason]').textContent=reasonSelect.selectedOptions[0]?.textContent||reason;
+    q('[data-system-review-reason]').textContent=serialOnly?'Serial Correction':(reasonSelect.selectedOptions[0]?.textContent||reason);
     const unitsBox=q('[data-system-review-units]');
 
     if(state.type==='accessory'){
@@ -874,7 +907,7 @@ $resetHref = app_url('inventory', $resetParams);
       q('[data-system-adjust-confirm-help]').textContent=direction==='increase'?'This will add the reviewed quantity and create an Adjustment IN history record.':'This will reduce available inventory and create an Adjustment OUT history record.';
       unitsBox.classList.add('hidden');
       unitsBox.innerHTML='';
-    }else if(deviceMode()==='remove_units'){
+    }else if(mode==='remove_units'){
       const units=selectedUnits();
       if(!units.length){setError('Select at least one exact IMEI/Serial unit.');return;}
       if(units.length>state.available){setError('The selected units are higher than current available stock.');return;}
@@ -884,6 +917,24 @@ $resetHref = app_url('inventory', $resetParams);
       q('[data-system-adjust-confirm-help]').textContent='This will remove the selected available unit(s) and create an Adjustment OUT history record.';
       unitsBox.classList.remove('hidden');
       unitsBox.innerHTML=`<strong>Units to Remove</strong><span>${units.map(unit=>esc(unit.identifier)).join(' • ')}</span>`;
+    }else if(mode==='edit_serial'){
+      const unit=selectedCorrectionUnit();
+      if(!unit){setError('Select one exact unit to correct.');return;}
+      const oldSerial=normalizeIdentifier(unit.serial_no||'');
+      const newSerial=normalizeIdentifier(q('[data-system-new-serial]').value);
+      const imei=normalizeIdentifier(unit.imei||'');
+      const imei2=normalizeIdentifier(unit.imei2||'');
+      if(!newSerial){q('[data-system-new-serial]').focus();setError('Enter the corrected Serial Number.');return;}
+      if(newSerial===oldSerial){q('[data-system-new-serial]').focus();setError('Enter a different Serial Number before reviewing.');return;}
+      if(newSerial===imei||newSerial===imei2){q('[data-system-new-serial]').focus();setError('Serial Number must not duplicate this unit’s IMEI.');return;}
+      state.pendingCorrection={mode:'edit_serial',unitId:Number(unit.unit_id),serial:newSerial,oldSerial};
+      q('[data-system-review-change-label]').textContent='Quantity Change';
+      q('[data-system-review-remove]').textContent='0';
+      q('[data-system-review-after]').textContent=state.available.toLocaleString();
+      q('[data-system-adjust-confirm-help]').textContent='This will update the selected Serial Number only. Available stock quantity will not change.';
+      q('[data-system-adjust-confirm]').textContent='Confirm Serial Correction';
+      unitsBox.classList.remove('hidden');
+      unitsBox.innerHTML=`<strong>Serial Number Correction</strong><span>Current: ${esc(oldSerial||'—')}<br>New: ${esc(newSerial)}</span>`;
     }else{
       const unit=selectedCorrectionUnit();
       if(!unit){setError('Select one exact unit to correct.');return;}
@@ -895,7 +946,7 @@ $resetHref = app_url('inventory', $resetParams);
       if(new Set(values).size!==values.length){setError('IMEI 1, IMEI 2, and Serial Number must not duplicate each other.');return;}
       const old={imei:normalizeIdentifier(unit.imei||''),imei2:normalizeIdentifier(unit.imei2||''),serial:normalizeIdentifier(unit.serial_no||'')};
       if(imei===old.imei&&imei2===old.imei2&&serial===old.serial){setError('No identifier change was detected. Edit the IMEI or Serial Number first.');return;}
-      state.pendingCorrection={unitId:Number(unit.unit_id),imei,imei2,serial,old};
+      state.pendingCorrection={mode:'correct_identifier',unitId:Number(unit.unit_id),imei,imei2,serial,old};
       const changes=[];
       if(imei!==old.imei)changes.push(`IMEI 1: ${esc(old.imei||'—')} → ${esc(imei||'—')}`);
       if(imei2!==old.imei2)changes.push(`IMEI 2: ${esc(old.imei2||'—')} → ${esc(imei2||'—')}`);
@@ -921,22 +972,23 @@ $resetHref = app_url('inventory', $resetParams);
     if(!state||!q('[data-system-adjust-ack]').checked)return;
     const button=q('[data-system-adjust-confirm]');
     const units=selectedUnits();
-    const correction=state.type!=='accessory'&&deviceMode()==='correct_identifier'?state.pendingCorrection:null;
+    const mode=state.type==='accessory'?'quantity_adjustment':deviceMode();
+    const correction=mode==='edit_serial'||mode==='correct_identifier'?state.pendingCorrection:null;
     const payload={
       _csrf:csrf,
       confirmed:true,
       product_id:state.productId,
       branch_id:state.branchId,
-      action_mode:state.type==='accessory'?'quantity_adjustment':(correction?'correct_identifier':'remove_units'),
-      unit_ids:state.type==='accessory'||correction?[]:units.map(unit=>unit.id),
+      action_mode:mode,
+      unit_ids:mode==='remove_units'?units.map(unit=>unit.id):[],
       unit_id:correction?correction.unitId:0,
-      imei:correction?correction.imei:'',
-      imei2:correction?correction.imei2:'',
+      imei:mode==='correct_identifier'&&correction?correction.imei:'',
+      imei2:mode==='correct_identifier'&&correction?correction.imei2:'',
       serial_no:correction?correction.serial:'',
-      quantity:state.type==='accessory'?adjustmentCount():(correction?0:units.length),
+      quantity:state.type==='accessory'?adjustmentCount():(mode==='remove_units'?units.length:0),
       direction:adjustmentDirection(),
-      reason:q('[data-system-adjust-reason]').value,
-      notes:q('[data-system-adjust-note]').value.trim()
+      reason:mode==='edit_serial'?'':q('[data-system-adjust-reason]').value,
+      notes:mode==='edit_serial'?'':q('[data-system-adjust-note]').value.trim()
     };
     button.disabled=true;button.textContent='Saving…';setError('',true);
     try{
@@ -953,3 +1005,177 @@ $resetHref = app_url('inventory', $resetParams);
 })();
 </script>
 <?php endif; ?>
+
+<?php if ($canDeleteDeviceInventory): ?>
+<div class="modal" id="deleteDeviceInventoryModal" hidden>
+    <div class="modal-backdrop" data-delete-device-close></div>
+    <div class="modal-dialog inventory-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDeviceInventoryTitle">
+        <div class="modal-header">
+            <div>
+                <span class="eyebrow delete-eyebrow">INVENTORY CONTROL</span>
+                <h2 id="deleteDeviceInventoryTitle">Delete Inventory Unit</h2>
+                <p class="modal-subtitle">Permanently remove an incorrectly received available device unit.</p>
+            </div>
+            <button type="button" class="icon-button" data-delete-device-close aria-label="Close">×</button>
+        </div>
+
+        <div class="modal-body inventory-delete-body" data-delete-device-editor>
+            <div class="delete-summary-grid">
+                <div><span>Product</span><strong data-delete-device-product>—</strong></div>
+                <div><span>Branch</span><strong data-delete-device-branch>—</strong></div>
+                <div><span>Current Available</span><strong data-delete-device-current>0</strong></div>
+            </div>
+
+            <div class="delete-warning-panel">
+                <div class="delete-warning-icon">!</div>
+                <div>
+                    <strong>Permanent inventory deletion</strong>
+                    <span>Use this only for a unit entered under the wrong variant or with an incorrect inventory record. Sold, transferred, reserved, returned, or otherwise historical units are blocked.</span>
+                </div>
+            </div>
+
+            <div class="delete-unit-section">
+                <div class="delete-unit-toolbar">
+                    <div><strong>Select exact unit(s)</strong><span>Only currently available units are shown.</span></div>
+                    <b data-delete-device-selected-count>0 selected</b>
+                </div>
+                <div class="variant-adjust-units delete-unit-list" data-delete-device-units>
+                    <div class="loading-state">Loading available units…</div>
+                </div>
+            </div>
+
+            <div class="delete-impact-card">
+                <div><span>Current Stock</span><strong data-delete-device-impact-current>0</strong></div>
+                <div class="delete-impact-danger"><span>Selected to Delete</span><strong data-delete-device-impact-remove>0</strong></div>
+                <div class="delete-impact-safe"><span>Stock After Delete</span><strong data-delete-device-impact-after>0</strong></div>
+            </div>
+            <div class="alert alert-error hidden" data-delete-device-error></div>
+        </div>
+
+        <div class="modal-body inventory-delete-body" data-delete-device-review hidden>
+            <div class="delete-review-heading">
+                <span class="eyebrow delete-eyebrow">FINAL REVIEW</span>
+                <h3>Confirm permanent deletion</h3>
+                <p>Review the exact unit identifiers before deleting them from inventory.</p>
+            </div>
+            <div class="delete-summary-grid">
+                <div><span>Product</span><strong data-delete-review-product>—</strong></div>
+                <div><span>Branch</span><strong data-delete-review-branch>—</strong></div>
+                <div><span>Stock After Delete</span><strong data-delete-review-after>0</strong></div>
+            </div>
+            <div class="delete-review-units"><strong>Units to Delete</strong><div data-delete-review-units>—</div></div>
+            <label class="stock-confirm-acknowledgement delete-confirm-ack">
+                <input type="checkbox" data-delete-device-ack>
+                <span><strong>I confirm these are incorrect inventory entries.</strong><small>The selected available inventory unit(s) and their erroneous stock-in/correction movement records will be permanently removed. This cannot be undone.</small></span>
+            </label>
+            <div class="alert alert-error hidden" data-delete-device-review-error></div>
+        </div>
+
+        <div class="modal-actions delete-device-editor-actions" data-delete-device-editor-actions>
+            <button class="btn btn-secondary" type="button" data-delete-device-close>Cancel</button>
+            <button class="btn btn-danger" type="button" data-delete-device-review-button disabled>Review Delete</button>
+        </div>
+        <div class="modal-actions delete-device-review-actions" data-delete-device-review-actions hidden>
+            <button class="btn btn-secondary" type="button" data-delete-device-back>Back</button>
+            <button class="btn btn-danger" type="button" data-delete-device-confirm disabled>Delete Inventory Unit</button>
+        </div>
+    </div>
+</div>
+<script>
+(()=>{
+  const modal=document.getElementById('deleteDeviceInventoryModal');
+  if(!modal)return;
+  const csrf=<?= json_encode(Csrf::token(), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
+  const q=(sel,root=modal)=>root.querySelector(sel);
+  const qa=(sel,root=modal)=>Array.from(root.querySelectorAll(sel));
+  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+  let state=null;
+
+  function selectedUnits(){
+    if(!state)return[];
+    const selected=new Set(qa('[data-delete-device-unit]:checked').map(input=>Number(input.value)));
+    return state.units.filter(unit=>selected.has(Number(unit.unit_id)));
+  }
+  function identifierFor(unit){return unit.serial_no||unit.imei||unit.imei2||unit.identifier||('Unit #'+unit.unit_id);}
+  function detailsFor(unit){
+    const parts=[];
+    if(unit.imei)parts.push('IMEI 1: '+unit.imei);
+    if(unit.imei2)parts.push('IMEI 2: '+unit.imei2);
+    if(unit.serial_no)parts.push('Serial: '+unit.serial_no);
+    return parts.join(' • ')||'Available unit';
+  }
+  function setError(message,review=false){
+    const box=q(review?'[data-delete-device-review-error]':'[data-delete-device-error]');
+    box.textContent=message||'';box.classList.toggle('hidden',!message);
+  }
+  function syncSelection(){
+    const count=selectedUnits().length;
+    q('[data-delete-device-selected-count]').textContent=count+' selected';
+    q('[data-delete-device-impact-current]').textContent=state.available.toLocaleString();
+    q('[data-delete-device-impact-remove]').textContent=count.toLocaleString();
+    q('[data-delete-device-impact-after]').textContent=Math.max(0,state.available-count).toLocaleString();
+    q('[data-delete-device-review-button]').disabled=count<1;
+    setError('');
+  }
+  function renderUnits(rows){
+    state.units=rows||[];
+    const list=q('[data-delete-device-units]');
+    if(!state.units.length){
+      list.innerHTML='<div class="empty-state small"><strong>No deletable available units</strong><span>This item may already have history that prevents deletion.</span></div>';
+      syncSelection();return;
+    }
+    list.innerHTML=state.units.map(unit=>{
+      const identifier=identifierFor(unit);const type=unit.serial_no?'SN':'IMEI';
+      return `<label class="variant-adjust-unit delete-unit-option"><input type="checkbox" value="${Number(unit.unit_id)}" data-delete-device-unit><span class="variant-adjust-unit-index">${type}</span><span class="variant-adjust-unit-copy"><strong>${esc(identifier)}</strong><small>${esc(detailsFor(unit))}</small></span></label>`;
+    }).join('');
+    qa('[data-delete-device-unit]').forEach(input=>input.addEventListener('change',syncSelection));
+    syncSelection();
+  }
+  async function loadUnits(){
+    q('[data-delete-device-units]').innerHTML='<div class="loading-state">Loading available units…</div>';
+    try{
+      const params=new URLSearchParams({product_id:String(state.productId),branch_id:String(state.branchId)});
+      const response=await fetch('actions/product_units.php?'+params.toString(),{headers:{'Accept':'application/json'}});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Unable to load available units.');
+      renderUnits(data.rows||[]);
+    }catch(error){q('[data-delete-device-units]').innerHTML=`<div class="alert alert-error">${esc(error.message||'Unable to load units.')}</div>`;}
+  }
+  function showEditor(){
+    q('[data-delete-device-editor]').hidden=false;q('[data-delete-device-review]').hidden=true;
+    q('[data-delete-device-editor-actions]').hidden=false;q('[data-delete-device-review-actions]').hidden=true;
+    q('[data-delete-device-ack]').checked=false;q('[data-delete-device-confirm]').disabled=true;
+    setError('');setError('',true);
+  }
+  function close(){modal.hidden=true;document.body.classList.remove('modal-open');state=null;}
+  async function open(button){
+    state={productId:Number(button.dataset.productId||0),branchId:Number(button.dataset.branchId||0),product:button.dataset.product||'Product',branch:button.dataset.branch||'Branch',available:Number(button.dataset.available||0),units:[]};
+    q('[data-delete-device-product]').textContent=state.product;q('[data-delete-device-branch]').textContent=state.branch;q('[data-delete-device-current]').textContent=state.available.toLocaleString();
+    q('[data-delete-device-impact-current]').textContent=state.available.toLocaleString();q('[data-delete-device-impact-remove]').textContent='0';q('[data-delete-device-impact-after]').textContent=state.available.toLocaleString();
+    showEditor();modal.hidden=false;document.body.classList.add('modal-open');await loadUnits();
+  }
+
+  document.querySelectorAll('[data-delete-device-inventory]').forEach(button=>button.addEventListener('click',()=>open(button)));
+  qa('[data-delete-device-close]').forEach(button=>button.addEventListener('click',close));
+  q('[data-delete-device-review-button]').addEventListener('click',()=>{
+    const units=selectedUnits();if(!units.length){setError('Select at least one exact available unit to delete.');return;}
+    q('[data-delete-review-product]').textContent=state.product;q('[data-delete-review-branch]').textContent=state.branch;q('[data-delete-review-after]').textContent=Math.max(0,state.available-units.length).toLocaleString();
+    q('[data-delete-review-units]').innerHTML=units.map(unit=>`<div class="delete-review-unit"><b>${esc(identifierFor(unit))}</b><span>${esc(detailsFor(unit))}</span></div>`).join('');
+    q('[data-delete-device-editor]').hidden=true;q('[data-delete-device-review]').hidden=false;q('[data-delete-device-editor-actions]').hidden=true;q('[data-delete-device-review-actions]').hidden=false;
+    q('[data-delete-device-ack]').checked=false;q('[data-delete-device-confirm]').disabled=true;setError('',true);
+  });
+  q('[data-delete-device-back]').addEventListener('click',showEditor);
+  q('[data-delete-device-ack]').addEventListener('change',event=>{q('[data-delete-device-confirm]').disabled=!event.target.checked;});
+  q('[data-delete-device-confirm]').addEventListener('click',async()=>{
+    const units=selectedUnits();if(!state||!units.length||!q('[data-delete-device-ack]').checked)return;
+    const button=q('[data-delete-device-confirm]');button.disabled=true;button.textContent='Deleting…';setError('',true);
+    try{
+      const response=await fetch('actions/delete_inventory_unit.php',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({_csrf:csrf,confirmed:true,product_id:state.productId,branch_id:state.branchId,unit_ids:units.map(unit=>Number(unit.unit_id))})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||'Unable to delete inventory unit.');window.location.reload();
+    }catch(error){button.disabled=false;button.textContent=units.length>1?'Delete Inventory Units':'Delete Inventory Unit';setError(error.message||'Unable to delete inventory unit.',true);}
+  });
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!modal.hidden)close();});
+})();
+</script>
+<?php endif; ?>
+
