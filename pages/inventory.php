@@ -273,7 +273,7 @@ $resetHref = app_url('inventory', $resetParams);
             ? ($ownerScope ? 'View stock currently assigned to the selected branch.' : 'View available stock across all branches.')
             : 'View available stock and stock-in dates across all branches. Your branch is highlighted.' ?></p>
     </div>
-    <div class="form-action-group"><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#inventoryScanSearch" data-scan-mode="auto" data-scan-label="Scan Inventory Item" data-scan-submit>Scan Search</button><?php if($canReceiveStock): ?><a class="btn btn-primary" href="<?= e($receiveHref) ?>"><?= icon('stock') ?> Receive Stock</a><?php endif; ?></div>
+    <div class="form-action-group"><?php if($canForwardStock): ?><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#forwardInventoryScanValue" data-scan-mode="auto" data-scan-label="Scan IMEI / Serial to Forward">Scan to Forward</button><input id="forwardInventoryScanValue" type="hidden"><span id="forwardInventoryScanStatus" role="status" aria-live="polite"></span><?php endif; ?><button class="btn btn-outline" type="button" data-device-scan data-scan-target="#inventoryScanSearch" data-scan-mode="auto" data-scan-label="Scan Inventory Item" data-scan-submit>Scan Search</button><?php if($canReceiveStock): ?><a class="btn btn-primary" href="<?= e($receiveHref) ?>"><?= icon('stock') ?> Receive Stock</a><?php endif; ?></div>
 </section>
 
 <nav class="inventory-view-tabs" aria-label="Inventory view">
@@ -468,6 +468,11 @@ $resetHref = app_url('inventory', $resetParams);
                 </div>
 
                 <div class="forward-units-section" data-forward-units-wrap hidden>
+                    <div class="forward-scan-tools">
+                        <label class="field"><span>Find by IMEI / Serial Number</span><input id="forwardIdentifierSearch" type="text" maxlength="120" autocomplete="off" placeholder="Scan or enter IMEI 1, IMEI 2 or serial"></label>
+                        <div class="forward-scan-buttons"><button type="button" class="btn btn-outline" data-device-scan data-scan-target="#forwardIdentifierSearch" data-scan-mode="auto" data-scan-label="Scan Unit to Forward">Scan IMEI / Serial</button><button type="button" class="btn btn-outline" data-forward-find>Find Unit</button><button type="button" class="btn btn-ghost" data-forward-show-all>Show All Units</button></div>
+                        <small data-forward-scan-status role="status" aria-live="polite">Scan to find the matching variant and select its exact unit.</small>
+                    </div>
                     <div class="forward-unit-heading">
                         <div>
                             <strong>Select Unit(s) <b>*</b></strong>
@@ -497,6 +502,18 @@ $resetHref = app_url('inventory', $resetParams);
     </div>
 </div>
 <?php endif; ?>
+
+<style>
+.forward-scan-tools{display:grid;gap:9px;padding:12px;margin-bottom:14px;background:#f7faff;border:1px solid #dce8fa;border-radius:12px}
+.forward-scan-tools .field{margin:0;min-width:0}.forward-scan-tools input{width:100%;min-width:0}
+.forward-scan-buttons{display:flex;gap:8px;flex-wrap:wrap}.forward-scan-tools small{color:#667085;overflow-wrap:anywhere}
+.forward-scan-tools small.is-error,#forwardInventoryScanStatus.is-error{color:#b42318}
+#forwardInventoryScanStatus{font-size:12px;max-width:320px;overflow-wrap:anywhere}
+.forward-unit-option.forward-scan-match{outline:2px solid #1670ea;background:#eff6ff}
+.forward-unit-option[hidden]{display:none!important}
+.shared-device-scanner{z-index:1700}
+@media(max-width:600px){.forward-scan-buttons .btn{flex:1 1 130px;white-space:normal;min-height:44px}}
+</style>
 
 <?php if($inventoryView==='accessories'): ?>
 <div class="modal" id="accessoryStockModal" hidden>
@@ -1178,4 +1195,3 @@ $resetHref = app_url('inventory', $resetParams);
 })();
 </script>
 <?php endif; ?>
-

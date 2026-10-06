@@ -19,6 +19,17 @@
   const qa = (selector, root = modal) => Array.from(root.querySelectorAll(selector));
   let current = null;
   let opening = false;
+  let viewSession = 0;
+  let scanRequest = 0;
+  let lookupPending = 0;
+  let forwarding = false;
+
+  const scanStatus = (message, error = false, outside = false) => {
+    const box = outside ? document.getElementById('forwardInventoryScanStatus') : q('[data-forward-scan-status]');
+    if (!box) return;
+    box.textContent = message;
+    box.classList.toggle('is-error', error);
+  };
 
   const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -63,7 +74,7 @@
     if (quantity) quantity.value = String(selectedUnits().length);
 
     const selectAll = q('[data-forward-select-all]');
-    const checks = qa('input[name="unit_ids[]"]');
+    const checks = qa('input[name="unit_ids[]"]').filter(input => !input.closest('.forward-unit-option').hidden);
     if (selectAll) {
       const allChecked = checks.length > 0 && checks.every(input => input.checked);
       selectAll.textContent = allChecked ? 'Clear All' : 'Select All';
@@ -72,6 +83,8 @@
   };
 
   const closeModal = () => {
+    if (forwarding) return;
+    viewSession++; scanRequest++; lookupPending = 0;
     modal.hidden = true;
     modal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('modal-open');
@@ -105,13 +118,35 @@
       </label>`;
   };
 
-  const loadUnits = async () => {
+  const selectScannedUnit = (unitId, identifier) => {
+    const checks = qa('input[name="unit_ids[]"]');
+    const match = checks.find(input => Number(input.value) === Number(unitId));
+    if (!match) {
+      scanStatus('That unit is no longer in this available list. Reopen the transfer and scan again.', true);
+      return false;
+    }
+    match.checked = true;
+    checks.forEach(input => {
+      const row = input.closest('.forward-unit-option');
+      row.hidden = input !== match;
+      row.classList.toggle('forward-scan-match', input === match);
+    });
+    syncSelectedQuantity();
+    const search = q('#forwardIdentifierSearch');
+    if (search) search.value = identifier;
+    scanStatus(`Matched ${identifier}. Unit selected; ${selectedUnits().length} selected in this variant. Choose the destination, then Forward Inventory.`);
+    match.closest('.forward-unit-option').scrollIntoView({ block: 'nearest' });
+    return true;
+  };
+
+  const loadUnits = async (matched = null) => {
     const list = q('[data-forward-units]');
-    if (!list || !current) return;
+    const context = current;
+    if (!list || !context) return false;
 
     list.innerHTML = '<div class="loading-state">Loading available units…</div>';
     try {
-      const url = `actions/product_units.php?product_id=${encodeURIComponent(current.productId)}&branch_id=${encodeURIComponent(current.sourceBranchId)}`;
+      const url = `actions/product_units.php?product_id=${encodeURIComponent(context.productId)}&branch_id=${encodeURIComponent(context.sourceBranchId)}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
@@ -125,12 +160,13 @@
         throw new Error('The unit list returned an invalid response.');
       }
 
+      if (current !== context || modal.hidden) return false;
       if (!response.ok) throw new Error(data.error || 'Unable to load available units.');
       const rows = Array.isArray(data.rows) ? data.rows : [];
 
       if (!rows.length) {
         list.innerHTML = '<div class="empty-state small"><strong>No available units</strong><span>Refresh the inventory and try again.</span></div>';
-        return;
+        return false;
       }
 
       list.innerHTML = rows.map(unitLine).join('');
@@ -138,13 +174,16 @@
         input.addEventListener('change', syncSelectedQuantity);
       });
 
-      if (rows.length === 1) {
+      if (!matched && rows.length === 1) {
         const only = q('input[name="unit_ids[]"]');
         if (only) only.checked = true;
       }
       syncSelectedQuantity();
+      return matched && matched.request === scanRequest ? selectScannedUnit(matched.unit_id, matched.identifier) : true;
     } catch (error) {
+      if (current !== context || modal.hidden) return false;
       list.innerHTML = `<div class="alert alert-error">${escapeHtml(error.message || 'Unable to load available units.')}</div>`;
+      return false;
     }
   };
 
@@ -161,18 +200,25 @@
     specs: String(button.dataset.specs || '—')
   });
 
-  const openModal = async button => {
-    if (!button || button.disabled || opening) return;
+  const openModal = async (button, matched = null) => {
+    if ((!button && !matched) || button?.disabled || opening || forwarding) return false;
     opening = true;
+    const session = ++viewSession;
+    if (!matched) scanRequest++;
+    const destination = matched && !modal.hidden ? q('select[name="destination_branch_id"]')?.value || '' : '';
+    const note = matched && !modal.hidden ? q('textarea[name="notes"]')?.value || '' : '';
 
     try {
-      current = readButtonData(button);
+      current = matched ? matched.product : readButtonData(button);
       if (!current.productId || !current.sourceBranchId) {
         throw new Error('This inventory row is missing transfer information. Refresh the page and try again.');
       }
 
       form.reset();
       clearErrors();
+      scanStatus('Scan to find the matching variant and select its exact unit.');
+      if (destination) q('select[name="destination_branch_id"]').value = destination;
+      if (note) q('textarea[name="notes"]').value = note;
 
       const productIdField = q('input[name="product_id"]');
       const productName = q('[data-forward-product-name], [data-forward-product]');
@@ -205,23 +251,78 @@
       document.body.classList.add('modal-open');
 
       requestAnimationFrame(() => {
-        q('select[name="destination_branch_id"]')?.focus();
+        if (session === viewSession && !modal.hidden) q('select[name="destination_branch_id"]')?.focus();
       });
 
       if (current.productType !== 'accessory') {
         if (!q('[data-forward-units]')) {
           throw new Error('The unit selection area is missing. Replace pages/inventory.php with the matching patch file.');
         }
-        await loadUnits();
+        return await loadUnits(matched);
       }
+      return true;
     } catch (error) {
+      if (session !== viewSession) return false;
       console.error('Unable to open Forward Inventory:', error);
       if (!modal.hidden) showGeneralError(error.message || 'Unable to open Forward Inventory.');
       else window.alert(error.message || 'Unable to open Forward Inventory.');
+      return false;
     } finally {
-      opening = false;
+      if (session === viewSession) opening = false;
     }
   };
+
+  const findScannedUnit = async (raw, outside = false) => {
+    if (forwarding) return;
+    if (opening) { scanStatus('Wait for the available unit list, then scan again.', true, outside); return; }
+    const value = String(raw || '').replace(/\s+/g, '').toUpperCase();
+    if (!value || value.length > 120) { scanStatus('Enter the complete IMEI or Serial Number.', true, outside); return; }
+    const request = ++scanRequest;
+    lookupPending = request;
+    const context = current;
+    scanStatus('Finding the matching unit in your branch…', false, outside);
+    try {
+      const response = await fetch('actions/lookup_forward_unit.php?' + new URLSearchParams({ identifier: value }), {
+        headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store'
+      });
+      const data = await response.json();
+      if (request !== scanRequest || forwarding || (!outside && (modal.hidden || current !== context))) return;
+      if (!response.ok) throw new Error(data.error || 'Unable to find that unit.');
+      data.request = request;
+      let selected = false;
+      if (!outside && current && current.productId === data.product.productId && current.sourceBranchId === data.product.sourceBranchId) {
+        selected = selectScannedUnit(data.unit_id, value);
+      } else {
+        // A transfer contains one variant. Opening the matched variant starts
+        // its selection afresh while keeping the destination and notes.
+        selected = await openModal(null, data);
+      }
+      if (request !== scanRequest) return;
+      if (outside) scanStatus(selected ? 'Matching variant opened; scanned unit selected.' : 'Matching variant opened. Check the unit list before forwarding.', !selected, true);
+    } catch (error) {
+      if (request === scanRequest && !forwarding) scanStatus(error.message || 'Unable to find that unit.', true, outside);
+    } finally {
+      if (lookupPending === request) lookupPending = 0;
+    }
+  };
+
+  const search = q('#forwardIdentifierSearch');
+  q('[data-forward-find]')?.addEventListener('click', () => void findScannedUnit(search?.value));
+  search?.addEventListener('change', () => { if (!modal.hidden) void findScannedUnit(search.value); });
+  search?.addEventListener('input', () => { scanRequest++; });
+  search?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault(); event.stopPropagation();
+    void findScannedUnit(search.value);
+  });
+  document.getElementById('forwardInventoryScanValue')?.addEventListener('change', event => void findScannedUnit(event.target.value, true));
+  q('[data-forward-show-all]')?.addEventListener('click', () => {
+    scanRequest++;
+    qa('.forward-unit-option').forEach(row => { row.hidden = false; row.classList.remove('forward-scan-match'); });
+    if (search) search.value = '';
+    syncSelectedQuantity();
+    scanStatus(`${selectedUnits().length} selected. Scan another unit or select from this variant.`);
+  });
 
   /*
    * Capture phase intentionally runs before page/table click handlers.
@@ -242,7 +343,7 @@
       void openModal(event.target.closest('[data-forward-inventory]'));
       return;
     }
-    if (event.key === 'Escape' && !modal.hidden) closeModal();
+    if (event.key === 'Escape' && !modal.hidden && !document.querySelector('.shared-device-scanner:not([hidden])')) closeModal();
   }, true);
 
   qa('[data-forward-close]').forEach(button => {
@@ -254,7 +355,7 @@
 
   q('[data-forward-select-all]')?.addEventListener('click', event => {
     event.preventDefault();
-    const checks = qa('input[name="unit_ids[]"]');
+    const checks = qa('input[name="unit_ids[]"]').filter(input => !input.closest('.forward-unit-option').hidden);
     const allChecked = checks.length > 0 && checks.every(input => input.checked);
     checks.forEach(input => { input.checked = !allChecked; });
     syncSelectedQuantity();
@@ -272,7 +373,8 @@
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!current) return;
+    if (!current || opening || forwarding) return;
+    if (lookupPending) { showGeneralError('Wait for the scanned unit lookup to finish before forwarding.'); return; }
 
     clearErrors();
     const destinationControl = q('select[name="destination_branch_id"]');
@@ -309,6 +411,9 @@
     }
 
     if (invalid) return;
+    scanRequest++;
+    forwarding = true;
+    qa('button, input, select, textarea').forEach(control => { control.disabled = true; });
 
     const payload = {
       _csrf: csrf.value,
@@ -342,6 +447,8 @@
       submit.textContent = 'Forwarded';
       window.setTimeout(() => window.location.reload(), 450);
     } catch (error) {
+      forwarding = false;
+      qa('button, input, select, textarea').forEach(control => { control.disabled = false; });
       showGeneralError(error.message || 'Unable to forward inventory. Please try again.');
       submit.disabled = false;
       submit.textContent = originalText;
