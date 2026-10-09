@@ -64,6 +64,7 @@ $tables = [
 ];
 
 $counts = [];
+if(inventory_void_schema_ready())array_unshift($tables,'inventory_movement_voids');
 $pdo = Database::connection();
 
 try {

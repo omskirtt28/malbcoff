@@ -48,12 +48,13 @@ try {
     $stats['total_inventory'] = $unitTotal + $accessoryTotal;
 
     $movementWhere = $scope ? ' AND sm.branch_id=:branch' : '';
+    $activeMovementSql=inventory_active_movement_sql('sm');
     $stats['stock_in_today'] = (int)Database::query(
         "SELECT COALESCE(SUM(CASE WHEN quantity>0 THEN quantity ELSE 0 END),0) FROM stock_movements sm WHERE movement_type IN ('stock_in','transfer_in','return') AND DATE(created_at)=CURDATE() {$movementWhere}",
         $params
     )->fetchColumn();
     $stats['stock_out_today'] = abs((int)Database::query(
-        "SELECT COALESCE(SUM(CASE WHEN quantity<0 THEN quantity ELSE 0 END),0) FROM stock_movements sm WHERE movement_type IN ('stock_out','sale','transfer_out','defective') AND DATE(created_at)=CURDATE() {$movementWhere}",
+        "SELECT COALESCE(SUM(CASE WHEN quantity<0 THEN quantity ELSE 0 END),0) FROM stock_movements sm WHERE movement_type IN ('stock_out','sale','transfer_out','defective') AND DATE(created_at)=CURDATE() AND {$activeMovementSql} {$movementWhere}",
         $params
     )->fetchColumn());
 
@@ -61,7 +62,7 @@ try {
         $recent = Database::query(
             "SELECT sm.created_at,sm.movement_type,sm.quantity,b.name branch_name,COALESCE(CONCAT(br.name,' ',pm.name),p.product_name) product_label,p.ram,p.storage,p.connectivity,p.color
              FROM stock_movements sm JOIN products p ON p.id=sm.product_id LEFT JOIN brands br ON br.id=p.brand_id LEFT JOIN product_models pm ON pm.id=p.model_id JOIN branches b ON b.id=sm.branch_id
-             WHERE 1=1 {$movementWhere} ORDER BY sm.created_at DESC LIMIT 6",
+             WHERE {$activeMovementSql} {$movementWhere} ORDER BY sm.created_at DESC LIMIT 6",
             $params
         )->fetchAll();
     }

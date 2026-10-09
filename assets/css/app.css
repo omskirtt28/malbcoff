@@ -2872,7 +2872,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     width:100%;
     align-items:center;
   }
-  .inventory-table-devices .inventory-row-actions .btn{
+  .inventory-table-devices .inventory-row-actions .btn,
+  .inventory-table-accessories .inventory-row-actions .btn{
     width:100%;
     min-width:0;
     height:36px;
@@ -2882,31 +2883,47 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     white-space:nowrap;
     line-height:1;
   }
-  .inventory-table-devices .inventory-view-btn{padding-inline:6px}
-  .inventory-table-devices .inventory-forward-btn{min-width:0;margin-left:0;padding-inline:8px}
+  .inventory-table-devices .inventory-view-btn,
+  .inventory-table-accessories .inventory-view-btn{min-width:0;padding-inline:6px}
+  .inventory-table-devices .inventory-forward-btn,
+  .inventory-table-accessories .inventory-forward-btn{min-width:0;margin-left:0;padding-inline:8px;grid-column:auto}
 
-  .inventory-table-accessories .col-action{width:29%}
+  .inventory-table-accessories .col-product{width:16%}
+  .inventory-table-accessories .col-category{width:8%}
+  .inventory-table-accessories .col-identifier{width:10%}
+  .inventory-table-accessories .col-stock{width:7%}
+  .inventory-table-accessories .col-location{width:9%}
+  .inventory-table-accessories .col-date{width:10%}
+  .inventory-table-accessories .col-status{width:7%}
+  .inventory-table-accessories .col-action{width:33%}
   .inventory-table-accessories .inventory-row-actions{
     display:grid;
-    grid-template-columns:minmax(88px,1fr) minmax(58px,.65fr) minmax(70px,.8fr);
+    grid-template-columns:minmax(88px,1.05fr) minmax(58px,.68fr) minmax(58px,.68fr) minmax(70px,.8fr);
     gap:5px;
     width:100%;
+    align-items:center;
   }
 }
 @media (max-width:1100px){
-  .inventory-table.is-responsive-table .inventory-row-actions-device{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .inventory-table.is-responsive-table .inventory-row-actions-device .inventory-forward-btn{grid-column:auto}
+  .inventory-table.is-responsive-table .inventory-row-actions-device,
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .inventory-table.is-responsive-table .inventory-row-actions-device .inventory-forward-btn,
+  .inventory-table.is-responsive-table .inventory-row-actions-accessory .inventory-forward-btn{grid-column:auto}
 }
 @media (max-width:760px){
   .delete-summary-grid,.delete-impact-card{grid-template-columns:1fr}
   .inventory-delete-dialog{width:min(100%,calc(100vw - 20px))}
-  .inventory-row-actions-device{grid-template-columns:1fr 1fr!important}
-  .inventory-row-actions-device .inventory-forward-btn{grid-column:auto!important}
-  .inventory-row-actions-device .btn{min-height:42px}
+  .inventory-row-actions-device,
+  .inventory-row-actions-accessory{grid-template-columns:1fr 1fr!important}
+  .inventory-row-actions-device .inventory-forward-btn,
+  .inventory-row-actions-accessory .inventory-forward-btn{grid-column:auto!important}
+  .inventory-row-actions-device .btn,
+  .inventory-row-actions-accessory .btn{min-height:42px}
 }
 @media (max-width:480px){
   .delete-unit-toolbar{flex-direction:column}
-  .inventory-row-actions-device .inventory-view-btn{grid-column:1/-1}
+  .inventory-row-actions-device .inventory-view-btn,
+  .inventory-row-actions-accessory .inventory-view-btn{grid-column:1/-1}
 }
 
 

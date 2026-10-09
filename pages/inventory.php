@@ -369,6 +369,7 @@ $resetHref = app_url('inventory', $resetParams);
         <?php else: ?><span class="table-subtext">Summary only</span><?php endif; ?>
         <?php if($canAdjustThisRow): ?><button type="button" class="btn btn-outline btn-sm inventory-adjust-btn" data-system-stock-adjust data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e((string)$row['product_type']) ?>" data-branch-id="<?= (int)$row['branch_id'] ?>" data-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Adjust</button><?php endif; ?>
         <?php if($canDeleteThisRow): ?><button type="button" class="btn btn-danger-outline btn-sm inventory-delete-btn" data-delete-device-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>" data-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Delete</button><?php endif; ?>
+        <?php if($canDeleteDeviceInventory && (Auth::isSystemAdmin() || $isOwnBranch) && $row['product_type']==='accessory' && $qty>0): ?><button type="button" class="btn btn-danger-outline btn-sm inventory-delete-btn" data-delete-accessory-inventory data-product="<?= e($unitModalName) ?>" data-product-id="<?= (int)$row['id'] ?>" data-branch-id="<?= (int)$row['branch_id'] ?>" data-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Delete</button><?php endif; ?>
         <?php if($canForwardStock && $isOwnBranch): ?><button type="button" class="btn btn-primary btn-sm inventory-forward-btn" data-forward-inventory data-product="<?= e($unitModalName.' • '.inventory_specs($row)) ?>" data-product-name="<?= e($mainName) ?>" data-brand="<?= e($brandName) ?>" data-model="<?= e($row['product_type']==='accessory' ? $mainName : (string)$row['model_name']) ?>" data-specs="<?= e(inventory_specs($row)) ?>" data-product-id="<?= (int)$row['id'] ?>" data-product-type="<?= e($row['product_type']) ?>" data-source-branch-id="<?= (int)$row['branch_id'] ?>" data-source-branch="<?= e($row['branch_name']) ?>" data-available="<?= (int)$qty ?>">Forward</button><?php endif; ?>
     </div>
 </td>
@@ -1195,3 +1196,5 @@ $resetHref = app_url('inventory', $resetParams);
 })();
 </script>
 <?php endif; ?>
+
+<?php require __DIR__ . '/../partials/inventory-accessory-delete.php'; ?>

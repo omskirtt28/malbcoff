@@ -138,7 +138,7 @@ try {
     $totalTransactions = (int)($totals['transactions'] ?? 0);
     $totalSales = (float)($totals['total_sales'] ?? 0);
 
-    $itemWhere = ["sx.status='completed'", 'sx.created_at>=:item_from', 'sx.created_at<:item_to'];
+    $itemWhere = ["sx.status='completed'", 'sx.created_at>=:item_from', 'sx.created_at<:item_to',inventory_active_sale_item_sql('si')];
     $itemParams = ['item_from' => $fromBoundary, 'item_to' => $toBoundary];
     if ($branchId) {
         $itemWhere[] = 'sx.branch_id=:item_branch';
@@ -166,9 +166,10 @@ try {
     if ($pageNo > $totalPages) $pageNo = $totalPages;
     $offset = ($pageNo - 1) * $perPage;
 
+    $activeSaleItemSql=inventory_active_sale_item_sql('si');
     $recordSql = "SELECT s.id,s.sale_no,s.total,s.payment_method,s.payment_reference,s.amount_received,s.change_due,s.created_at,
                          b.name branch_name,b.code branch_code,u.name cashier_name,
-                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id=s.id) item_count
+                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id=s.id AND {$activeSaleItemSql}) item_count
                   FROM sales s
                   JOIN branches b ON b.id=s.branch_id
                   JOIN users u ON u.id=s.created_by
@@ -183,20 +184,20 @@ try {
             $selectedSale = Database::query(
                 "SELECT s.*,b.name branch_name,b.code branch_code,u.name cashier_name
                  FROM sales s JOIN branches b ON b.id=s.branch_id JOIN users u ON u.id=s.created_by
-                 WHERE s.id=? AND s.status='completed' LIMIT 1",
+                 WHERE s.id=? AND s.status IN ('completed','voided') LIMIT 1",
                 [$saleId]
             )->fetch() ?: null;
         } else {
             $selectedSale = Database::query(
                 "SELECT s.*,b.name branch_name,b.code branch_code,u.name cashier_name
                  FROM sales s JOIN branches b ON b.id=s.branch_id JOIN users u ON u.id=s.created_by
-                 WHERE s.id=? AND s.branch_id=? AND s.status='completed' LIMIT 1",
+                 WHERE s.id=? AND s.branch_id=? AND s.status IN ('completed','voided') LIMIT 1",
                 [$saleId, $branchId]
             )->fetch() ?: null;
         }
         if ($selectedSale) {
             $selectedItems = Database::query(
-                'SELECT item_name_snapshot,specs_snapshot,identifier_snapshot,quantity,unit_price,line_total FROM sale_items WHERE sale_id=? ORDER BY id',
+                'SELECT si.*,CASE WHEN '.inventory_active_sale_item_sql('si').' THEN 0 ELSE 1 END is_voided FROM sale_items si WHERE si.sale_id=? ORDER BY si.id',
                 [$saleId]
             )->fetchAll();
         }
@@ -286,8 +287,8 @@ foreach ($branches as $branch) {
     <div class="sales-detail-summary">
         <div><span>Payment</span><strong><?= e(sales_records_payment_label($selectedSale['payment_method'])) ?></strong></div>
         <div><span>Reference</span><strong><?= e($selectedSale['payment_reference'] ?: '—') ?></strong></div>
-        <div><span>Amount Received</span><strong><?= $selectedSale['amount_received'] !== null ? peso($selectedSale['amount_received']) : '—' ?></strong></div>
-        <div><span>Change</span><strong><?= peso($selectedSale['change_due']) ?></strong></div>
+        <div><span>Original Amount Received</span><strong><?= $selectedSale['amount_received'] !== null ? peso($selectedSale['amount_received']) : '—' ?></strong></div>
+        <div><span>Original Change</span><strong><?= peso($selectedSale['change_due']) ?></strong></div>
         <div class="sales-detail-total"><span>Total</span><strong><?= peso($selectedSale['total']) ?></strong></div>
     </div>
     <div class="table-wrap sales-detail-table-wrap">
@@ -300,7 +301,7 @@ foreach ($branches as $branch) {
                     <td><?= e($item['identifier_snapshot'] ?: '—') ?></td>
                     <td><?= number_format((int)$item['quantity']) ?></td>
                     <td><?= peso($item['unit_price']) ?></td>
-                    <td><strong><?= peso($item['line_total']) ?></strong></td>
+                    <td><strong><?= peso($item['line_total']) ?></strong><?php if($item['is_voided']): ?><span class="sales-cell-sub">Voided — excluded from Total</span><?php endif; ?></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

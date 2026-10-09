@@ -1,4 +1,24 @@
 <?php
+function inventory_void_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try { return $ready = (bool)Database::query("SHOW TABLES LIKE 'inventory_movement_voids'")->fetchColumn(); }
+    catch (Throwable $e) { return $ready = false; }
+}
+
+function inventory_active_movement_sql(string $alias = 'sm'): string
+{
+    return inventory_void_schema_ready()
+        ? "NOT EXISTS (SELECT 1 FROM inventory_movement_voids vm WHERE vm.movement_id={$alias}.id)" : '1=1';
+}
+
+function inventory_active_sale_item_sql(string $alias = 'si'): string
+{
+    return inventory_void_schema_ready()
+        ? "NOT EXISTS (SELECT 1 FROM inventory_movement_voids vi WHERE vi.sale_item_id={$alias}.id)" : '1=1';
+}
+
 function e(?string $value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
