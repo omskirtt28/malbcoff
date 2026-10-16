@@ -168,9 +168,12 @@
     if (!target?.isConnected || modal.hidden) return;
     const value = normalize(valueInput.value);
     if (!valid(value)) { status(mode.value === 'imei' ? 'Enter a valid 15-digit IMEI.' : 'Enter the printed value before using it.', true); message.scrollIntoView({ block: 'nearest' }); return; }
-    const field = target, submit = submitSearch;
+    const field = target, submit = submitSearch, again = opener?.hasAttribute('data-scan-continuous') ? opener : null;
     field.value = value; close(); field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true })); field.focus();
+    field.dispatchEvent(new CustomEvent('devicescan', { bubbles: true, detail: { value } }));
     if (submit) field.form?.requestSubmit();
+    // Continuous mode: reopen the camera so the next item can be scanned straight away.
+    if (again) setTimeout(() => again.isConnected && open(again), 250);
   });
   valueInput.addEventListener('input', () => {
     // A late OCR result must not replace a value the user is already correcting.

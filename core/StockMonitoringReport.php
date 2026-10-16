@@ -33,13 +33,10 @@ final class StockMonitoringReport
             }
         }
 
-        $displayBranches = $branches;
-        if ($isOwner && $branchId !== null) {
-            $displayBranches = array_values(array_filter(
-                $branches,
-                static fn(array $branch): bool => (int)$branch['id'] === $branchId
-            ));
-        }
+        // 'branch' = single-branch view (every branch user, or owner with one branch selected);
+        // 'matrix' = owner with All Branches (one column per active branch + Overall Total).
+        $view = $branchId !== null ? 'branch' : 'matrix';
+        $displayBranches = $view === 'matrix' ? $branches : [];
 
         $startAt = $date . ' 00:00:00';
         $endAt = date('Y-m-d 00:00:00', strtotime($date . ' +1 day'));
@@ -110,7 +107,7 @@ final class StockMonitoringReport
         $branchTotals = [];
         foreach ($displayBranches as $branch) $branchTotals[(int)$branch['id']] = 0;
 
-        if ($isOwner && $rows) {
+        if ($view === 'matrix' && $rows) {
             $productIds = array_values(array_unique(array_map(
                 static fn(array $row): int => (int)$row['product_id'],
                 $rows
@@ -118,10 +115,6 @@ final class StockMonitoringReport
             $marks = implode(',', array_fill(0, count($productIds), '?'));
             $branchWhere = ['sm.created_at < ?', "sm.product_id IN ($marks)"];
             $branchParams = [$endAt, ...$productIds];
-            if ($branchId !== null) {
-                $branchWhere[] = 'sm.branch_id = ?';
-                $branchParams[] = $branchId;
-            }
             $endingRows = Database::query(
                 "SELECT sm.product_id,sm.branch_id,COALESCE(SUM(sm.quantity),0) ending_stock
                  FROM stock_movements sm
@@ -154,6 +147,7 @@ final class StockMonitoringReport
 
         return [
             'is_owner' => $isOwner,
+            'view' => $view,
             'role' => $role,
             'date' => $date,
             'formatted_date' => date('M d, Y', strtotime($date)),

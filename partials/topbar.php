@@ -31,7 +31,7 @@ $actor = Auth::actorUser();
 
     <div class="topbar-actions">
         <?php if (!empty($app['maintenance_mode']) && (Auth::isOwner() || Auth::actorIsSystemAdmin())): ?><span class="maintenance-owner-chip"><?= icon('alert') ?> Maintenance Mode</span><?php endif; ?>
-        <?php if (!$isSystemAdminControl && Auth::isOwner() && !in_array((string)($page ?? ''), ['products','users'], true)): ?>
+        <?php if (!$isSystemAdminControl && Auth::isOwner() && !in_array((string)($page ?? ''), ['products','users','stock-monitoring'], true)): ?>
             <div class="branch-switcher"><?= icon('branch') ?><select aria-label="Branch scope" onchange="window.location='<?= e(owner_branch_filter_url($page, null)) ?>' + (this.value ? '?branch=' + encodeURIComponent(this.value) : '')"><option value="">All Branches</option><?php foreach ($branches as $branch): ?><option value="<?= (int)$branch['id'] ?>" <?= $scopeBranchId === (int)$branch['id'] ? 'selected' : '' ?>><?= e($branch['name']) ?></option><?php endforeach; ?></select></div>
         <?php else: ?><div class="branch-chip topbar-branch-chip"><?= icon($isSystemAdminControl ? 'shield' : 'branch') ?><span><?= e($scopeName) ?></span></div><?php endif; ?>
 

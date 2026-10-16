@@ -91,9 +91,24 @@
 
     persist();
     syncPaymentFields();
+    syncResultCards();
   }
 
-  function addItem(item) {
+  function syncResultCards() {
+    resultsBox.querySelectorAll('.pos-result-card').forEach(card => {
+      const inCart = cart.find(row => row.key === card.dataset.key);
+      const label = card.querySelector('.pos-result-add');
+      if (!label) return;
+      card.classList.toggle('is-added', !!inCart);
+      if (!inCart) label.textContent = '+ Add';
+      else if (inCart.kind === 'accessory') label.textContent = `✓ ${Number(inCart.quantity)} in cart · + Add`;
+      else label.textContent = '✓ In cart';
+    });
+  }
+
+  // fromScan: scanner/Enter flow clears the box for the next scan; clicking a
+  // result keeps the list open so several items can be added in a row.
+  function addItem(item, fromScan = false) {
     const existingIndex = cart.findIndex(row => row.key === item.key);
     if (existingIndex >= 0) {
       if (item.kind === 'accessory') {
@@ -112,10 +127,15 @@
       cart.push({...item, quantity: 1});
     }
     renderCart();
-    searchInput.value = '';
-    resultsBox.innerHTML = '';
-    searchStatus.textContent = 'Item added. Scan or search the next product.';
-    searchInput.focus();
+    if (fromScan) {
+      searchInput.value = '';
+      resultsBox.innerHTML = '';
+      searchStatus.textContent = `${item.name} added. Scan or search the next product.`;
+      searchInput.focus();
+    } else {
+      syncResultCards();
+      searchStatus.textContent = `${item.name} added. Keep adding, or search for another product.`;
+    }
   }
 
   function renderResults(items) {
@@ -129,6 +149,7 @@
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'pos-result-card';
+      card.dataset.key = item.key;
       card.innerHTML = `
         <div class="pos-result-icon">${item.kind === 'device' ? '▣' : '◇'}</div>
         <div class="pos-result-copy"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.specs || '—')}</span>${item.identifier ? `<small>${escapeHtml(item.identifier_type)}: ${escapeHtml(item.identifier)}${item.secondary_identifier ? ` • IMEI 2: ${escapeHtml(item.secondary_identifier)}` : ''}</small>` : `<small>${Number(item.available_qty || 0)} available</small>`}</div>
@@ -137,6 +158,7 @@
       card.addEventListener('click', () => addItem(item));
       resultsBox.appendChild(card);
     });
+    syncResultCards();
   }
 
   async function runSearch(query, autoAddSingle=false) {
@@ -156,7 +178,7 @@
       if (searchId !== latestSearch) return;
       if (!response.ok || !data.ok) throw new Error(data.message || 'Unable to search inventory.');
       renderResults(data.items || []);
-      if (autoAddSingle && data.items?.length === 1) addItem(data.items[0]);
+      if (autoAddSingle && data.items?.length === 1) addItem(data.items[0], true);
     } catch (error) {
       resultsBox.innerHTML = '';
       searchStatus.textContent = error.message || 'Unable to search inventory.';
@@ -170,6 +192,12 @@
   searchInput?.addEventListener('keydown', event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
+    clearTimeout(searchTimer);
+    runSearch(searchInput.value, true);
+  });
+
+  // Camera scanner fills the box, then asks us to search and auto-add a single match.
+  searchInput?.addEventListener('devicescan', () => {
     clearTimeout(searchTimer);
     runSearch(searchInput.value, true);
   });

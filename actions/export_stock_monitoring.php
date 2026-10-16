@@ -15,14 +15,16 @@ try {
 }
 
 $isOwner = (bool)$report['is_owner'];
+// Same rule as the page: matrix only for the owner on All Branches.
+$isMatrix = $isOwner && $report['view'] === 'matrix';
 $rows = [];
-$title = $isOwner ? 'Overall Stock Monitoring' : 'Stock Monitoring';
+$title = $isMatrix ? 'Overall Stock Monitoring' : 'Stock Monitoring';
 $scope = $isOwner ? (string)$report['selected_branch_name'] : (string)(Auth::user()['branch_name'] ?? 'Assigned Branch');
 $rows[] = [['v' => $title, 's' => 3]];
 $rows[] = [['v' => 'Date', 's' => 1], ['v' => (string)$report['formatted_date']], ['v' => 'Scope', 's' => 1], ['v' => $scope]];
 $rows[] = [];
 
-if ($isOwner) {
+if ($isMatrix) {
     $headers = [['v' => 'Brand', 's' => 1], ['v' => 'Model', 's' => 1]];
     foreach ($report['display_branches'] as $branch) $headers[] = ['v' => (string)$branch['name'], 's' => 1];
     $headers[] = ['v' => 'Overall Total', 's' => 1];

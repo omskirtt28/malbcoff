@@ -10,6 +10,8 @@ try {
 }
 
 $isOwner = (bool)($report['is_owner'] ?? Auth::isOwner());
+// Compare matrix only for the owner on All Branches; everything else is the single-branch view.
+$isMatrix = $isOwner && (($report['view'] ?? 'matrix') === 'matrix');
 $selectedDate = (string)($report['date'] ?? date('Y-m-d'));
 $formattedDate = (string)($report['formatted_date'] ?? date('M d, Y'));
 $branchId = $report['branch_id'] ?? null;
@@ -33,11 +35,13 @@ $resetUrl = app_url('stock-monitoring');
 ?>
 <section class="page-heading stock-monitoring-heading">
     <div>
-        <span class="eyebrow"><?= $isOwner ? 'REPORTS' : 'STOCK REPORT' ?></span>
-        <h1><?= $isOwner ? 'Overall Stock Monitoring' : 'Stock Monitoring' ?></h1>
-        <p><?= $isOwner
+        <span class="eyebrow"><?= $isMatrix ? 'REPORTS' : 'STOCK REPORT' ?></span>
+        <h1><?= $isMatrix ? 'Overall Stock Monitoring' : 'Stock Monitoring' ?></h1>
+        <p><?= $isMatrix
             ? 'View and compare daily stock levels across all branches.'
-            : 'Monitor your branch’s daily opening, movements, and ending stock per model.' ?></p>
+            : ($isOwner
+                ? 'Monitor ' . e((string)($report['selected_branch_name'] ?? 'the branch')) . '’s daily opening, movements, and ending stock per model.'
+                : 'Monitor your branch’s daily opening, movements, and ending stock per model.') ?></p>
     </div>
     <span class="branch-chip stock-monitoring-scope"><?= icon('branch') ?><span><?= e($isOwner ? (string)($report['selected_branch_name'] ?? 'All Branches') : (string)(Auth::user()['branch_name'] ?? 'Assigned Branch')) ?></span></span>
 </section>
@@ -46,7 +50,7 @@ $resetUrl = app_url('stock-monitoring');
     <div class="alert alert-error"><?= e($stockMonitorError) ?></div>
 <?php endif; ?>
 
-<?php if ($isOwner): ?>
+<?php if ($isMatrix): ?>
 <section class="stock-monitoring-kpis" aria-label="Overall stock monitoring key figures">
     <article class="stock-monitoring-kpi is-overall">
         <span class="stock-monitoring-kpi-icon"><?= icon('inventory') ?></span>
@@ -118,7 +122,7 @@ $resetUrl = app_url('stock-monitoring');
         <strong>No stock records found</strong>
         <span>Try another date, brand, branch, or model search.</span>
     </div>
-<?php elseif ($isOwner): ?>
+<?php elseif ($isMatrix): ?>
     <div class="table-scroll stock-monitoring-table-wrap">
         <table class="data-table stock-monitoring-table stock-monitoring-owner-table" data-stock-monitoring-table="owner">
             <thead>
