@@ -1,10 +1,11 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../core/Idempotency.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
     http_response_code(401);
-    echo json_encode(['error' => 'Please sign in again.']);
+    echo json_encode(['error' => 'Please sign in again.', 'code' => 'auth']);
     exit;
 }
 
@@ -27,10 +28,14 @@ $payload = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($payload)) $payload = $_POST;
 
 if (!Csrf::verify($payload['_csrf'] ?? null)) {
-    http_response_code(419);
-    echo json_encode(['error' => 'Your session expired. Refresh the page and try again.']);
-    exit;
+    Idempotency::csrfFailure();
 }
+
+// Same key again (double tap, lost response, retry) → return the original result; never a second record.
+$idemKey = Idempotency::key($payload);
+$idemUser = (int)(Auth::user()['id'] ?? 0);
+$idemFp = Idempotency::fingerprint($payload);
+Idempotency::replayJsonAndExit($idemKey, 'stock_adjust', $idemUser, $idemFp);
 
 if (($payload['confirmed'] ?? false) !== true && (string)($payload['confirmed'] ?? '') !== '1') {
     http_response_code(422);
@@ -105,6 +110,10 @@ if ($effectiveRole === 'branch_manager') {
 $pdo = Database::connection();
 try {
     $pdo->beginTransaction();
+    if ($idemKey !== null && !Idempotency::claim($idemKey, 'stock_adjust', $idemUser, $idemFp)) {
+        $pdo->rollBack();
+        Idempotency::replayAfterLostClaim($idemKey, 'stock_adjust', $idemUser, $idemFp);
+    }
 
     $product = Database::query(
         "SELECT p.id,p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,p.cost_price,p.selling_price,
@@ -380,9 +389,24 @@ try {
         ? (int)Database::query('SELECT COALESCE(quantity,0) FROM inventory_balances WHERE product_id=? AND branch_id=? LIMIT 1', [$productId,$branchId])->fetchColumn()
         : (int)Database::query("SELECT COUNT(*) FROM inventory_units WHERE product_id=? AND branch_id=? AND status='available'", [$productId,$branchId])->fetchColumn();
 
+    if ($serialCorrected) {
+        $message = 'Device Serial Number corrected. Available stock quantity was not changed.';
+    } elseif ($identifierCorrected) {
+        $message = 'Device IMEI / Serial corrected. Available stock quantity was not changed.';
+    } else {
+        $verb = $direction === 'increase' ? 'added to' : 'removed from';
+        $message = $changed . ' unit' . ($changed === 1 ? '' : 's') . ' ' . $verb . ' available stock.';
+    }
+    $response = [
+        'success' => true,
+        'message' => $message,
+        'reference_no' => $reference,
+        'branch_available' => $branchRemaining,
+    ];
+    if ($idemKey !== null) Idempotency::complete($idemKey, $response, $reference);
     $pdo->commit();
 
-    $auditEvent = $serialCorrected
+    $auditEvent =$serialCorrected
         ? 'inventory.serial_corrected'
         : ($identifierCorrected ? 'inventory.identifier_corrected' : 'inventory.adjusted');
     Security::audit($auditEvent, 'product', $productId, [
@@ -399,22 +423,9 @@ try {
         'effective_role' => $effectiveRole,
     ]);
 
-    if ($serialCorrected) {
-        $message = 'Device Serial Number corrected. Available stock quantity was not changed.';
-    } elseif ($identifierCorrected) {
-        $message = 'Device IMEI / Serial corrected. Available stock quantity was not changed.';
-    } else {
-        $verb = $direction === 'increase' ? 'added to' : 'removed from';
-        $message = $changed . ' unit' . ($changed === 1 ? '' : 's') . ' ' . $verb . ' available stock.';
-    }
     flash('success', $message . ' Reference: ' . $reference);
 
-    echo json_encode([
-        'success' => true,
-        'message' => $message,
-        'reference_no' => $reference,
-        'branch_available' => $branchRemaining,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     $status = $e instanceof RuntimeException ? 422 : 500;

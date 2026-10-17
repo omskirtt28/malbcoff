@@ -18,7 +18,7 @@ if ($transferId <= 0) {
 try {
     $row = Database::query(
         "SELECT t.*,sb.name source_branch,db.name destination_branch,
-                fu.name forwarded_by_name,ru.name received_by_user_name,
+                " . snapshot_name_sql('inventory_transfers', 't', 'forwarded_by_snapshot', 'fu.name') . " forwarded_by_name," . snapshot_name_sql('inventory_transfers', 't', 'received_by_snapshot', 'ru.name') . " received_by_user_name,
                 p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,
                 br.name brand_name,pm.name model_name
          FROM inventory_transfers t

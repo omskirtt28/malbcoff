@@ -26,6 +26,7 @@ if ($isSystemAdminControl) {
     if (Auth::isOwner() || in_array((string)($sidebarUser['role'] ?? ''), ['branch_manager','inventory'], true)) $navItems[] = ['branch-transfers', 'movement', 'Branch Transfers'];
     if (Auth::isOwner() || in_array($sidebarUser['role'], ['branch_manager', 'inventory'], true)) $navItems[] = ['stock-movement', 'movement', 'Stock Movement'];
     if (Auth::isOwner() || ($sidebarUser['role'] ?? '') === 'branch_manager') $navItems[] = ['users', 'users', 'Users'];
+    if (Auth::isOwner()) $navItems[] = ['needs-action', 'alert', 'Needs Action'];
 
     $sidebarContext = Auth::isOwner() ? 'All Branches' : ($sidebarUser['branch_name'] ?? 'Assigned Branch');
     $pendingTransferCount = 0;
@@ -51,7 +52,7 @@ if ($isSystemAdminControl) {
     <nav class="sidebar-nav" aria-label="Main navigation">
         <?php foreach ($navItems as [$slug, $iconName, $label]): ?>
             <a href="<?= e(app_url($slug)) ?>" class="nav-link <?= ($page === $slug || ($slug === 'products' && $page === 'add-item')) ? 'active' : '' ?>">
-                <?= icon($iconName) ?><span><?= e($label) ?></span><?php if ($slug === 'branch-transfers' && $pendingTransferCount > 0): ?><b class="nav-count"><?= $pendingTransferCount > 99 ? '99+' : (int)$pendingTransferCount ?></b><?php endif; ?>
+                <?= icon($iconName) ?><span><?= e($label) ?></span><?php if ($slug === 'branch-transfers' && $pendingTransferCount > 0): ?><b class="nav-count"><?= $pendingTransferCount > 99 ? '99+' : (int)$pendingTransferCount ?></b><?php endif; ?><?php if ($slug === 'needs-action' && outbox_open_count() > 0): ?><b class="nav-count"><?= outbox_open_count() > 99 ? '99+' : (int)outbox_open_count() ?></b><?php endif; ?>
             </a>
         <?php endforeach; ?>
         <?php if (!$isSystemAdminControl && Auth::isOwner()): ?>

@@ -476,3 +476,77 @@ A UI patch is complete when:
 - Retain collapse/expand by brand, existing export parameters and fallback initials for brands without supplied logos.
 - Illustrative numbers and any nonfunctional decoration in mockups must not be copied into production.
 - Verification was not run for this patch at the user's explicit request; user will perform deployment testing.
+
+
+---
+
+## 15. App Rules (Patch 7, 2026-10-17) — every patch must follow these
+
+These rules are the current standard. Where an older section above says something smaller or looser (13px headings, "roughly 40px" targets, "tables may scroll"), **this section wins**.
+
+### 15.1 Language and wording
+- **English only** in all user-facing text: labels, buttons, tooltips, placeholders, status and error messages, empty states, export headers. No Tagalog or Taglish.
+- **Simple words for non-technical staff.** Say what happened and what to do next ("Not saved yet. Your internet is weak or offline. Nothing was lost."). No table names, SQL, stack traces or developer terms.
+- Code comments may be in any language; only text the user can see counts.
+
+### 15.2 Mobile-first responsive
+- Design for **360px**, then **768px**, then desktop. Check all three before finishing.
+- **No horizontal page scroll.** A wide table may scroll sideways *inside its own wrapper* (`.table-scroll`, keyboard-focusable with an `aria-label`), never the whole page.
+- **Tap targets at least 44px** high (buttons, tabs, links used as buttons, form fields, toggles, table header hints).
+- **Text at least 14px** (tables, hints, KPI captions, tooltips included). Do not use 9–13px for anything a user must read.
+- Visible focus ring on every interactive element; everything works with the keyboard.
+
+### 15.3 Tab pattern
+- Tabs that change *which data is shown* are server-rendered links in `<nav class="…-tabs" aria-label="…">`; the active tab has `aria-current="page"` and `.is-active`.
+- **The active tab lives in the URL** (`?tab=accessories`). The default tab needs no parameter. The tab must survive Apply, Reset, Export and the other filters (hidden `tab` input in the filter form; tab links carry the current filters).
+- Tabs are 44px high with 14px semibold text (scale update 2026-10-17) and split the width on phones.
+- Unknown `tab` values fall back to the default on the server.
+- Reference implementation: Stock Monitoring (`Phones & Tablets` default, `Accessories`) — see the Stock Monitoring feature note in the vault.
+
+### 15.4 Table pattern
+- Group rows by brand (collapsible), group total row after each group, one **Grand Total** row at the bottom that covers the active tab only.
+- Column order for stock reports: **Opening | Stock In | Transfer | Sold | Other | Ending**. *Other* is hidden when every value is zero.
+- **Zeros are dimmed** (`.is-zero`, light grey) and **non-zero values are bold** (`.is-nz`); Transfer shows green `+In` and red `−Out`.
+- Column headers have a plain-English hint (hover, keyboard focus or tap). Accessories never show a serial/IMEI column.
+- Never change a number to make the layout nicer; the tabs of one report must add up to the combined total.
+
+### 15.5 KPI cards and the drawer
+- **KPI cards are clickable** and open the **shared right-side drawer** (`assets/js/kpi-drawer.js`, data from `actions/stock_monitoring_drawer.php`). Do not build a second drawer or a different pop-up for the same job.
+- A card and its drawer must show the same total for the same date/branch/brand/search.
+
+### 15.6 Saving and retry messages
+All state-changing submits go through `SafeSubmit.run()` and use the same wording:
+- **Saving...** — while the request is running ("Please do not refresh or close this page.").
+- **Saved** — after success (green card, one OK button).
+- **Not saved yet.** — weak/offline internet or an expired login: "Your internet is weak or offline. Nothing was lost." with **Retry** and **Go back and edit**.
+- **Not saved** + the reason — when the server refuses the request (business error).
+- The connection banner (slim, non-blocking) reads **"Weak connection"**, **"No internet. Your data is safe."** or, for 3 seconds after recovery, **"Back online"** (Patch 6b).
+- When a page cannot load because there is no internet, the offline page says "No internet. Your data is safe. Reconnect and try again." with a **Retry** button.
+- **Offline outbox (Patch 6c-1, stock actions only):** when a Receive Stock / Branch Transfer / Receive Transfer save fails because of the network, the card (blue) says **"Saved on this device."** + "It will be sent when you are back online." with **OK** and **View Outbox**. The topbar shows a **Queued: N** badge (**Needs action: N** when only refused items are left) that opens the **Outbox** panel (bottom sheet on phones, centered panel from 768px). Statuses: Waiting · Sending... · Sent ✓ · Needs action (reason in plain English + **Review** / **Discard**, discard asks "Discard this item?"). The banner adds "Sending N queued items...", "All queued items were sent", "N items need action" and "Please log in again to send your queued items." Pages where stock numbers matter show "N queued actions are not counted yet." Sign Out warns "You have N unsent items. Stay signed in until they are sent." Owner-only list: **Needs Action** (Open / Resolved tabs, Mark as resolved + optional note).
+
+### 15.7 Roles
+- **Owner and branch users share the same views** unless a screen is owner-only. An owner who selects a branch must see exactly what that branch's user sees (same tabs, columns, numbers).
+- Owner-only extras (All Branches compare matrix, KPI cards, Branch filter) are the only differences. The matrix uses the same tabs, text size and zero/bold look.
+
+### 15.9 Prices at checkout (Patch 8)
+- The cashier types the agreed price for every line on the **Set Prices** sheet (full-height bottom sheet on phones, centered panel on tablet/desktop). The 1 peso placeholder and catalog prices are never shown or used.
+- Per row: **Per piece / Total for all** toggle (line total is the truth), large decimal input, "Last: ₱…" chip (this branch only; hidden when no history), live line total, red "Enter price". Footer: Grand Total + **Confirm Sale**, disabled until every line is above 0. **Same price for all** is a shortcut.
+- Completed sales are final for everyone, including the owner: no price editing anywhere.
+
+### 15.10 Offline sales (Patch 6c-2)
+- If the network fails at **Confirm**, the confirm dialog shows the compact state (same layout as "Sale saved"): check icon, **"Sale saved on this device"**, `Temporary receipt no. OFFLINE-<branch>-<date>-<n>`, Total / Payment / Cash received / Change, a muted 14px line "It will be sent when you are back online." and one full-width 48px **New Sale** button. New Sale never reloads the page.
+- Non-cash payments first show the "No internet" notice (amber note box, 14px) with a 48px **Payment received** checkbox row; **Save sale on this device** is disabled until it is ticked; **Back** returns to the normal Retry card.
+- Queued items: POS result cards turn dashed amber with the label **"In a queued sale"** (14px) and cannot be added; accessories show "57 in stock · 3 in a queued sale".
+- Hint bar (blue) "N queued sales are not counted yet." with **View Outbox**; when > 50 sales wait or the oldest is > 24 h it turns amber and adds the bold red line **"Please connect to the internet to send your sales."** (selling is never blocked). The Outbox panel shows the same warning.
+- Sales Records: offline sales carry the amber line "Saved offline · OFFLINE-…"; the owner's detail also shows "Made on device" and "Received by server". Owner Needs Action: type "Offline Sale", labels "Cashier" and "Sale made (device time)".
+
+### 15.8 Before finishing any patch (checklist)
+- [ ] All new/changed UI text is English and simple (grep the files you touched for Tagalog).
+- [ ] Checked at 360px, 768px and desktop: no horizontal page scroll, targets ≥ 44px, text ≥ 14px.
+- [ ] Owner (with a branch selected) and branch user see the same view and numbers.
+- [ ] Tabs/filters/export keep each other's state in the URL; export matches what is on screen.
+- [ ] Zeros dimmed, non-zero bold; KPI cards open the shared drawer.
+- [ ] Saves use `SafeSubmit` with Saving... / Saved / Not saved yet... wording.
+- [ ] No calculation or number changed unless the patch is about that calculation.
+- [ ] No PHP warnings/notices (`php -l` + load the page as owner and as a branch user).
+- [ ] Vault updated: feature note, plan note, `Changelog.md` (and `File Index.md` if files were added).

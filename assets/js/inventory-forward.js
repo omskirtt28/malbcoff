@@ -424,34 +424,45 @@
       unit_ids: unitIds
     };
 
-    const originalText = submit.textContent;
-    submit.disabled = true;
-    submit.textContent = 'Forwarding…';
-
-    try {
-      const response = await fetch('actions/forward_inventory.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      });
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (_) {
-        throw new Error('The server returned an invalid transfer response.');
-      }
-
-      if (!response.ok) throw new Error(data.error || 'Unable to forward inventory.');
-      submit.textContent = 'Forwarded';
-      window.setTimeout(() => window.location.reload(), 450);
-    } catch (error) {
+    if (!window.SafeSubmit) {
       forwarding = false;
       qa('button, input, select, textarea').forEach(control => { control.disabled = false; });
-      showGeneralError(error.message || 'Unable to forward inventory. Please try again.');
-      submit.disabled = false;
-      submit.textContent = originalText;
+      showGeneralError('The page did not load completely. Please refresh the page and try again.');
+      return;
+    }
+    // Words for the offline outbox (Patch 6c-1): what the staff member would recognise in the Outbox list.
+    const productLabel = [current.productName, current.brand && !String(current.productName).includes(current.brand) ? current.brand : '', current.specs && current.specs !== '—' ? current.specs : ''].filter(Boolean).join(' • ');
+    const destinationLabel = destinationControl.selectedOptions?.[0]?.textContent.replace(/\s+/g, ' ').trim() || '';
+    const outboxLines = [`Item: ${productLabel}`, `From: ${current.sourceBranch}`, `To: ${destinationLabel}`, `Quantity: ${quantity}`];
+    if (notes && notes.value.trim()) outboxLines.push(`Note: ${notes.value.trim()}`);
+    if (current.productType !== 'accessory') {
+      selectedUnits().forEach(input => {
+        const text = (input.closest('label') || input.parentElement)?.textContent.replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (text) outboxLines.push(`Unit: ${text}`);
+      });
+    }
+
+    // Same key on every retry → the server returns the first transfer instead of creating a second one.
+    const result = await window.SafeSubmit.run({
+      url: 'actions/forward_inventory.php',
+      keyHolder: form,
+      button: submit,
+      host: submit.parentElement,
+      before: submit,
+      getBody: () => Object.assign({}, payload, { _csrf: csrf.value }),
+      onCsrf: token => { csrf.value = token; },
+      successDetail: data => `${data.reference_no || ''} · ${data.message || ''}`,
+      onDismiss: () => window.location.reload(),
+      outbox: {
+        type: 'transfer_forward',
+        summary: `Send ${quantity} ${current.productType === 'accessory' ? (quantity === 1 ? 'piece' : 'pieces') : (quantity === 1 ? 'unit' : 'units')} of ${productLabel} to ${destinationLabel}`,
+        lines: outboxLines,
+        review: { page: 'inventory', params: {} }
+      }
+    });
+    if (!result.ok && !result.queued) {
+      forwarding = false;
+      qa('button, input, select, textarea').forEach(control => { control.disabled = false; });
     }
   });
 })();

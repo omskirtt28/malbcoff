@@ -45,7 +45,7 @@ Sizes in lines. "Tables" = main DB tables touched. ⚠ = huge file, read only th
 ## actions/
 | File | What it does |
 |---|---|
-| `complete_sale.php` | POS checkout (form POST → redirect). Locks, re-prices, inserts `sales`, `sale_items`, `stock_movements(sale)` |
+| `complete_sale.php` | POS checkout (JSON for SafeSubmit / the outbox, classic form post kept). Locks, prices from the typed entries, inserts `sales`, `sale_items`, `stock_movements(sale)`. Patch 6c-2: `X-Outbox-Send` = queued offline sale → device time sets the sale date, `sales.client_id` UNIQUE guard, plain refusal reasons |
 | `pos_search.php` | JSON search for POS |
 | `stock_in.php` ⚠ (534) | Receive stock: units/balances + `stock_movements(stock_in)`; owner allowed here |
 | `forward_inventory.php` | Start branch transfer: source `transfer_out`, units → `transferred`, `inventory_transfers(pending)` |
@@ -58,15 +58,26 @@ Sizes in lines. "Tables" = main DB tables touched. ⚠ = huge file, read only th
 | `add_item.php` | Create catalog item |
 | `product_units.php`, `variant_inventory.php` | JSON unit lists / per-branch variant stock |
 | `export_stock_monitoring.php` | Excel export of Stock Monitoring (uses same report class) |
+| `stock_monitoring_drawer.php` | Read-only owner-only JSON for the KPI drawer (`StockMonitoringReport::drawer`) |
+| `account_update.php` | Self-service: a user changes ONLY their own display name (id from session, CSRF, validated) |
+| `pos_last_prices.php` | Patch 8: per-product price THIS branch last sold at (typed at checkout, not voided) for the "Last: ₱…" chips; branch from login only |
+| `ping.php` | Tiny public heartbeat for the connection banner (no session, no DB) |
+| `outbox_status.php` | Patch 6c-1: GET heartbeat for the device outbox — signed in? as which user? fresh CSRF token (no state change) |
+| `outbox_report.php` | Patch 6c-1: branch staff report a "needs action" outbox item (idempotent on UUID) or flag it discarded; user/branch from session; writes `outbox_reports` only |
+| `outbox_resolve.php` | Patch 6c-1: owner-only, marks a Needs Action report resolved (+ note) |
 | `user_management.php` | Owner-only: create / update / toggle / reset_password |
 | `impersonation.php`, `system_admin_*.php` | System admin tools |
 
 ## partials/
-`header.php` (CSS), `sidebar.php` (nav per role), `topbar.php` (**owner branch switcher**, user menu), `mobile-nav.php`, `footer.php` (page-specific JS), `inventory-accessory-delete.php`
+`header.php` (CSS), `sidebar.php` (nav per role), `topbar.php` (**owner branch switcher**, user menu), `mobile-nav.php`, `footer.php` (page-specific JS, all `defer`), `inventory-accessory-delete.php`, `pwa-head.php` (manifest + icons, in every `<head>`), `pwa-register.php` (loads `sw-register.js`, in every page — Patch 6b)
+
+## web root (Patch 6b)
+`sw.js` (service worker, static files only), `offline.html` (no-internet page), `manifest.webmanifest` (install on phone/tablet). See [[Service Worker and Offline Page]].
 
 ## assets/
 - `css/app.css` 205 KB (all styles), `css/branch-transfers.css`
-- `js/app.js` (global: search, inventory modals, forward, adjust), `pos.js`, `users.js`, `branch-transfers.js`, `inventory-*.js`, scanners (`device-scanner.js`, `imei-reader.js`, `serial-label-reader.js`, `serial-ocr.js`), `product-quick-setup.js`
+- `js/app.js` (global: search, inventory modals, forward, adjust), `pos.js`, `users.js`, `branch-transfers.js`, `kpi-drawer.js` (owner KPI drawer), `safe-submit.js` (shared saving status + retry + connection banner: Weak connection / No internet / Back online; hands failed saves to the outbox), `outbox.js` (Patch 6c-1/6c-2: IndexedDB outbox for Receive Stock / Branch Transfer / Receive Transfer / POS sales (holds, 50-sale / 24 h warning) — queue, FIFO sender with backoff + lock, topbar badge, Outbox panel, pending hint, sign-out guard, banner messages), `sw-register.js` (registers or removes the service worker), `inventory-*.js`, scanners (`device-scanner.js`, `imei-reader.js`, `serial-label-reader.js`, `serial-ocr.js`), `product-quick-setup.js`
+- `icons/` PNG home-screen icons (192, 512, maskable, Apple 180) made from `favicon.svg`
 - `vendor/` zxing-wasm (~1 MB), legacy-scanner, serial-ocr (~13 MB, Tesseract) — loaded only on pos/inventory/add-item
 
 Related: [[Architecture Map]] · [[Data Model]]

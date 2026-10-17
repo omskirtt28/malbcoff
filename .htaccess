@@ -16,6 +16,11 @@ DirectoryIndex index.php
     # Development artifacts / backups / documentation are not public assets.
     RewriteRule ^(?:preview\.html|.*\.(?:md|sql|zip|bak|backup|log|ini|dist))$ - [F,L,NC]
 
+    # Patch 6b: static files requested with a version (assets/…?v=<filemtime>) may be cached for a year,
+    # because every change to the file changes the URL. Used by the Cache-Control header further down.
+    RewriteCond %{QUERY_STRING} (?:^|&)v=\d+(?:&|$)
+    RewriteRule ^assets/.+\.(?:css|js)$ - [E=ASSET_VERSIONED:1]
+
     # Existing public files/folders (assets and action endpoints) keep working.
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -43,6 +48,8 @@ DirectoryIndex index.php
     RewriteRule ^receive-stock$ index.php?page=stock-in [L,QSA]
     RewriteRule ^stock-movement$ index.php?page=stock-movement [L,QSA]
     RewriteRule ^users$ index.php?page=users [L,QSA]
+    RewriteRule ^account$ index.php?page=account [L,QSA]
+    RewriteRule ^needs-action$ index.php?page=needs-action [L,QSA]
 
     # System Admin routes stay flat so existing relative assets/actions remain safe.
     RewriteRule ^system-admin$ index.php?page=system-admin-dashboard [L,QSA]
@@ -64,4 +71,28 @@ DirectoryIndex index.php
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set X-Permitted-Cross-Domain-Policies "none"
+</IfModule>
+
+# ---------------------------------------------------------------------------------------------
+# Patch 6b — fast loading on weak internet (static files only; PHP pages are never cached)
+# ---------------------------------------------------------------------------------------------
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+    AddType application/wasm .wasm
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Versioned CSS/JS (…?v=123): safe to keep for a year. Both names cover an internal rewrite.
+    Header set Cache-Control "public, max-age=31536000, immutable" env=ASSET_VERSIONED
+    Header set Cache-Control "public, max-age=31536000, immutable" env=REDIRECT_ASSET_VERSIONED
+
+    # The service worker, its offline page and the manifest must always be re-checked, so a new deploy is seen at once.
+    <FilesMatch "^(?:sw\.js|offline\.html|manifest\.webmanifest)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
+# gzip/deflate for text-like static files only (never HTML pages or JSON answers that can carry tokens).
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/css text/javascript application/javascript application/x-javascript image/svg+xml application/manifest+json application/wasm
 </IfModule>

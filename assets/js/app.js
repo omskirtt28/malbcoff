@@ -743,38 +743,37 @@
     const confirmed = window.confirm(`Remove ${unitIds.length} selected unit${unitIds.length === 1 ? '' : 's'} from available stock? This action will be recorded.`);
     if (!confirmed) return;
 
-    button.disabled = true;
-    button.textContent = 'Saving…';
-    try {
-      const response = await fetch('actions/adjust_inventory.php', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json','Accept':'application/json'},
-        body: JSON.stringify({
-          _csrf: csrfToken(),
-          confirmed: true,
-          product_id: productId,
-          branch_id: activeBranchId,
-          unit_ids: unitIds,
-          reason,
-          notes
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to save adjustment.');
-
-      const stock = document.querySelector(`[data-variant-stock="${productId}"]`);
-      if (stock) stock.textContent = Number(data.total_available || 0).toLocaleString();
-      body.dataset.loadedProduct = '';
-      inventoryData = null;
-      await loadInventory(true);
-      renderOverview(`${data.message} Reference: ${data.reference_no}`);
-    } catch (error) {
-      const existing = body.querySelector('.variant-inventory-message.error');
-      if (existing) existing.remove();
-      body.insertAdjacentHTML('afterbegin', '<div class="variant-inventory-message error">' + esc(error.message) + '</div>');
-      button.disabled = false;
-      button.textContent = 'Remove Selected from Available Stock';
+    if (!window.SafeSubmit) {
+      body.insertAdjacentHTML('afterbegin', '<div class="variant-inventory-message error">The page did not load completely. Please refresh the page and try again.</div>');
+      return;
     }
+    const footer = button.closest('.variant-adjust-footer');
+    await window.SafeSubmit.run({
+      url: 'actions/adjust_inventory.php',
+      keyHolder: body,
+      button,
+      host: footer ? footer.parentElement : body,
+      before: footer || null,
+      getBody: () => ({
+        _csrf: csrfToken(),
+        confirmed: true,
+        product_id: productId,
+        branch_id: activeBranchId,
+        unit_ids: unitIds,
+        reason,
+        notes
+      }),
+      successDetail: data => `${data.reference_no || ''} · ${data.message || ''}`,
+      // The list refreshes only after the green confirmation is dismissed, so it never disappears under the user.
+      onDismiss: async data => {
+        const stock = document.querySelector(`[data-variant-stock="${productId}"]`);
+        if (stock && data.branch_available !== undefined) stock.textContent = Number(data.total_available || data.branch_available || 0).toLocaleString();
+        body.dataset.loadedProduct = '';
+        inventoryData = null;
+        await loadInventory(true);
+        renderOverview(`${data.message} Reference: ${data.reference_no}`);
+      }
+    });
   }
 
   document.addEventListener('click', event => {
@@ -1079,24 +1078,21 @@
     };
 
     const submit = q('[data-forward-submit]');
-    const originalText = submit.textContent;
-    submit.disabled = true;
-    submit.textContent = 'Forwarding…';
-
-    try {
-      const response = await fetch('actions/forward_inventory.php', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
-        body:JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to forward inventory.');
-      submit.textContent = 'Forwarded';
-      setTimeout(() => window.location.reload(), 450);
-    } catch (error) {
-      showGeneralError(error.message);
-      submit.disabled = false;
-      submit.textContent = originalText;
+    if (!window.SafeSubmit) {
+      showGeneralError('The page did not load completely. Please refresh the page and try again.');
+      return;
     }
+    // Same key on every retry → the server returns the first transfer instead of creating a second one.
+    await window.SafeSubmit.run({
+      url: 'actions/forward_inventory.php',
+      keyHolder: form,
+      button: submit,
+      host: submit.parentElement,
+      before: submit,
+      getBody: () => Object.assign({}, payload, { _csrf: q('input[name="_csrf"]').value }),
+      onCsrf: token => { const field = q('input[name="_csrf"]'); if (field) field.value = token; },
+      successDetail: data => `${data.reference_no || ''} · ${data.message || ''}`,
+      onDismiss: () => window.location.reload()
+    });
   });
 })();

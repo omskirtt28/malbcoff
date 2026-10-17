@@ -3,9 +3,12 @@ require __DIR__ . '/../bootstrap.php';
 
 $ajaxAction = (string)($_POST['ajax_action'] ?? '');
 $isQuickReceive = $_SERVER['REQUEST_METHOD'] === 'POST' && $ajaxAction === 'receive_stock';
+require_once __DIR__ . '/../core/Idempotency.php';
+// JSON answers for the inventory quick-receive AND for the safe-retry fetch of the Receive Stock page.
+$jsonMode = $_SERVER['REQUEST_METHOD'] === 'POST' && ($isQuickReceive || Idempotency::wantsJson());
 
 if (!Auth::check()) {
-    if ($isQuickReceive) {
+    if ($jsonMode) {
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok'=>false,'error'=>'Your session expired. Please sign in again.']);
@@ -114,25 +117,34 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
 }
 
 if(!$canStockIn){
-    if($isQuickReceive){http_response_code(403);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your account does not have permission to receive stock.']);exit;}
+    if($jsonMode){http_response_code(403);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your account does not have permission to receive stock.']);exit;}
     flash('error','Your account does not have permission to receive stock.');redirect(app_url('inventory'));
 }
 if($_SERVER['REQUEST_METHOD']!=='POST')redirect(app_url('stock-in'));
 if(!Csrf::verify($_POST['_csrf']??null)){
-    if($isQuickReceive){http_response_code(419);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>'Your session expired. Refresh the page and try again.']);exit;}
+    if($jsonMode){Idempotency::csrfFailure();}
     flash('error','Your session expired. Please submit the Receive Stock form again.');redirect(app_url('stock-in'));
 }
+
+// Same key again (double tap, lost response, retry) → return the original result; never a second stock-in.
+$idemKey=Idempotency::key($_POST);$idemUser=(int)(Auth::user()['id']??0);$idemFp=Idempotency::fingerprint($_POST);
+Idempotency::replayJsonAndExit($idemKey,'stock_in',$idemUser,$idemFp);
 
 $receiveNonce='';
 if(!$isQuickReceive){
     if((string)($_POST['confirmed']??'0')!=='1'){
+        if($jsonMode)Idempotency::send(422,['ok'=>false,'error'=>'Review and confirm the stock-in before saving. Nothing was added.']);
         flash('error','Review and confirm the stock-in before saving. Nothing was added.');
         redirect(app_url('stock-in'));
     }
     $receiveNonce=trim((string)($_POST['receive_nonce']??''));
     $knownNonces=$_SESSION['stock_receive_nonces']??[];
     $createdAt=is_array($knownNonces)?($knownNonces[$receiveNonce]??null):null;
-    if($receiveNonce==='' || !is_int($createdAt) || (time()-$createdAt)>7200){
+    // Patch 6c-1: a send from the device outbox was already reviewed + confirmed on the phone (confirmed=1 above) and the
+    // page-view nonce lives only in the old session/page, so it is not required here. Every other check below still runs.
+    $fromOutbox=($_SERVER['HTTP_X_OUTBOX_SEND']??'')==='1';
+    if(!$fromOutbox && ($receiveNonce==='' || !is_int($createdAt) || (time()-$createdAt)>7200)){
+        if($jsonMode)Idempotency::send(422,['ok'=>false,'error'=>'This stock-in review expired or was already used. Review the stock again before saving.']);
         flash('error','This stock-in review expired or was already used. Review the stock again before saving.');
         redirect(app_url('stock-in'));
     }
@@ -147,13 +159,17 @@ if (Auth::isOwner() && $branchId) $returnParams['branch'] = $branchId;
 $returnUrl = app_url('stock-in', $returnParams);
 if(!$productId||!$branchId){
     $message=!$productId?'Please choose a product variant first.':'Please select a valid stock location.';
-    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
+    if($jsonMode){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
     flash('error',$message);redirect($returnUrl);
 }
 
 try{
     ensure_stock_in_schema_p1004();
     $pdo=Database::connection();$pdo->beginTransaction();
+    if($idemKey!==null&&!Idempotency::claim($idemKey,'stock_in',$idemUser,$idemFp)){
+        $pdo->rollBack();
+        Idempotency::replayAfterLostClaim($idemKey,'stock_in',$idemUser,$idemFp);
+    }
     $product=Database::query(
         "SELECT p.*,br.name brand_name,pm.name model_name,c.name category_name
          FROM products p LEFT JOIN brands br ON br.id=p.brand_id LEFT JOIN product_models pm ON pm.id=p.model_id LEFT JOIN categories c ON c.id=p.category_id
@@ -362,13 +378,14 @@ try{
         $restoredCount=count($restoredUnitIds);
     }
 
+    $successPayload=['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId];
+    if($idemKey!==null)Idempotency::complete($idemKey,['ok'=>true,'stock'=>$successPayload],$reference);
     $pdo->commit();
     if(!$isQuickReceive && $receiveNonce!==''){
         unset($_SESSION['stock_receive_nonces'][$receiveNonce]);
     }
     Security::audit('inventory.stock_in', 'product', $productId, ['reference_no' => $reference, 'branch_id' => $branchId, 'quantity' => $quantity]);
-    $successPayload=['reference'=>$reference,'quantity'=>$quantity,'restored'=>$restoredCount??0,'product'=>stock_action_product_label($product),'product_id'=>$productId,'branch'=>$branch['name'],'branch_id'=>$branchId];
-    if($isQuickReceive){
+    if($jsonMode){
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok'=>true,'stock'=>$successPayload],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         exit;
@@ -380,11 +397,11 @@ try{
     $message=(string)$e->getCode()==='23000'
         ? 'A duplicate IMEI 1, IMEI 2, Serial Number, or unique inventory record was detected. Nothing was added.'
         : 'Unable to receive stock. Please check the item details and try again.';
-    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
+    if($jsonMode){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>$message]);exit;}
     flash('error',$message);redirect($returnUrl);
 }catch(Throwable $e){
     if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();
-    if($isQuickReceive){http_response_code(422);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>safe_exception_message($e,'Unable to receive stock right now. Please try again.')]);exit;}
+    if($jsonMode){http_response_code(($e instanceof RuntimeException&&!($e instanceof PDOException))?422:500);header('Content-Type: application/json; charset=utf-8');echo json_encode(['ok'=>false,'error'=>safe_exception_message($e,'Unable to receive stock right now. Please try again.')]);exit;}
     flash('error',safe_exception_message($e,'Unable to receive stock right now. Please try again.'));redirect($returnUrl);
 }
 

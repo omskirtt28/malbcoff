@@ -2921,7 +2921,9 @@ form.addEventListener('submit',async e=>{
   confirmModal.hidden=false;
   document.body.classList.add('modal-open');
 });
+let stockSaving=false; // true from the confirm tap until the green "Saved" card is dismissed
 function closeStockConfirmation(){
+  if(stockSaving)return;
   confirmModal.hidden=true;
   $('confirmedField').value='0';
   $('confirmStockAcknowledgement').checked=false;
@@ -2930,14 +2932,45 @@ function closeStockConfirmation(){
 }
 document.querySelectorAll('[data-confirm-close]').forEach(b=>b.addEventListener('click',closeStockConfirmation));
 $('confirmStockAcknowledgement').addEventListener('change',e=>{$('confirmStockIn').disabled=!e.target.checked;});
-$('confirmStockIn').addEventListener('click',()=>{
-  if(!$('confirmStockAcknowledgement').checked)return;
+$('confirmStockIn').addEventListener('click',async()=>{
+  if(!$('confirmStockAcknowledgement').checked||stockSaving)return;
   const button=$('confirmStockIn');
-  button.disabled=true;
-  button.textContent='Saving…';
   $('confirmedField').value='1';
-  if(typeof form.requestSubmit==='function')form.requestSubmit();
-  else form.submit();
+  if(!window.SafeSubmit){
+    // Helper script missing: classic form post, same behaviour as before.
+    button.disabled=true;button.textContent='Saving…';
+    if(typeof form.requestSubmit==='function')form.requestSubmit();else form.submit();
+    return;
+  }
+  stockSaving=true;
+  // Words for the offline outbox (Patch 6c-1): read from the confirmation the staff member just approved.
+  const outboxItem=($('confirmProduct').textContent||'').trim();
+  const outboxQty=($('confirmQuantity').textContent||'').trim();
+  const outboxBranch=($('confirmBranch').textContent||'').trim();
+  const outboxIds=($('confirmIdentifiers').querySelector('span')?.textContent||'').split(' • ').map(s=>s.trim()).filter(Boolean);
+  const outboxNotes=(form.querySelector('[name="notes"]')?.value||'').trim();
+  const outboxLines=[`Item: ${outboxItem}`,`Branch: ${outboxBranch}`,`Quantity: ${outboxQty}`,`Selling price: ${($('confirmSelling').textContent||'').trim()}`];
+  if(outboxNotes)outboxLines.push(`Note: ${outboxNotes}`);
+  outboxIds.forEach(id=>outboxLines.push(id));
+  // The form stays exactly as filled until the server confirms; retries reuse the same key (no double stock-in).
+  const result=await window.SafeSubmit.run({
+    url:form.getAttribute('action')||'actions/stock_in.php',
+    keyHolder:form,
+    button,
+    host:button.parentElement,
+    before:button,
+    getBody:()=>new FormData(form),
+    onCsrf:token=>{const field=form.querySelector('input[name="_csrf"]');if(field)field.value=token;},
+    successDetail:data=>{const s=data.stock||{};return `${s.reference||''} · ${s.quantity||0} unit${Number(s.quantity)===1?'':'s'} · ${s.product||''}${s.branch?' · '+s.branch:''}`;},
+    onDismiss:()=>{window.location.href=window.location.pathname+(productId.value?'?product_id='+encodeURIComponent(productId.value):'');},
+    outbox:{
+      type:'stock_in',
+      summary:`Receive ${outboxQty} — ${outboxItem}`,
+      lines:outboxLines,
+      review:{page:'stock-in',params:productId.value?{product_id:productId.value}:{}}
+    }
+  });
+  if(!result.ok && !result.queued){stockSaving=false;}
 });
 
 if(presetProductId){

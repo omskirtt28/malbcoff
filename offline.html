@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<title>No internet | Malbcoff POS</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<style>
+  /* Self-contained on purpose: this page must render with no other file (it is served when the network is down). */
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 16px;background:#f5f7fb;color:#14233b;font-family:Inter,"Segoe UI",system-ui,-apple-system,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5}
+  .card{width:100%;max-width:420px;padding:32px 24px;background:#fff;border:1px solid #dfe5ee;border-radius:16px;box-shadow:0 8px 24px rgba(20,35,59,.08);text-align:center}
+  .mark{width:64px;height:64px;margin:0 auto 16px;border-radius:15px;background:#1769e8;color:#fff;font-size:36px;font-weight:700;line-height:64px}
+  .brand{margin:0 0 20px;font-size:14px;font-weight:700;letter-spacing:.04em;color:#5b6b83}
+  h1{margin:0 0 8px;font-size:22px;line-height:1.25}
+  p{margin:0 0 24px;font-size:16px;color:#3b4a63}
+  button{min-height:48px;width:100%;padding:12px 24px;border:0;border-radius:12px;background:#1769e8;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+  button:hover{background:#0f56c4}
+  button:focus-visible{outline:3px solid #14233b;outline-offset:3px}
+  .status{margin:16px 0 0;font-size:14px;color:#5b6b83;min-height:21px}
+  @media(min-width:768px){.card{padding:40px 32px}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="mark" aria-hidden="true">M</div>
+  <p class="brand">MALBCOFF POS</p>
+  <h1>You are offline</h1>
+  <p>No internet. Your data is safe. Reconnect and try again.</p>
+  <button type="button" id="retry">Retry</button>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+</main>
+<script>
+(function () {
+  var status = document.getElementById('status');
+  function retry() {
+    status.textContent = 'Trying again...';
+    location.reload();
+  }
+  document.getElementById('retry').addEventListener('click', retry);
+  // Reload on its own as soon as the phone says it is back online.
+  window.addEventListener('online', retry);
+})();
+</script>
+</body>
+</html>

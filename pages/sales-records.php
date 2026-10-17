@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../core/StockMonitoringReport.php';
 $salesRecordsRole = (string)(Auth::user()['role'] ?? '');
 $isOwner = Auth::isOwner();
 $isBranchSalesUser = in_array($salesRecordsRole, ['branch_manager', 'cashier'], true);
@@ -32,6 +33,14 @@ function sales_records_payment_label(string $method): string
     };
 }
 
+/** Receipts containing at least one active item of the given type ('units' | 'accessories'); '' = no filter. */
+function sales_records_type_sql(string $type, string $saleAlias): string
+{
+    if ($type === '') return '';
+    $cond = $type === 'units' ? StockMonitoringReport::UNITS_SQL : StockMonitoringReport::ACCESSORIES_SQL;
+    return "EXISTS (SELECT 1 FROM sale_items sit JOIN products p ON p.id=sit.product_id WHERE sit.sale_id={$saleAlias}.id AND {$cond} AND " . inventory_active_sale_item_sql('sit') . ')';
+}
+
 function sales_records_url(array $state, array $changes = []): string
 {
     foreach ($changes as $key => $value) {
@@ -54,8 +63,13 @@ $allowedPayments = ['cash', 'gcash', 'maya', 'card', 'bank_transfer'];
 if (!in_array($payment, $allowedPayments, true)) $payment = '';
 $search = trim((string)($_GET['q'] ?? ''));
 if (mb_strlen($search) > 100) $search = mb_substr($search, 0, 100);
+$type = (string)($_GET['type'] ?? '');
+if (!in_array($type, ['units', 'accessories'], true)) $type = '';
 $pageNo = max(1, filter_input(INPUT_GET, 'p', FILTER_VALIDATE_INT) ?: 1);
 $perPage = 40;
+// Cashier = the name used when the sale was made (snapshot), falling back to the live user name.
+$cashierSql = snapshot_name_sql('sales', 's', 'cashier_name', 'u.name');
+$itemCashierSql = snapshot_name_sql('sales', 'sx', 'cashier_name', 'ux.name');
 
 $fromBoundary = (new DateTimeImmutable($from))->setTime(0, 0, 0)->format('Y-m-d H:i:s');
 $toBoundary = (new DateTimeImmutable($to))->modify('+1 day')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
@@ -64,12 +78,14 @@ $branches = [];
 $branchSummary = [];
 $records = [];
 $selectedSale = null;
+$hasOfflineCols = false;
 $selectedItems = [];
 $dbError = null;
 $totalRecords = 0;
 $totalSales = 0.0;
 $totalTransactions = 0;
 $totalItems = 0;
+$soldSplit = ['units' => ['qty' => 0, 'amount' => 0.0], 'accessories' => ['qty' => 0, 'amount' => 0.0]];
 
 try {
     $salesReady = (bool)Database::query("SHOW TABLES LIKE 'sales'")->fetchColumn();
@@ -90,8 +106,24 @@ try {
             $summaryJoin .= ' AND s.payment_method=:summary_payment';
             $summaryParams['summary_payment'] = $payment;
         }
+        if ($type !== '') $summaryJoin .= ' AND ' . sales_records_type_sql($type, 's');
+        // Per-branch Units / Accessories quantities (own placeholders: native prepares cannot reuse names).
+        $qtySubquery = static function (string $prefix, string $typeSql) use ($payment, $type, &$summaryParams, $fromBoundary, $toBoundary): string {
+            $summaryParams[$prefix . '_from'] = $fromBoundary;
+            $summaryParams[$prefix . '_to'] = $toBoundary;
+            $extra = '';
+            if ($payment !== '') {
+                $summaryParams[$prefix . '_payment'] = $payment;
+                $extra .= ' AND sb.payment_method=:' . $prefix . '_payment';
+            }
+            if ($type !== '') $extra .= ' AND ' . sales_records_type_sql($type, 'sb');
+            return "(SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si JOIN sales sb ON sb.id=si.sale_id JOIN products p ON p.id=si.product_id WHERE sb.branch_id=b.id AND sb.status='completed' AND sb.created_at>=:{$prefix}_from AND sb.created_at<:{$prefix}_to{$extra} AND {$typeSql} AND " . inventory_active_sale_item_sql('si') . ')';
+        };
+        $unitsQtySql = $qtySubquery('bu', StockMonitoringReport::UNITS_SQL);
+        $accQtySql = $qtySubquery('ba', StockMonitoringReport::ACCESSORIES_SQL);
         $branchSummary = Database::query(
-            "SELECT b.id,b.name,b.code,COUNT(s.id) transactions,COALESCE(SUM(s.total),0) total_sales
+            "SELECT b.id,b.name,b.code,COUNT(s.id) transactions,COALESCE(SUM(s.total),0) total_sales,
+                    {$unitsQtySql} units_qty,{$accQtySql} accessories_qty
              FROM branches b
              LEFT JOIN sales s ON {$summaryJoin}
              WHERE b.is_active=1
@@ -116,13 +148,14 @@ try {
         $params['payment_method'] = $payment;
     }
     if ($search !== '') {
-        $where[] = '(s.sale_no LIKE :q_sale OR b.name LIKE :q_branch OR u.name LIKE :q_cashier OR COALESCE(s.payment_reference,\'\') LIKE :q_reference)';
+        $where[] = '(s.sale_no LIKE :q_sale OR b.name LIKE :q_branch OR ' . $cashierSql . ' LIKE :q_cashier OR COALESCE(s.payment_reference,\'\') LIKE :q_reference)';
         $like = '%' . $search . '%';
         $params['q_sale'] = $like;
         $params['q_branch'] = $like;
         $params['q_cashier'] = $like;
         $params['q_reference'] = $like;
     }
+    if ($type !== '') $where[] = sales_records_type_sql($type, 's');
     $whereSql = implode(' AND ', $where);
 
     $totals = Database::query(
@@ -149,17 +182,29 @@ try {
         $itemParams['item_payment'] = $payment;
     }
     if ($search !== '') {
-        $itemWhere[] = '(sx.sale_no LIKE :item_q_sale OR bx.name LIKE :item_q_branch OR ux.name LIKE :item_q_cashier OR COALESCE(sx.payment_reference,\'\') LIKE :item_q_reference)';
+        $itemWhere[] = '(sx.sale_no LIKE :item_q_sale OR bx.name LIKE :item_q_branch OR ' . $itemCashierSql . ' LIKE :item_q_cashier OR COALESCE(sx.payment_reference,\'\') LIKE :item_q_reference)';
         $like = '%' . $search . '%';
         $itemParams['item_q_sale'] = $like;
         $itemParams['item_q_branch'] = $like;
         $itemParams['item_q_cashier'] = $like;
         $itemParams['item_q_reference'] = $like;
     }
-    $totalItems = (int)Database::query(
-        'SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si JOIN sales sx ON sx.id=si.sale_id JOIN branches bx ON bx.id=sx.branch_id JOIN users ux ON ux.id=sx.created_by WHERE ' . implode(' AND ', $itemWhere),
+    if ($type !== '') $itemWhere[] = sales_records_type_sql($type, 'sx');
+    // Units (phone/tablet) and Accessories are counted separately; units + accessories = all items.
+    $itemTotals = Database::query(
+        'SELECT COALESCE(SUM(si.quantity),0) all_qty,
+                COALESCE(SUM(CASE WHEN ' . StockMonitoringReport::UNITS_SQL . ' THEN si.quantity END),0) units_qty,
+                COALESCE(SUM(CASE WHEN ' . StockMonitoringReport::UNITS_SQL . ' THEN si.line_total END),0) units_amount,
+                COALESCE(SUM(CASE WHEN ' . StockMonitoringReport::ACCESSORIES_SQL . ' THEN si.quantity END),0) acc_qty,
+                COALESCE(SUM(CASE WHEN ' . StockMonitoringReport::ACCESSORIES_SQL . ' THEN si.line_total END),0) acc_amount
+         FROM sale_items si JOIN sales sx ON sx.id=si.sale_id JOIN products p ON p.id=si.product_id JOIN branches bx ON bx.id=sx.branch_id JOIN users ux ON ux.id=sx.created_by WHERE ' . implode(' AND ', $itemWhere),
         $itemParams
-    )->fetchColumn();
+    )->fetch() ?: [];
+    $totalItems = (int)($itemTotals['all_qty'] ?? 0);
+    $soldSplit = [
+        'units' => ['qty' => (int)($itemTotals['units_qty'] ?? 0), 'amount' => (float)($itemTotals['units_amount'] ?? 0)],
+        'accessories' => ['qty' => (int)($itemTotals['acc_qty'] ?? 0), 'amount' => (float)($itemTotals['acc_amount'] ?? 0)],
+    ];
 
     $totalRecords = $totalTransactions;
     $totalPages = max(1, (int)ceil($totalRecords / $perPage));
@@ -167,9 +212,17 @@ try {
     $offset = ($pageNo - 1) * $perPage;
 
     $activeSaleItemSql=inventory_active_sale_item_sql('si');
-    $recordSql = "SELECT s.id,s.sale_no,s.total,s.payment_method,s.payment_reference,s.amount_received,s.change_due,s.created_at,
-                         b.name branch_name,b.code branch_code,u.name cashier_name,
-                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id=s.id AND {$activeSaleItemSql}) item_count
+    // Patch 6c-2: sales saved on a device first (migration P3_005). Old databases simply show no offline marks.
+    $hasOfflineCols = (int)Database::query(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sales'
+         AND COLUMN_NAME IN ('client_id','is_offline','device_time','received_at','offline_receipt_no')"
+    )->fetchColumn() === 5;
+    $offlineSelect = $hasOfflineCols ? 's.is_offline,s.offline_receipt_no,s.device_time,s.received_at,' : '0 is_offline,NULL offline_receipt_no,NULL device_time,NULL received_at,';
+    $recordSql = "SELECT s.id,s.sale_no,s.total,s.payment_method,s.payment_reference,s.amount_received,s.change_due,s.created_at,{$offlineSelect}
+                         b.name branch_name,b.code branch_code,{$cashierSql} cashier_name,
+                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id=s.id AND {$activeSaleItemSql}) item_count,
+                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=s.id AND {$activeSaleItemSql} AND " . StockMonitoringReport::UNITS_SQL . ") units_count,
+                         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=s.id AND {$activeSaleItemSql} AND " . StockMonitoringReport::ACCESSORIES_SQL . ") accessories_count
                   FROM sales s
                   JOIN branches b ON b.id=s.branch_id
                   JOIN users u ON u.id=s.created_by
@@ -182,14 +235,14 @@ try {
     if ($saleId) {
         if ($isOwner) {
             $selectedSale = Database::query(
-                "SELECT s.*,b.name branch_name,b.code branch_code,u.name cashier_name
+                "SELECT s.*,b.name branch_name,b.code branch_code,{$cashierSql} cashier_name
                  FROM sales s JOIN branches b ON b.id=s.branch_id JOIN users u ON u.id=s.created_by
                  WHERE s.id=? AND s.status IN ('completed','voided') LIMIT 1",
                 [$saleId]
             )->fetch() ?: null;
         } else {
             $selectedSale = Database::query(
-                "SELECT s.*,b.name branch_name,b.code branch_code,u.name cashier_name
+                "SELECT s.*,b.name branch_name,b.code branch_code,{$cashierSql} cashier_name
                  FROM sales s JOIN branches b ON b.id=s.branch_id JOIN users u ON u.id=s.created_by
                  WHERE s.id=? AND s.branch_id=? AND s.status IN ('completed','voided') LIMIT 1",
                 [$saleId, $branchId]
@@ -215,6 +268,7 @@ $baseState = [
 ];
 if ($isOwner && $branchId) $baseState['branch'] = $branchId;
 if ($payment !== '') $baseState['payment'] = $payment;
+if ($type !== '') $baseState['type'] = $type;
 if ($search !== '') $baseState['q'] = $search;
 
 $selectedBranchName = $isOwner ? 'All Branches' : 'Assigned Branch';
@@ -245,6 +299,7 @@ foreach ($branches as $branch) {
     <label class="field sales-search-field"><span>Search Record</span><div class="sales-search-input"><?= icon('search') ?><input type="search" name="q" value="<?= e($search) ?>" placeholder="Sale no., cashier, reference…"></div></label>
     <?php if ($isOwner): ?><label class="field"><span>Branch</span><select name="branch"><option value="">All Branches</option><?php foreach ($branches as $branch): ?><option value="<?= (int)$branch['id'] ?>" <?= $branchId === (int)$branch['id'] ? 'selected' : '' ?>><?= e($branch['name']) ?></option><?php endforeach; ?></select></label><?php else: ?><label class="field"><span>Branch</span><input type="text" value="<?= e($selectedBranchName) ?>" readonly aria-label="Assigned branch"></label><?php endif; ?>
     <label class="field"><span>Payment</span><select name="payment"><option value="">All Payments</option><?php foreach ($allowedPayments as $method): ?><option value="<?= e($method) ?>" <?= $payment === $method ? 'selected' : '' ?>><?= e(sales_records_payment_label($method)) ?></option><?php endforeach; ?></select></label>
+    <label class="field"><span>Item Type</span><select name="type"><option value="">All Items</option><option value="units" <?= $type === 'units' ? 'selected' : '' ?>>Units (phones &amp; tablets)</option><option value="accessories" <?= $type === 'accessories' ? 'selected' : '' ?>>Accessories</option></select></label>
     <label class="field"><span>Date From</span><input type="date" name="from" value="<?= e($from) ?>"></label>
     <label class="field"><span>Date To</span><input type="date" name="to" value="<?= e($to) ?>"></label>
     <button class="btn btn-primary sales-filter-apply" type="submit">Apply</button>
@@ -253,8 +308,9 @@ foreach ($branches as $branch) {
 
 <div class="sales-kpi-grid">
     <article class="sales-kpi-card"><span>Filtered Sales</span><strong><?= peso($totalSales) ?></strong><small><?= e($selectedBranchName) ?> · <?= e(date('M d', strtotime($from))) ?>–<?= e(date('M d, Y', strtotime($to))) ?></small></article>
-    <article class="sales-kpi-card"><span>Transactions</span><strong><?= number_format($totalTransactions) ?></strong><small>Completed POS sales</small></article>
-    <article class="sales-kpi-card"><span>Items Sold</span><strong><?= number_format($totalItems) ?></strong><small>Total quantity in completed sales</small></article>
+    <article class="sales-kpi-card"><span>Transactions</span><strong><?= number_format($totalTransactions) ?></strong><small><?= $type === 'units' ? 'Receipts with units' : ($type === 'accessories' ? 'Receipts with accessories' : 'Completed POS sales') ?></small></article>
+    <article class="sales-kpi-card"><span>Units Sold</span><strong><?= number_format($soldSplit['units']['qty']) ?></strong><small>Phones &amp; tablets · <?= peso($soldSplit['units']['amount']) ?></small></article>
+    <article class="sales-kpi-card"><span>Accessories Sold</span><strong><?= number_format($soldSplit['accessories']['qty']) ?></strong><small>Accessories · <?= peso($soldSplit['accessories']['amount']) ?></small></article>
 </div>
 
 <?php if ($isOwner): ?>
@@ -272,6 +328,7 @@ foreach ($branches as $branch) {
             <strong><?= e($row['name']) ?></strong>
             <b><?= peso($row['total_sales']) ?></b>
             <small><?= number_format((int)$row['transactions']) ?> transaction<?= (int)$row['transactions'] === 1 ? '' : 's' ?></small>
+            <small class="sales-branch-split">Units <b><?= number_format((int)$row['units_qty']) ?></b> · Accessories <b><?= number_format((int)$row['accessories_qty']) ?></b></small>
         </a>
         <?php endforeach; ?>
     </div>
@@ -287,6 +344,13 @@ foreach ($branches as $branch) {
     <div class="sales-detail-summary">
         <div><span>Payment</span><strong><?= e(sales_records_payment_label($selectedSale['payment_method'])) ?></strong></div>
         <div><span>Reference</span><strong><?= e($selectedSale['payment_reference'] ?: '—') ?></strong></div>
+        <?php if (!empty($selectedSale['is_offline'])): ?>
+        <div><span>Saved offline</span><strong>Receipt <?= e($selectedSale['offline_receipt_no'] ?: '—') ?></strong></div>
+        <?php if ($isOwner): ?>
+        <div><span>Made on device</span><strong><?= !empty($selectedSale['device_time']) ? e(date('M d, Y • h:i A', strtotime($selectedSale['device_time']))) : '—' ?></strong></div>
+        <div><span>Received by server</span><strong><?= !empty($selectedSale['received_at']) ? e(date('M d, Y • h:i A', strtotime($selectedSale['received_at']))) : '—' ?></strong></div>
+        <?php endif; ?>
+        <?php endif; ?>
         <div><span>Original Amount Received</span><strong><?= $selectedSale['amount_received'] !== null ? peso($selectedSale['amount_received']) : '—' ?></strong></div>
         <div><span>Original Change</span><strong><?= peso($selectedSale['change_due']) ?></strong></div>
         <div class="sales-detail-total"><span>Total</span><strong><?= peso($selectedSale['total']) ?></strong></div>
@@ -321,10 +385,10 @@ foreach ($branches as $branch) {
             <?php else: foreach ($records as $sale): ?>
                 <tr>
                     <td><strong><?= e(date('M d, Y', strtotime($sale['created_at']))) ?></strong><span class="sales-cell-sub"><?= e(date('h:i A', strtotime($sale['created_at']))) ?></span></td>
-                    <td><strong><?= e($sale['sale_no']) ?></strong><?php if ($sale['payment_reference']): ?><span class="sales-cell-sub">Ref: <?= e($sale['payment_reference']) ?></span><?php endif; ?></td>
+                    <td><strong><?= e($sale['sale_no']) ?></strong><?php if ($sale['payment_reference']): ?><span class="sales-cell-sub">Ref: <?= e($sale['payment_reference']) ?></span><?php endif; ?><?php if (!empty($sale['is_offline'])): ?><span class="sales-cell-sub sales-offline-tag">Saved offline<?= $sale['offline_receipt_no'] ? ' · ' . e($sale['offline_receipt_no']) : '' ?></span><?php endif; ?></td>
                     <td><span class="sales-table-branch"><?= icon('branch') ?><?= e($sale['branch_name']) ?></span></td>
                     <td><?= e($sale['cashier_name']) ?></td>
-                    <td><?= number_format((int)$sale['item_count']) ?></td>
+                    <td><strong><?= number_format((int)$sale['item_count']) ?></strong><span class="sales-cell-sub"><?= number_format((int)$sale['units_count']) ?> unit<?= (int)$sale['units_count'] === 1 ? '' : 's' ?> · <?= number_format((int)$sale['accessories_count']) ?> acc.</span></td>
                     <td><span class="sales-payment-pill <?= e($sale['payment_method']) ?>"><?= e(sales_records_payment_label($sale['payment_method'])) ?></span></td>
                     <td><strong class="sales-table-total"><?= peso($sale['total']) ?></strong></td>
                     <td><a class="btn btn-secondary btn-sm" href="<?= e(sales_records_url($baseState, ['sale' => (int)$sale['id'], 'p' => $pageNo])) ?>#sale-detail"><?= icon('eye') ?> View</a></td>

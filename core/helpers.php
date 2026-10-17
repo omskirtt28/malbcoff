@@ -94,6 +94,8 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         'login' => '/login',
         'logout' => '/logout',
         'change-password' => '/change-password',
+        'account' => '/account',
+        'needs-action' => '/needs-action',
         'maintenance' => '/maintenance',
     ];
 
@@ -127,6 +129,48 @@ function is_legacy_script_request(string $filename): bool
     return basename(rtrim($requestPath, '/')) === $filename;
 }
 
+/** True when the table has the column (cached). Lets readers work before P3_001 is imported. */
+function db_column_exists(string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    try {
+        $cache[$key] = (int)Database::query(
+            'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',
+            [$table, $column]
+        )->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+    }
+    return $cache[$key];
+}
+
+/**
+ * SQL expression for "the name that was used when the record was created": the snapshot column
+ * ($alias.$column, filled by the P3_001 triggers) and, when it is empty or not installed yet,
+ * the live user name ($liveNameExpr, e.g. "u.name"). History is therefore never renamed.
+ */
+function snapshot_name_sql(string $table, string $alias, string $column, string $liveNameExpr): string
+{
+    if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $alias . $column . $table)) return $liveNameExpr;
+    return db_column_exists($table, $column)
+        ? "COALESCE(NULLIF({$alias}.{$column},''),{$liveNameExpr})"
+        : $liveNameExpr;
+}
+
+/** Display-name rules for "My Account": trimmed, collapsed spaces, 1–60 chars, no HTML/control characters. */
+function validate_display_name(mixed $value): string
+{
+    $name = preg_replace('/\s+/u', ' ', trim((string)$value)) ?? '';
+    if ($name === '') throw new RuntimeException('Display name is required.');
+    if (mb_strlen($name) > 60) throw new RuntimeException('Display name must be 60 characters or fewer.');
+    if (preg_match('/[<>]/', $name) || preg_match('/[\x00-\x1F\x7F]/', $name) || strip_tags($name) !== $name) {
+        throw new RuntimeException('Display name cannot contain HTML or special control characters.');
+    }
+    return $name;
+}
+
 function flash(string $key, ?string $message = null): ?string
 {
     if ($message !== null) {
@@ -156,7 +200,8 @@ function movement_label(string $type): string
         'stock_in' => 'Stock In',
         'stock_out' => 'Stock Out',
         'sale' => 'Sold',
-        'transfer_in', 'transfer_out' => 'Transfer',
+        'transfer_in' => 'Transfer In',
+        'transfer_out' => 'Transfer Out',
         'adjustment' => 'Adjustment',
         'return' => 'Return',
         'defective' => 'Defective',
@@ -843,4 +888,62 @@ function variant_cleanup_truncated_color_duplicates_once(): void
     // Current repair routine is idempotent, transaction-safe per merge, and
     // catches/report merge failures instead of breaking page rendering.
     variant_repair_live_device_duplicates();
+}
+
+/** True when migration P3_004 (outbox_reports) is imported. Everything outbox-related degrades silently without it. */
+function outbox_reports_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+        $ready = (int)Database::query(
+            "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outbox_reports'"
+        )->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+/** Number of open "Needs action" reports from staff outboxes (Patch 6c-1). Owner pages only. */
+function outbox_open_count(): int
+{
+    static $count = null;
+    if ($count !== null) return $count;
+    $count = 0;
+    if (!outbox_reports_ready()) return $count;
+    try {
+        $count = (int)Database::query("SELECT COUNT(*) FROM outbox_reports WHERE status='open'")->fetchColumn();
+    } catch (Throwable $e) {
+        $count = 0;
+    }
+    return $count;
+}
+
+/** Longest text outbox_reports.details can hold: 2000 after migration P3_005, 600 before it. */
+function outbox_reports_details_max(): int
+{
+    static $max = null;
+    if ($max !== null) return $max;
+    try {
+        $len = (int)Database::query(
+            "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outbox_reports' AND COLUMN_NAME='details'"
+        )->fetchColumn();
+        $max = $len >= 2000 ? 2000 : 600;
+    } catch (Throwable $e) {
+        $max = 600;
+    }
+    return $max;
+}
+
+/** Plain-English name of an outbox action type. */
+function outbox_action_label(string $type): string
+{
+    return match ($type) {
+        'sale' => 'Offline Sale',
+        'stock_in' => 'Receive Stock',
+        'transfer_forward' => 'Branch Transfer (send)',
+        'transfer_receive' => 'Receive Transfer',
+        default => 'Stock action',
+    };
 }

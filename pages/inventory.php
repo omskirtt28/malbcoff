@@ -1008,16 +1008,18 @@ $resetHref = app_url('inventory', $resetParams);
       reason:mode==='edit_serial'?'':q('[data-system-adjust-reason]').value,
       notes:mode==='edit_serial'?'':q('[data-system-adjust-note]').value.trim()
     };
-    button.disabled=true;button.textContent='Saving…';setError('',true);
-    try{
-      const response=await fetch('actions/adjust_inventory.php',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.error||'Unable to save stock adjustment.');
-      window.location.reload();
-    }catch(error){
-      button.disabled=false;button.textContent='Confirm Stock Adjustment';
-      setError(error.message||'Unable to save stock adjustment.',true);
-    }
+    setError('',true);
+    if(!window.SafeSubmit){setError('The page did not load completely. Please refresh the page and try again.',true);return;}
+    await window.SafeSubmit.run({
+      url:'actions/adjust_inventory.php',
+      keyHolder:button.closest('form')||modal,
+      button,
+      host:button.parentElement,
+      before:button,
+      getBody:()=>payload,
+      successDetail:data=>`${data.reference_no||''} · ${data.message||''}`,
+      onDismiss:()=>window.location.reload()
+    });
   });
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!modal.hidden)close();});
 })();

@@ -2,16 +2,27 @@
 $scope=current_branch_scope();$type=$_GET['movement']??'';$params=[];$where=['1=1'];
 $voidReady=inventory_void_schema_ready();$canVoid=Auth::actorIsSystemAdmin()&&$voidReady;
 if($scope){$where[]='sm.branch_id=:branch';$params['branch']=$scope;}
-if(in_array($type,['stock_in','stock_out','sale','transfer_in','transfer_out','adjustment','return','defective'],true)){$where[]='sm.movement_type=:movement';$params['movement']=$type;}
+// Tabs use the same buckets as Stock Monitoring; "Other" is everything the other tabs do not show
+// (adjustments, stock out, defective, void restorations...). Legacy ?movement=<raw type> links still work.
+$stockInSql="(sm.movement_type IN ('stock_in','return') AND sm.quantity>0 AND COALESCE(sm.reference_no,'') NOT LIKE 'VOID-%')";
+$bucketSql=[
+    'stock_in'=>$stockInSql,
+    'transfer_in'=>"sm.movement_type='transfer_in'",
+    'transfer_out'=>"sm.movement_type='transfer_out'",
+    'sale'=>"sm.movement_type='sale'",
+    'other'=>"NOT ($stockInSql OR sm.movement_type IN ('transfer_in','transfer_out','sale'))",
+];
+if(isset($bucketSql[$type])){$where[]=$bucketSql[$type];}
+elseif(in_array($type,['stock_out','adjustment','return','defective'],true)){$where[]='sm.movement_type=:movement';$params['movement']=$type;}
 $voidSelect=$voidReady?'v.id void_id,v.reason void_reason,va.name void_actor':'NULL void_id,NULL void_reason,NULL void_actor';
 $voidJoin=$voidReady?'LEFT JOIN inventory_movement_voids v ON v.movement_id=sm.id LEFT JOIN users va ON va.id=v.voided_by':'';
 $rows=[];
-try{$rows=Database::query("SELECT sm.*,b.name branch_name,u.name user_name,COALESCE(NULLIF(iu.serial_no,''),NULLIF(iu.imei,''),p.barcode) identifier_value,iu.condition_type,COALESCE(CONCAT(br.name,' ',pm.name),p.product_name) product_label,p.ram,p.storage,p.connectivity,p.color,{$voidSelect} FROM stock_movements sm JOIN products p ON p.id=sm.product_id LEFT JOIN inventory_units iu ON iu.id=sm.unit_id JOIN branches b ON b.id=sm.branch_id JOIN users u ON u.id=sm.created_by LEFT JOIN brands br ON br.id=p.brand_id LEFT JOIN product_models pm ON pm.id=p.model_id {$voidJoin} WHERE ".implode(' AND ',$where)." ORDER BY sm.created_at DESC,sm.id DESC LIMIT 150",$params)->fetchAll();}catch(Throwable $e){Security::reportException($e,'stock_movement');}
+try{$rows=Database::query("SELECT sm.*,b.name branch_name,".snapshot_name_sql('stock_movements','sm','created_by_name','u.name')." user_name,COALESCE(NULLIF(iu.serial_no,''),NULLIF(iu.imei,''),p.barcode) identifier_value,iu.condition_type,COALESCE(CONCAT(br.name,' ',pm.name),p.product_name) product_label,p.ram,p.storage,p.connectivity,p.color,{$voidSelect} FROM stock_movements sm JOIN products p ON p.id=sm.product_id LEFT JOIN inventory_units iu ON iu.id=sm.unit_id JOIN branches b ON b.id=sm.branch_id JOIN users u ON u.id=sm.created_by LEFT JOIN brands br ON br.id=p.brand_id LEFT JOIN product_models pm ON pm.id=p.model_id {$voidJoin} WHERE ".implode(' AND ',$where)." ORDER BY sm.created_at DESC,sm.id DESC LIMIT 150",$params)->fetchAll();}catch(Throwable $e){Security::reportException($e,'stock_movement');}
 function movement_specs(array $row):string{$parts=[];foreach(['ram','storage','connectivity','color'] as $key)if(!empty($row[$key]))$parts[]=$row[$key];if(($row['condition_type']??'')==='preloved')$parts[]='Pre-Loved';return implode(' • ',$parts);}
 ?>
 <section class="page-heading"><div><span class="eyebrow">IN / OUT HISTORY</span><h1>Stock Movement</h1><p>Track stock in, stock out, transfers and adjustments with accountability.</p></div><?php if($canVoid): ?><button type="button" class="btn btn-outline" id="reviewInventoryVoid">Void Selected</button><?php endif; ?></section>
 <?php if(Auth::actorIsSystemAdmin()&&!$voidReady): ?><div class="alert alert-error">Import <strong>database/P2_024_system_admin_inventory_void.sql</strong> into the existing POS database to enable Void.</div><?php endif; ?>
-<div class="tab-row"><?php $tabs=[''=>'All','stock_in'=>'Stock In','stock_out'=>'Stock Out','sale'=>'Sold','transfer_out'=>'Transfer','adjustment'=>'Adjustment'];foreach($tabs as $key=>$label): $tabParams=[];if($scope)$tabParams['branch']=$scope;if($key)$tabParams['movement']=$key; ?><a class="tab <?= $type===$key?'active':'' ?>" href="<?= e(app_url('stock-movement',$tabParams)) ?>"><?= e($label) ?></a><?php endforeach; ?></div>
+<div class="tab-row"><?php $tabs=[''=>'All','stock_in'=>'Stock In','transfer_in'=>'Transfer In','transfer_out'=>'Transfer Out','sale'=>'Sold','other'=>'Other'];foreach($tabs as $key=>$label): $tabParams=[];if($scope)$tabParams['branch']=$scope;if($key)$tabParams['movement']=$key; ?><a class="tab <?= $type===$key?'active':'' ?>" href="<?= e(app_url('stock-movement',$tabParams)) ?>"><?= e($label) ?></a><?php endforeach; ?></div>
 <?php if($canVoid): ?><p>Select only incorrect outgoing records, then <strong>Void Selected</strong>. Stock returns to the original branch shown below.</p><p id="inventoryVoidSelectionMessage" role="status"></p><?php endif; ?>
 <section class="card table-card"><div class="table-wrap"><table class="data-table"><thead><tr><?php if($canVoid): ?><th>Select</th><?php endif; ?><th>Date</th><th>Item</th><th>Device ID / Barcode</th><th>Branch</th><th>Movement Type</th><th>Qty</th><th>Added By</th><th>Status</th></tr></thead><tbody>
 <?php if(!$rows): ?><tr><td colspan="<?= $canVoid?9:8 ?>"><div class="empty-state"><strong>No movement history yet</strong></div></td></tr><?php else: foreach($rows as $row):$movement=$row['movement_type'];$eligible=!$row['void_id']&&(int)$row['quantity']<0&&in_array($movement,['sale','stock_out','adjustment','defective'],true); ?>

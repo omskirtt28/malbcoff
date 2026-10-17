@@ -29,7 +29,7 @@ try {
 
     if ($activeBranch && $schemaChecks['sales table']) {
         $recentSales = Database::query(
-            "SELECT s.sale_no,s.total,s.payment_method,s.created_at,u.name cashier_name
+            "SELECT s.sale_no,s.total,s.payment_method,s.created_at," . snapshot_name_sql('sales', 's', 'cashier_name', 'u.name') . " cashier_name
              FROM sales s JOIN users u ON u.id=s.created_by
              WHERE s.branch_id=? AND s.status='completed'
              ORDER BY s.id DESC LIMIT 5",
@@ -83,7 +83,7 @@ function pos_payment_label(string $method): string {
 </div>
 <?php endif; ?>
 
-<div class="pos-shell" data-pos-root data-branch-id="<?= (int)$activeBranch['id'] ?>" data-search-url="actions/pos_search.php" data-cart-storage="malbcoff_pos_cart_<?= (int)$activeBranch['id'] ?>">
+<div class="pos-shell" data-pos-root data-branch-id="<?= (int)$activeBranch['id'] ?>" data-branch-code="<?= e(preg_replace('/[^A-Za-z0-9]/', '', (string)($activeBranch['code'] ?? '')) ?: 'BR') ?>" data-search-url="actions/pos_search.php" data-last-prices-url="actions/pos_last_prices.php" data-cart-storage="malbcoff_pos_cart_<?= (int)$activeBranch['id'] ?>">
     <section class="pos-catalog-column">
         <div class="card pos-search-card">
             <div class="pos-section-heading"><div><span class="eyebrow">ADD TO CART</span><h2>Find an item</h2><p>Scan an IMEI, Serial Number or barcode, or search by brand and model.</p></div><div class="pos-search-hint"><?= icon('barcode') ?><span>Scanner ready</span></div></div>
@@ -111,8 +111,8 @@ function pos_payment_label(string $method): string {
             <input type="hidden" name="cart_json" value="[]" data-cart-json>
 
             <div class="pos-summary">
-                <div><span>Subtotal</span><strong data-subtotal><?= peso(0) ?></strong></div>
-                <div class="pos-total-row"><span>Total</span><strong data-total><?= peso(0) ?></strong></div>
+                <div><span>Subtotal</span><strong data-subtotal>—</strong></div>
+                <div class="pos-total-row"><span>Total</span><strong data-total>—</strong></div>
             </div>
 
             <div class="pos-payment-section">
@@ -129,8 +129,8 @@ function pos_payment_label(string $method): string {
                 </div>
             </div>
 
-            <button class="btn btn-primary pos-complete-btn" type="submit" data-complete-sale disabled><?= icon('receipt') ?><span>Complete Sale</span><strong data-complete-total><?= peso(0) ?></strong></button>
-            <p class="pos-checkout-note">Completing the sale automatically marks serialized units as Sold and records Stock Out in Stock Movement.</p>
+            <button class="btn btn-primary pos-complete-btn" type="submit" data-complete-sale disabled><?= icon('receipt') ?><span>Checkout</span><strong data-complete-total></strong></button>
+            <p class="pos-checkout-note">You will type the agreed price for each item at checkout. Completing the sale automatically marks serialized units as Sold and records Stock Out in Stock Movement.</p>
         </form>
     </aside>
 </div>
@@ -141,6 +141,51 @@ function pos_payment_label(string $method): string {
         <div class="modal-header"><div><span class="eyebrow">CONFIRM SALE</span><h2>Complete this transaction?</h2><p class="modal-subtitle">Stock will be deducted immediately after confirmation.</p></div><button type="button" class="icon-button" data-pos-confirm-close aria-label="Close sale confirmation">×</button></div>
         <div class="pos-confirm-body"><div class="pos-confirm-row"><span>Branch</span><strong><?= e($activeBranch['name']) ?></strong></div><div class="pos-confirm-row"><span>Items</span><strong data-confirm-items>0</strong></div><div class="pos-confirm-row"><span>Payment</span><strong data-confirm-payment>Cash</strong></div><div class="pos-confirm-row total"><span>Total</span><strong data-confirm-total><?= peso(0) ?></strong></div></div>
         <div class="pos-confirm-actions"><button class="btn btn-secondary" type="button" data-pos-confirm-close>Review Cart</button><button class="btn btn-primary" type="button" data-pos-confirm-submit><?= icon('receipt') ?> Confirm & Complete Sale</button></div>
+        <?php // Patch 6c-2: the internet dropped at Confirm. Non-cash payments cannot be checked offline → the cashier confirms first. ?>
+        <div class="pos-offline-ask" data-pos-offline-ask role="alertdialog" aria-labelledby="posOfflineAskTitle" tabindex="-1" hidden>
+            <div class="pos-offline-ask-head"><span class="pos-offline-ask-icon" aria-hidden="true">!</span><div><h2 id="posOfflineAskTitle">No internet</h2><p>This sale will be saved on this device and sent when you are back online.</p></div></div>
+            <p class="pos-offline-ask-note"><b data-ask-method>This payment</b> cannot be checked while you are offline. Make sure the customer's payment was received.</p>
+            <label class="pos-offline-ask-check"><input type="checkbox" data-ask-check><span>Payment received</span></label>
+            <div class="pos-offline-ask-actions"><button class="btn btn-secondary" type="button" data-ask-back>Back</button><button class="btn btn-primary" type="button" data-ask-save disabled>Save sale on this device</button></div>
+        </div>
+        <div class="pos-done" data-pos-done role="status" aria-live="polite" tabindex="-1" hidden>
+            <div class="pos-done-head">
+                <span class="pos-done-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+                <div><h2 data-done-title>Sale saved</h2><p data-done-no></p></div>
+            </div>
+            <dl class="pos-done-list">
+                <div><dt>Total</dt><dd data-done-total>—</dd></div>
+                <div><dt>Payment</dt><dd data-done-payment>—</dd></div>
+                <div data-done-cash-row><dt>Cash received</dt><dd data-done-cash>—</dd></div>
+                <div data-done-change-row><dt>Change</dt><dd data-done-change>—</dd></div>
+            </dl>
+            <p class="pos-done-note" data-done-note hidden></p>
+            <div class="pos-done-actions"><button class="btn btn-primary" type="button" data-pos-new-sale>New Sale</button></div>
+        </div>
     </div>
+</div>
+
+<div class="price-sheet" id="posPriceSheet" hidden>
+    <div class="price-sheet-backdrop" data-price-close></div>
+    <section class="price-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="priceSheetTitle">
+        <header class="price-sheet-head">
+            <div><span class="eyebrow">CHECKOUT</span><h2 id="priceSheetTitle">Set Prices</h2><p>Type the agreed price for each item.</p></div>
+            <button type="button" class="price-sheet-close" data-price-close aria-label="Close Set Prices">×</button>
+        </header>
+        <div class="price-sheet-body">
+            <div class="price-same" data-price-same hidden>
+                <button type="button" class="price-same-toggle" data-price-same-toggle aria-expanded="false">Same price for all</button>
+                <div class="price-same-panel" data-price-same-panel hidden>
+                    <label class="price-same-field"><span>Price per piece</span><span class="price-input-box"><b>₱</b><input type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="0.00" data-price-same-input aria-label="Same price per piece for all items"></span></label>
+                    <button type="button" class="btn btn-outline price-same-apply" data-price-same-apply>Apply to all items</button>
+                </div>
+            </div>
+            <div class="price-rows" data-price-rows></div>
+        </div>
+        <footer class="price-sheet-foot">
+            <div class="price-grand"><span>Grand Total</span><strong data-price-grand>₱0.00</strong></div>
+            <button class="btn btn-primary price-confirm" type="button" data-price-confirm disabled>Confirm Sale</button>
+        </footer>
+    </section>
 </div>
 <?php endif; ?>

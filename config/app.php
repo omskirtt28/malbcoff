@@ -48,6 +48,8 @@ return [
     'hsts_enabled' => $boolSetting('APP_HSTS', 'hsts_enabled', false),
     'hsts_include_subdomains' => $boolSetting('APP_HSTS_INCLUDE_SUBDOMAINS', 'hsts_include_subdomains', false),
     'maintenance_mode' => $boolSetting('APP_MAINTENANCE', 'maintenance_mode', false),
+    // Patch 6b: false = every browser unregisters the service worker and clears its caches on the next page load.
+    'enable_service_worker' => $boolSetting('ENABLE_SERVICE_WORKER', 'enable_service_worker', true),
     'audit_retention_days' => max(30, $intSetting('AUDIT_LOG_RETENTION_DAYS', 'audit_retention_days', 180)),
     'require_security_schema' => $boolSetting('REQUIRE_SECURITY_SCHEMA', 'require_security_schema', $isProduction),
     'login_rate_limit' => [

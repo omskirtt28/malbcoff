@@ -42,7 +42,7 @@ $actor = Auth::actorUser();
 
         <details class="user-dropdown"><summary class="user-menu" aria-label="User menu"><div class="avatar"><?= e(strtoupper(substr($user['name'] ?? 'U', 0, 1))) ?></div><div class="user-copy"><strong><?= e($user['name'] ?? 'User') ?></strong><span><?= e(role_label($user['role'] ?? '')) ?></span></div><?= icon('chevron', 'user-chevron') ?></summary>
             <div class="user-dropdown-menu"><div class="user-dropdown-meta"><strong><?= e($user['name'] ?? 'User') ?></strong><span><?= e($scopeName) ?> • <?= e(role_label($user['role'] ?? '')) ?></span></div>
-                <?php if (Auth::isImpersonating()): ?><form method="post" action="actions/impersonation.php" class="dropdown-return-form"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="action" value="end"><button type="submit"><?= icon('shield') ?><span>Return to System Admin</span></button></form><?php else: ?><a href="<?= e(app_url('change-password')) ?>"><?= icon('shield') ?><span>Change Password</span></a><?php endif; ?>
+                <?php if (Auth::isImpersonating()): ?><form method="post" action="actions/impersonation.php" class="dropdown-return-form"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="action" value="end"><button type="submit"><?= icon('shield') ?><span>Return to System Admin</span></button></form><?php else: ?><a href="<?= e(app_url('account')) ?>"><?= icon('users') ?><span>My Account</span></a><a href="<?= e(app_url('change-password')) ?>"><?= icon('shield') ?><span>Change Password</span></a><?php endif; ?>
                 <a href="<?= e(app_url('logout')) ?>"><?= icon('logout') ?><span>Sign Out</span></a></div>
         </details>
     </div>

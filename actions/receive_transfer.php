@@ -1,10 +1,11 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../core/Idempotency.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
     http_response_code(401);
-    echo json_encode(['error' => 'Please sign in again.']);
+    echo json_encode(['error' => 'Please sign in again.', 'code' => 'auth']);
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -24,10 +25,14 @@ if (Auth::isOwner() || $branchId <= 0 || !in_array((string)($user['role'] ?? '')
 $payload = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($payload)) $payload = $_POST;
 if (!Csrf::verify($payload['_csrf'] ?? null)) {
-    http_response_code(419);
-    echo json_encode(['error' => 'Your session expired. Refresh the page and try again.']);
-    exit;
+    Idempotency::csrfFailure();
 }
+
+// Same key again (double tap, lost response, retry) → return the original result; never a second record.
+$idemKey = Idempotency::key($payload);
+$idemUser = (int)(Auth::user()['id'] ?? 0);
+$idemFp = Idempotency::fingerprint($payload);
+Idempotency::replayJsonAndExit($idemKey, 'transfer_receive', $idemUser, $idemFp);
 
 $transferId = filter_var($payload['transfer_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $receiverName = trim((string)($payload['receiver_name'] ?? ''));
@@ -47,6 +52,10 @@ if (mb_strlen($receiverName) > 120) $receiverName = mb_substr($receiverName, 0, 
 $pdo = Database::connection();
 try {
     $pdo->beginTransaction();
+    if ($idemKey !== null && !Idempotency::claim($idemKey, 'transfer_receive', $idemUser, $idemFp)) {
+        $pdo->rollBack();
+        Idempotency::replayAfterLostClaim($idemKey, 'transfer_receive', $idemUser, $idemFp);
+    }
 
     $transfer = Database::query(
         "SELECT t.*,p.product_type,p.product_name,sb.name source_branch,db.name destination_branch
@@ -108,15 +117,17 @@ try {
     );
     if ($updated->rowCount() !== 1) throw new RuntimeException('This transfer has already been processed.');
 
-    $pdo->commit();
-    Security::audit('inventory.transfer_received', 'transfer', $transferId, ['reference_no' => $reference, 'destination_branch_id' => $branchId, 'quantity' => $quantity, 'receiver_name' => $receiverName]);
-    echo json_encode([
+    $response = [
         'success' => true,
         'message' => 'Inventory received successfully.',
         'reference_no' => $reference,
         'receiver_name' => $receiverName,
         'quantity' => $quantity,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ];
+    if ($idemKey !== null) Idempotency::complete($idemKey, $response, $reference);
+    $pdo->commit();
+    Security::audit('inventory.transfer_received', 'transfer', $transferId, ['reference_no' => $reference, 'destination_branch_id' => $branchId, 'quantity' => $quantity, 'receiver_name' => $receiverName]);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     $status = $e instanceof RuntimeException ? 422 : 500;

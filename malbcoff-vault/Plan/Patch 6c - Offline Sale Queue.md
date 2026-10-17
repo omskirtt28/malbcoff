@@ -1,18 +1,7 @@
 ---
-tags: [plan, patch, network, optional]
+tags: [plan, patch, network, offline, pos]
 ---
-# Patch 6c — (Optional) Offline sale queue
+# Patch 6c-2 — Offline sale queue (old plan note)
+**Status: DONE 2026-10-17 — see [[Patch 6c-2 - Offline Sales Outbox]]** (that note has the final behaviour, server rules, migration `P3_005` and the acceptance list).
 
-Only do if Branch needs to keep selling with NO net. Risky: stock/price are validated server-side at sync time.
-
-## Design
-- IndexedDB queue `pending_sales` {client_ref, cart snapshot, payment, created_local_at}. POS keeps a cached copy of last-fetched catalog for branch (from `pos_search.php`) in IndexedDB for search while offline.
-- When offline: sale saved as **PENDING** (receipt marked "Pending sync"), unit marked reserved locally so same IMEI can't be added twice.
-- On reconnect (`online` event + 30 s timer): POST each in order via `netFetch` + `client_ref` (6a). Server re-validates stock/price; conflicts (unit already sold) go to a "Needs attention" list for the manager.
-- `pages/pos.php`: "Pending (n)" chip + sync/resolve panel. `complete_sale.php`: accept `offline_at` timestamp for `sales.created_at` (validated, ≤ 48 h old) and mark `sales.offline_synced=1` (migration).
-- Security: queue holds no passwords; require valid session at sync (else prompt login then continue).
-
-## Acceptance
-- [ ] Airplane mode: complete 3 sales; reconnect → 3 sales appear once, correct branch, stock decremented.
-- [ ] Conflict case (unit sold elsewhere meanwhile) is flagged, not silently dropped.
-- [ ] Clear browser data warning shown if pending > 0.
+This file is kept only because older notes link to it. The original idea (reuse the [[Patch 6c-1 - Offline Outbox for Stock Actions]] outbox with a `sale` type, send each sale with its 6a key, let the server re-validate, send conflicts to the owner's Needs Action list, keep the typed prices from [[Patch 8 - Price at Checkout]]) is exactly what was built. Differences from this old plan: the device time is accepted for the sale date within 7 days (not 48 h) and is stored next to the server time; the duplicate guard is a UNIQUE `sales.client_id` in addition to the idempotency key; a small "seen earlier" search cache lets the cashier keep selling while offline; there is no "Pending sync" receipt page (there is still no receipt page) — the temporary receipt number `OFFLINE-<branch>-<date>-<n>` is shown instead.

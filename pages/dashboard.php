@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../core/StockMonitoringReport.php';
 $scope = current_branch_scope();
 $whereUnit = $scope ? ' WHERE iu.branch_id=:branch ' : '';
 $whereBalance = $scope ? ' WHERE ib.branch_id=:branch ' : '';
@@ -12,7 +13,13 @@ $stats = [
     'preloved' => 0,
     'accessories' => 0,
     'stock_in_today' => 0,
-    'stock_out_today' => 0,
+    'transfer_in_today' => 0,
+    'transfer_today' => 0,
+    'units_sold_today' => 0,
+    'units_sold_amount' => 0.0,
+    'accessories_sold_today' => 0,
+    'accessories_sold_amount' => 0.0,
+    'in_transit' => 0,
     'sales_today' => 0.0,
     'sales_month' => 0.0,
     'transactions_today' => 0,
@@ -49,15 +56,18 @@ try {
 
     $movementWhere = $scope ? ' AND sm.branch_id=:branch' : '';
     $activeMovementSql=inventory_active_movement_sql('sm');
-    $stats['stock_in_today'] = (int)Database::query(
-        "SELECT COALESCE(SUM(CASE WHEN quantity>0 THEN quantity ELSE 0 END),0) FROM stock_movements sm WHERE movement_type IN ('stock_in','transfer_in','return') AND DATE(created_at)=CURDATE() {$movementWhere}",
-        $params
-    )->fetchColumn();
-    $stats['stock_out_today'] = abs((int)Database::query(
-        "SELECT COALESCE(SUM(CASE WHEN quantity<0 THEN quantity ELSE 0 END),0) FROM stock_movements sm WHERE movement_type IN ('stock_out','sale','transfer_out','defective') AND DATE(created_at)=CURDATE() AND {$activeMovementSql} {$movementWhere}",
-        $params
-    )->fetchColumn());
-
+    // Same buckets/filters as Stock Monitoring (voids excluded, transfers split from Stock In).
+    $dayTotals = StockMonitoringReport::dayTotals(date('Y-m-d'), $scope ? (int)$scope : null);
+    $stats['stock_in_today'] = $dayTotals['stock_in'];
+    $stats['transfer_in_today'] = $dayTotals['transfer_in'];
+    $stats['transfer_today'] = $dayTotals['transfer_out'];
+    // Units vs accessories sold today: quantity + peso from completed, non-voided sale items.
+    $soldToday = StockMonitoringReport::soldByType(date('Y-m-d') . ' 00:00:00', date('Y-m-d 00:00:00', strtotime('+1 day')), $scope ? (int)$scope : null);
+    $stats['units_sold_today'] = $soldToday['units']['qty'];
+    $stats['units_sold_amount'] = $soldToday['units']['amount'];
+    $stats['accessories_sold_today'] = $soldToday['accessories']['qty'];
+    $stats['accessories_sold_amount'] = $soldToday['accessories']['amount'];
+    $stats['in_transit'] = (int)$dayTotals['in_transit']['units'];
     if (!$isOwnerDashboard) {
         $recent = Database::query(
             "SELECT sm.created_at,sm.movement_type,sm.quantity,b.name branch_name,COALESCE(CONCAT(br.name,' ',pm.name),p.product_name) product_label,p.ram,p.storage,p.connectivity,p.color
@@ -86,21 +96,27 @@ if ($isOwnerDashboard) {
             throw new RuntimeException('Sales monitoring is unavailable.');
         }
 
+        // Sales cards follow the branch selector and use the same PHP date boundaries as the KPI drawer.
+        $salesBranchSql = $scope ? ' AND branch_id=?' : '';
+        $salesBranchParams = $scope ? [(int)$scope] : [];
+        $tomorrowStart = date('Y-m-d 00:00:00', strtotime('+1 day'));
         $today = Database::query(
             "SELECT COUNT(*) transactions, COALESCE(SUM(total),0) total_sales
              FROM sales
-             WHERE status='completed' AND DATE(created_at)=CURDATE()"
+             WHERE status='completed' AND created_at >= ? AND created_at < ?{$salesBranchSql}",
+            [date('Y-m-d 00:00:00'), $tomorrowStart, ...$salesBranchParams]
         )->fetch();
         $stats['transactions_today'] = (int)($today['transactions'] ?? 0);
         $stats['sales_today'] = (float)($today['total_sales'] ?? 0);
         $stats['sales_month'] = (float)Database::query(
             "SELECT COALESCE(SUM(total),0)
              FROM sales
-             WHERE status='completed' AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')"
+             WHERE status='completed' AND created_at >= ? AND created_at < ?{$salesBranchSql}",
+            [date('Y-m-01 00:00:00'), $tomorrowStart, ...$salesBranchParams]
         )->fetchColumn();
 
         $recentSales = Database::query(
-            "SELECT s.sale_no,s.total,s.payment_method,s.created_at,b.name branch_name,u.name cashier_name
+            "SELECT s.sale_no,s.total,s.payment_method,s.created_at,b.name branch_name," . snapshot_name_sql('sales', 's', 'cashier_name', 'u.name') . " cashier_name
              FROM sales s
              JOIN branches b ON b.id=s.branch_id
              JOIN users u ON u.id=s.created_by
@@ -151,16 +167,33 @@ function dashboard_payment_label(string $method): string
 <?php if ($dbError): ?><div class="alert alert-info"><?= e($dbError) ?></div><?php endif; ?>
 <?php if ($salesDbError): ?><div class="alert alert-info"><?= e($salesDbError) ?></div><?php endif; ?>
 
+<?php if ($isOwnerDashboard && outbox_open_count() > 0): $needsActionCount = outbox_open_count(); ?>
+<a class="needs-action-card" href="<?= e(app_url('needs-action')) ?>">
+    <span class="needs-action-card-icon" aria-hidden="true"><?= icon('alert') ?></span>
+    <span class="needs-action-card-copy"><strong><?= (int)$needsActionCount ?> saved item<?= $needsActionCount === 1 ? '' : 's' ?> (sales or stock) need<?= $needsActionCount === 1 ? 's' : '' ?> action</strong><small>A branch phone could not complete <?= $needsActionCount === 1 ? 'it' : 'them' ?>. Tap to see why.</small></span>
+    <span class="needs-action-card-go"><?= icon('chevron') ?></span>
+</a>
+<?php endif; ?>
+
 <div class="quick-search card compact"><?= icon('search') ?><input type="search" placeholder="Quick search products, models, IMEI, serial, barcode…" data-global-search></div>
 
-<?php if ($isOwnerDashboard): ?>
-<div class="kpi-grid owner">
-    <article class="kpi-card tint-blue"><div class="kpi-icon"><?= icon('inventory') ?></div><span>Total Inventory</span><strong><?= number_format($stats['total_inventory']) ?></strong><small>Available units</small></article>
-    <article class="kpi-card tint-green"><div class="kpi-icon"><?= icon('phone') ?></div><span>Phones Available</span><strong><?= number_format($stats['phones']) ?></strong><small>Units</small></article>
-    <article class="kpi-card tint-purple"><div class="kpi-icon"><?= icon('tablet') ?></div><span>Tablets Available</span><strong><?= number_format($stats['tablets']) ?></strong><small>Units</small></article>
-    <article class="kpi-card tint-violet"><div class="kpi-icon"><?= icon('accessory') ?></div><span>Accessories Stock</span><strong><?= number_format($stats['accessories']) ?></strong><small>Units</small></article>
-    <article class="kpi-card tint-amber"><div class="kpi-icon"><?= icon('receipt') ?></div><span>Sales Today</span><strong><?= peso($stats['sales_today']) ?></strong><small><?= number_format($stats['transactions_today']) ?> completed transactions</small></article>
-    <article class="kpi-card tint-red"><div class="kpi-icon"><?= icon('receipt') ?></div><span>Sales This Month</span><strong><?= peso($stats['sales_month']) ?></strong><small>All branches</small></article>
+<?php if ($isOwnerDashboard):
+    $salesScopeLabel = 'All branches';
+    foreach ($branchSummary as $bs) if ($scope && (int)$bs['id'] === (int)$scope) $salesScopeLabel = (string)$bs['name'];
+    // Owner KPI cards open the shared drawer (today, current branch scope).
+    $drawerAttrs = static fn(string $kind, string $basis = '', string $type = ''): string => ' data-kpi-drawer="' . $kind . '" data-date="' . date('Y-m-d') . '" data-branch="' . ($scope ? (int)$scope : '') . '"' . ($basis !== '' ? ' data-basis="' . $basis . '"' : '') . ($type !== '' ? ' data-type="' . $type . '"' : '');
+?>
+<div class="kpi-grid owner owner-dash-kpis">
+    <article class="kpi-card tint-blue"<?= $drawerAttrs('overall', 'live') ?>><div class="kpi-icon"><?= icon('inventory') ?></div><span>Total Inventory</span><strong><?= number_format($stats['total_inventory']) ?></strong><small>Available units</small></article>
+    <article class="kpi-card tint-green"<?= $drawerAttrs('overall', 'live', 'phone') ?>><div class="kpi-icon"><?= icon('phone') ?></div><span>Phones Available</span><strong><?= number_format($stats['phones']) ?></strong><small>Units</small></article>
+    <article class="kpi-card tint-purple"<?= $drawerAttrs('overall', 'live', 'tablet') ?>><div class="kpi-icon"><?= icon('tablet') ?></div><span>Tablets Available</span><strong><?= number_format($stats['tablets']) ?></strong><small>Units</small></article>
+    <article class="kpi-card tint-violet"<?= $drawerAttrs('overall', 'live', 'accessories') ?>><div class="kpi-icon"><?= icon('accessory') ?></div><span>Accessories Stock</span><strong><?= number_format($stats['accessories']) ?></strong><small>Units</small></article>
+    <article class="kpi-card tint-amber"<?= $drawerAttrs('sales_today') ?>><div class="kpi-icon"><?= icon('receipt') ?></div><span>Sales Today</span><strong><?= peso($stats['sales_today']) ?></strong><small><?= number_format($stats['transactions_today']) ?> completed transactions</small></article>
+    <article class="kpi-card tint-red"<?= $drawerAttrs('sales_month') ?>><div class="kpi-icon"><?= icon('receipt') ?></div><span>Sales This Month</span><strong><?= peso($stats['sales_month']) ?></strong><small><?= e($salesScopeLabel) ?></small></article>
+    <article class="kpi-card tint-green"<?= $drawerAttrs('stock_in') ?>><div class="kpi-icon"><?= icon('stock') ?></div><span>Stock In Today</span><strong><?= number_format($stats['stock_in_today']) ?></strong><small>Supplier receives &amp; returns</small></article>
+    <article class="kpi-card tint-violet"<?= $drawerAttrs('transfer') ?>><div class="kpi-icon"><?= icon('movement') ?></div><span>Transfer Today</span><strong><?= number_format($stats['transfer_today']) ?></strong><small><?= number_format($stats['transfer_in_today']) ?> received · In transit: <?= number_format($stats['in_transit']) ?></small></article>
+    <article class="kpi-card tint-amber"<?= $drawerAttrs('sold', '', 'units') ?>><div class="kpi-icon"><?= icon('phone') ?></div><span>Units Sold Today</span><strong><?= number_format($stats['units_sold_today']) ?></strong><small>Phones &amp; tablets · <?= peso($stats['units_sold_amount']) ?></small></article>
+    <article class="kpi-card tint-purple"<?= $drawerAttrs('sold', '', 'accessories') ?>><div class="kpi-icon"><?= icon('accessory') ?></div><span>Accessories Sold Today</span><strong><?= number_format($stats['accessories_sold_today']) ?></strong><small>Accessories · <?= peso($stats['accessories_sold_amount']) ?></small></article>
 </div>
 <?php else: ?>
 <div class="kpi-grid owner">
@@ -173,6 +206,7 @@ function dashboard_payment_label(string $method): string
 </div>
 <?php endif; ?>
 
+<?php if ($isOwnerDashboard): ?><script src="assets/js/kpi-drawer.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/kpi-drawer.js') ?>"></script><?php endif; ?>
 <div class="dashboard-grid">
     <?php if ($isOwnerDashboard): ?>
     <section class="card">

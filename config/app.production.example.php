@@ -8,6 +8,7 @@ return [
     'hsts_include_subdomains' => false,
     'trust_cloudflare_proxy' => false, // change to true only after the domain is proxied through Cloudflare
     'maintenance_mode' => false,
+    'enable_service_worker' => true, // Set to false to switch the service worker off instantly (see vault: How to turn off the service worker).
     'require_security_schema' => true,
     'audit_retention_days' => 180,
 ];

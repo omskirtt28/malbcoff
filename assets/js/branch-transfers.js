@@ -142,27 +142,41 @@
       return;
     }
     if (!submit || !csrf || !transferId) return;
-    const old = submit.innerHTML;
-    submit.disabled = true;
-    submit.textContent = 'Receiving…';
-    try {
-      const response = await fetch('actions/receive_transfer.php', {
-        method:'POST',
-        headers:{'Content-Type':'application/json',Accept:'application/json'},
-        credentials:'same-origin',
-        body:JSON.stringify({_csrf:csrf.value,transfer_id:Number(transferId),receiver_name:name})
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (data.field === 'receiver_name') setReceiverError(data.error || 'Enter a receiver name.');
-        throw new Error(data.error || 'Unable to receive this transfer.');
-      }
-      submit.textContent = 'Received';
-      window.setTimeout(() => window.location.reload(), 500);
-    } catch (error) {
-      setError(error.message || 'Unable to receive this transfer. Please try again.');
-      submit.disabled = false;
-      submit.innerHTML = old;
+    if (!window.SafeSubmit) {
+      setError('The page did not load completely. Please refresh the page and try again.');
+      return;
     }
+    // Words for the offline outbox (Patch 6c-1).
+    const t = activeTransfer || {};
+    const productLabel = [t.product_name, t.specs && t.specs !== '—' ? t.specs : ''].filter(Boolean).join(' • ');
+    const outboxLines = [`Reference: ${t.reference_no || ''}`, `From: ${t.source_branch || ''}`, `To: ${t.destination_branch || ''}`, `Quantity: ${t.quantity ?? ''}`, `Received by: ${name}`];
+    qa('.transfer-proof-line', q('[data-transfer-units]') || modal).forEach(line => {
+      const text = line.textContent.replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (text) outboxLines.push(`Unit: ${text}`);
+    });
+
+    // Same key on every retry → the server confirms the first receipt instead of moving stock twice.
+    await window.SafeSubmit.run({
+      url: 'actions/receive_transfer.php',
+      keyHolder: form,
+      button: submit,
+      host: submit.parentElement,
+      before: submit,
+      getBody: () => ({ _csrf: csrf.value, transfer_id: Number(transferId), receiver_name: name }),
+      onCsrf: token => { csrf.value = token; },
+      successDetail: data => `${data.reference_no || ''} · ${data.message || ''}`,
+      onDismiss: () => window.location.reload(),
+      outbox: {
+        type: 'transfer_receive',
+        summary: `Receive ${t.quantity ?? ''} ${Number(t.quantity) === 1 ? 'item' : 'items'} of ${productLabel} from ${t.source_branch || 'another branch'}`.replace(/\s+/g, ' '),
+        lines: outboxLines.filter(line => !/:\s*$/.test(line)),
+        dedupe: `transfer_receive:${transferId}`,
+        review: { page: 'branch-transfers', params: { open: transferId } }
+      }
+    });
   });
+
+  // Outbox "Review" opens this page with ?open=<transfer id> so the transfer is shown right away.
+  const autoOpen = new URLSearchParams(window.location.search).get('open');
+  if (autoOpen && /^\d+$/.test(autoOpen)) void open(autoOpen);
 })();

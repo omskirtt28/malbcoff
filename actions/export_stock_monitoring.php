@@ -18,10 +18,12 @@ $isOwner = (bool)$report['is_owner'];
 // Same rule as the page: matrix only for the owner on All Branches.
 $isMatrix = $isOwner && $report['view'] === 'matrix';
 $rows = [];
-$title = $isMatrix ? 'Overall Stock Monitoring' : 'Stock Monitoring';
+$isAccessoriesTab = ($report['tab'] ?? 'phones') === 'accessories';
+$tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
+$title = ($isMatrix ? 'Overall Stock Monitoring' : 'Stock Monitoring') . ' - ' . $tabLabel;
 $scope = $isOwner ? (string)$report['selected_branch_name'] : (string)(Auth::user()['branch_name'] ?? 'Assigned Branch');
 $rows[] = [['v' => $title, 's' => 3]];
-$rows[] = [['v' => 'Date', 's' => 1], ['v' => (string)$report['formatted_date']], ['v' => 'Scope', 's' => 1], ['v' => $scope]];
+$rows[] = [['v' => 'Date', 's' => 1], ['v' => (string)$report['formatted_date']], ['v' => 'Scope', 's' => 1], ['v' => $scope], ['v' => 'Tab', 's' => 1], ['v' => $tabLabel], ['v' => 'In transit', 's' => 1], ['v' => (int)($report['in_transit']['units'] ?? 0)]];
 $rows[] = [];
 
 if ($isMatrix) {
@@ -54,63 +56,75 @@ if ($isMatrix) {
         $rows[] = $totalLine;
     }
 
-    $grand = [['v' => 'GRAND TOTAL (All Brands)', 's' => 4], ['v' => '', 's' => 4]];
+    $grand = [['v' => 'GRAND TOTAL (' . $tabLabel . ')', 's' => 4], ['v' => '', 's' => 4]];
     foreach ($report['display_branches'] as $branch) $grand[] = ['v' => (int)($report['branch_totals'][(int)$branch['id']] ?? 0), 's' => 4];
     $grand[] = ['v' => (int)$report['totals']['ending'], 's' => 4];
     $rows[] = $grand;
 } else {
-    $rows[] = [
+    // Patch 2C: same columns as the screen — one Transfer column ("+2 / −1"), one Sold column, Other only when it has data.
+    $showOther = StockMonitoringReport::hasOther($report['rows']);
+    $head = [
         ['v' => 'Brand', 's' => 1],
         ['v' => 'Model', 's' => 1],
-        ['v' => 'Opening Stock', 's' => 1],
-        ['v' => 'IN', 's' => 1],
-        ['v' => 'OUT', 's' => 1],
-        ['v' => 'SOLD', 's' => 1],
-        ['v' => 'Ending Stock', 's' => 1],
+        ['v' => 'Opening', 's' => 1],
+        ['v' => 'Stock In', 's' => 1],
+        ['v' => 'Transfer', 's' => 1],
+        ['v' => 'Sold', 's' => 1],
     ];
+    if ($showOther) $head[] = ['v' => 'Other', 's' => 1];
+    $head[] = ['v' => 'Ending', 's' => 1];
+    $rows[] = $head;
 
     foreach ($report['groups'] as $groupName => $groupRows) {
-        $groupTotal = ['opening'=>0,'in'=>0,'out'=>0,'sold'=>0,'ending'=>0];
+        $groupTotal = ['opening'=>0,'stock_in'=>0,'transfer_in'=>0,'transfer_out'=>0,'sold'=>0,'other'=>0,'ending'=>0];
         foreach ($groupRows as $row) {
             $groupTotal['opening'] += (int)$row['opening_stock'];
-            $groupTotal['in'] += (int)$row['in_qty'];
-            $groupTotal['out'] += (int)$row['out_qty'];
+            $groupTotal['stock_in'] += (int)$row['stock_in_qty'];
+            $groupTotal['transfer_in'] += (int)$row['transfer_in_qty'];
+            $groupTotal['transfer_out'] += (int)$row['transfer_out_qty'];
             $groupTotal['sold'] += (int)$row['sold_qty'];
+            $groupTotal['other'] += (int)$row['other_qty'];
             $groupTotal['ending'] += (int)$row['ending_stock'];
-            $rows[] = [
+            $line = [
                 ['v' => (string)$groupName],
                 ['v' => StockMonitoringReport::displayModel($row)],
                 ['v' => (int)$row['opening_stock']],
-                ['v' => (int)$row['in_qty']],
-                ['v' => (int)$row['out_qty']],
+                ['v' => (int)$row['stock_in_qty']],
+                ['v' => StockMonitoringReport::transferLabel((int)$row['transfer_in_qty'], (int)$row['transfer_out_qty'])],
                 ['v' => (int)$row['sold_qty']],
-                ['v' => (int)$row['ending_stock'], 's' => 2],
             ];
+            if ($showOther) $line[] = ['v' => (int)$row['other_qty']];
+            $line[] = ['v' => (int)$row['ending_stock'], 's' => 2];
+            $rows[] = $line;
         }
-        $rows[] = [
+        $total = [
             ['v' => strtoupper((string)$groupName) . ' TOTAL', 's' => 2],
             ['v' => '', 's' => 2],
             ['v' => $groupTotal['opening'], 's' => 2],
-            ['v' => $groupTotal['in'], 's' => 2],
-            ['v' => $groupTotal['out'], 's' => 2],
+            ['v' => $groupTotal['stock_in'], 's' => 2],
+            ['v' => StockMonitoringReport::transferLabel($groupTotal['transfer_in'], $groupTotal['transfer_out']), 's' => 2],
             ['v' => $groupTotal['sold'], 's' => 2],
-            ['v' => $groupTotal['ending'], 's' => 2],
         ];
+        if ($showOther) $total[] = ['v' => $groupTotal['other'], 's' => 2];
+        $total[] = ['v' => $groupTotal['ending'], 's' => 2];
+        $rows[] = $total;
     }
-    $rows[] = [
-        ['v' => 'GRAND TOTAL (All Brands)', 's' => 4],
+    $grand = [
+        ['v' => 'GRAND TOTAL (' . $tabLabel . ')', 's' => 4],
         ['v' => '', 's' => 4],
         ['v' => (int)$report['totals']['opening'], 's' => 4],
-        ['v' => (int)$report['totals']['in'], 's' => 4],
-        ['v' => (int)$report['totals']['out'], 's' => 4],
+        ['v' => (int)$report['totals']['stock_in'], 's' => 4],
+        ['v' => StockMonitoringReport::transferLabel((int)$report['totals']['transfer_in'], (int)$report['totals']['transfer_out']), 's' => 4],
         ['v' => (int)$report['totals']['sold'], 's' => 4],
-        ['v' => (int)$report['totals']['ending'], 's' => 4],
     ];
+    if ($showOther) $grand[] = ['v' => (int)$report['totals']['other'], 's' => 4];
+    $grand[] = ['v' => (int)$report['totals']['ending'], 's' => 4];
+    $rows[] = $grand;
 }
 
 $slugScope = preg_replace('/[^a-z0-9]+/i', '-', strtolower($scope));
 $slugScope = trim((string)$slugScope, '-') ?: 'stock';
-$baseName = 'malbcoff-stock-monitoring-' . $slugScope . '-' . $report['date'];
+$baseName = 'malbcoff-stock-monitoring-' . ($isAccessoriesTab ? 'accessories' : 'phones-tablets') . '-' . $slugScope . '-' . $report['date'];
 
 if (class_exists('ZipArchive')) {
     send_stock_monitoring_xlsx($rows, $baseName . '.xlsx', $title);
@@ -131,7 +145,7 @@ function send_stock_monitoring_xlsx(array $rows, string $filename, string $title
     $sheetXml = stock_monitoring_sheet_xml($rows);
     $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>');
     $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>');
-    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Stock Monitoring" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' . stock_monitoring_xml($GLOBALS['tabLabel'] === 'Accessories' ? 'Accessories' : 'Phones and Tablets') . '" sheetId="1" r:id="rId1"/></sheets></workbook>');
     $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
     $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
     $zip->addFromString('xl/styles.xml', stock_monitoring_styles_xml());

@@ -301,7 +301,13 @@
       receiveData.set('ajax_action', 'receive_stock');
       receiveData.set('product_id', String(productId));
       receiveData.set('branch_id', String(receiveData.get('branch_id') || modal.dataset.defaultBranchId || ''));
+      // Safe retry: one key per intention; pressing Save again after a bad connection never receives the stock twice.
+      if (window.SafeSubmit) {
+        form.dataset.clientKey = form.dataset.clientKey || window.SafeSubmit.uuid();
+        receiveData.set('client_key', form.dataset.clientKey);
+      }
       const received = await postForm('actions/stock_in.php', receiveData);
+      delete form.dataset.clientKey;
       const stock = received.stock || {};
       const params = new URLSearchParams({model:String(modelId), stock_done:'1', variant:String(productId)});
       if (stock.reference) params.set('stock_ref', String(stock.reference));

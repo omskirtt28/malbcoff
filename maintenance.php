@@ -16,6 +16,7 @@ header('Retry-After: 300');
     <title>Maintenance | <?= e($app['name']) ?></title>
     <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
     <link rel="shortcut icon" href="assets/favicon.svg">
+    <?php require __DIR__ . '/partials/pwa-head.php'; ?>
     <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/assets/css/app.css') ?>">
 </head>
 <body class="auth-page maintenance-page">
@@ -30,5 +31,6 @@ header('Retry-After: 300');
     </div>
     <small>Version <?= e($app['version'] ?? '1.0.0') ?></small>
 </div>
+<?php require __DIR__ . '/partials/pwa-register.php'; ?>
 </body>
 </html>

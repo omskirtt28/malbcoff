@@ -1,10 +1,11 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../core/Idempotency.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
     http_response_code(401);
-    echo json_encode(['error' => 'Please sign in again.']);
+    echo json_encode(['error' => 'Please sign in again.', 'code' => 'auth']);
     exit;
 }
 
@@ -25,10 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $payload = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($payload)) $payload = $_POST;
 if (!Csrf::verify($payload['_csrf'] ?? null)) {
-    http_response_code(419);
-    echo json_encode(['error' => 'Your session expired. Refresh the page and try again.']);
-    exit;
+    Idempotency::csrfFailure();
 }
+
+// Same key again (double tap, lost response, retry) → return the original result; never a second record.
+$idemKey = Idempotency::key($payload);
+$idemUser = (int)(Auth::user()['id'] ?? 0);
+$idemFp = Idempotency::fingerprint($payload);
+Idempotency::replayJsonAndExit($idemKey, 'transfer_forward', $idemUser, $idemFp);
 
 $productId = filter_var($payload['product_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
 $destinationBranchId = filter_var($payload['destination_branch_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
@@ -60,6 +65,10 @@ try {
     }
 
     $pdo->beginTransaction();
+    if ($idemKey !== null && !Idempotency::claim($idemKey, 'transfer_forward', $idemUser, $idemFp)) {
+        $pdo->rollBack();
+        Idempotency::replayAfterLostClaim($idemKey, 'transfer_forward', $idemUser, $idemFp);
+    }
 
     $sourceBranch = Database::query('SELECT id,name,code FROM branches WHERE id=? AND is_active=1 LIMIT 1 FOR UPDATE', [$sourceBranchId])->fetch();
     $destinationBranch = Database::query('SELECT id,name,code FROM branches WHERE id=? AND is_active=1 LIMIT 1 FOR UPDATE', [$destinationBranchId])->fetch();
@@ -149,9 +158,7 @@ try {
         }
     }
 
-    $pdo->commit();
-    Security::audit('inventory.transfer_forwarded', 'transfer', $transferId, ['reference_no' => $reference, 'source_branch_id' => $sourceBranchId, 'destination_branch_id' => $destinationBranchId, 'product_id' => $productId, 'quantity' => $moved]);
-    echo json_encode([
+    $response = [
         'success' => true,
         'message' => $moved . ' unit' . ($moved === 1 ? '' : 's') . ' forwarded to ' . $destinationBranch['name'] . '. Pending receiving confirmation.',
         'reference_no' => $reference,
@@ -159,7 +166,11 @@ try {
         'destination_branch' => $destinationBranch['name'],
         'quantity' => $moved,
         'status' => 'pending',
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ];
+    if ($idemKey !== null) Idempotency::complete($idemKey, $response, $reference);
+    $pdo->commit();
+    Security::audit('inventory.transfer_forwarded', 'transfer', $transferId, ['reference_no' => $reference, 'source_branch_id' => $sourceBranchId, 'destination_branch_id' => $destinationBranchId, 'product_id' => $productId, 'quantity' => $moved]);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     $status = $e instanceof RuntimeException ? 422 : 500;
