@@ -1,6 +1,6 @@
 ---
 tags: [index]
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # Malbcoff POS Vault — Start Here
 
@@ -10,6 +10,12 @@ Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code*
 1. Sabihin: *"Read malbcoff-vault/00 Start Here.md and Plan/Owner Updates Plan.md, then do Patch N only."*
 2. Claude Code reads lang yung files na naka-list sa patch note (hindi buong codebase).
 3. Pagkatapos ng patch, i-update ang related Feature note + i-tick sa [[Owner Updates Plan]].
+
+## Patch delivery rule (permanente) — tingnan [[Deploy Rule]]
+- **Trigger phrases:** "akin na yung patch", "give me the patch", "ibigay mo yung patch", "latest patch", "deploy package", "patch na".
+- Kapag sinabi ang alinman: **huwag magtanong, huwag i-re-read ang project** — patakbuhin ang `deploy\build-update-package.ps1`. Package = LANG files na bago/binago laban sa `deploy/baseline-manifest.json` (ang LIVE na). Output sa Desktop: `malbcoff-deploy-update-<yyyy-mm-dd-hhmm>\` + zip, `deploy/migrations.sql` (bagong migrations lang), `deploy/README.txt` (plain English).
+- Tapusin sa listahan ng new/changed files, zip path, baseline version, at: **reply "deployed" after uploading**.
+- Kapag "deployed" / "na-deploy ko na" / "live na": `deploy\confirm-deployed.ps1`, tapos itala sa [[Deploy Rule]] at [[Changelog]]. Walang confirmation = hindi gumagalaw ang baseline.
 
 ## Map
 - [[Architecture Map]] — paano dumadaan ang request, folders, layers
@@ -31,8 +37,10 @@ Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code*
 - [[Patch 6c-1 - Offline Outbox for Stock Actions]] — Receive Stock / Branch Transfer / Receive Transfer queue on the device and send when online; owner Needs Action list
 - [[Patch 6c-2 - Offline Sales Outbox]] — POS sales saved on the device when the net drops, sent once later (client id, device time, "In a queued sale", owner Needs Action for refused sales); migration `P3_005`
 - [[How to turn off the service worker]] — emergency switch for the Patch 6b service worker
+- [[Deploy Rule]] — permanenteng patch-delivery rule (trigger phrases, baseline manifest, "deployed")
 - [[Deploy Package]] — ano ang laman ng bawat live-deploy zip
 - [[BUG Stock Monitoring Owner Branch View]] — root cause
+- [[BUG Tablet Login Stays on Login Page]] — tablets returned to login (service worker re-sent pages with another User-Agent); fixed 2026-10-18
 
 ## Source docs (nasa root, mahaba — basahin lang kung kailangan)
 `ARCHITECTURE.md`, `SCHEMA.md`, `RULES.md`, `PRD.md`, `DESIGN.md`

@@ -1,1 +1,8 @@
 Basahin muna ang malbcoff-vault/00 Start Here.md bago mag-explore ng code; i-update ang kaukulang note pagkatapos ng bawat patch.
+
+## Patch delivery rule (permanente) — buong detalye: malbcoff-vault/Plan/Deploy Rule.md
+- **Trigger phrases** (English/Taglish): "akin na yung patch", "give me the patch", "ibigay mo yung patch", "latest patch", "deploy package", "patch na".
+- **Kapag trigger:** huwag magtanong at huwag i-re-read ang buong project. Patakbuhin agad `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\build-update-package.ps1`. Gumagawa ito ng package na may **LANG files na bago/binago** laban sa `deploy/baseline-manifest.json` (ang nasa LIVE; hindi kailanman kasama sa package; git-ignored). Output: `%USERPROFILE%\Desktop\malbcoff-deploy-update-<yyyy-mm-dd-hhmm>\` + kapangalang `.zip`, `deploy/migrations.sql` (bagong migrations lang, re-runnable) at plain-English `deploy/README.txt`. Manual na hakbang (config lines, `.htaccess`) → isulat muna sa `deploy/package-notes.txt`.
+- Hindi kasama kailanman: vault, CLAUDE.md, .git, node_modules, backups, logs, uploads, caches, tests, ibang deploy folders, real config na may secrets.
+- Tapusin sa listahan ng new/changed files, zip path, baseline version; sabihin: **reply "deployed" after uploading**.
+- **Kapag "deployed" / "na-deploy ko na" / "live na":** patakbuhin `deploy\confirm-deployed.ps1` (ililipat ang baseline sa eksaktong estado ng huling na-deliver na package), tapos itala ang petsa sa Plan/Deploy Rule.md at Changelog.md. Walang confirmation = hindi gumagalaw ang baseline, kaya kasama pa rin ang unconfirmed na pagbabago sa susunod.

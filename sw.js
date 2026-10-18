@@ -1,26 +1,27 @@
-/* Malbcoff POS service worker (Patch 6b) — STATIC FILES ONLY.
+/* Malbcoff POS service worker (Patch 6b, hardened by BUG Tablet Login) — STATIC FILES ONLY.
  *
- *  - Caches CSS, JS, fonts, images/icons under assets/ (stale-while-revalidate; vendor files cache-first).
- *  - NEVER caches PHP pages, actions/*, ping, login/session/CSRF, or any non-GET request. Those always
- *    go to the network, so stock, sales and tokens are never stale.
- *  - If a page (navigation) request fails because there is no internet, it shows offline.html.
- *  - APP_VERSION comes from the registration URL (sw.js?v=<config version>), so the version lives in ONE place
- *    (config 'version' / APP_VERSION). Changing it creates a new cache and deletes the old ones on activate.
+ *  - Handles ONLY GET requests for CSS, JS, fonts, images/icons and scanner files under assets/.
+ *  - NEVER touches a page (navigation), a form POST, actions/*, ping, login/session/CSRF or anything else:
+ *    those requests are not intercepted at all, so the browser sends them itself, with its own cookies,
+ *    headers and User-Agent. (A request re-issued by a worker can carry a different User-Agent than the
+ *    page — on tablets using "desktop site" the server then ended the login session. See the vault note
+ *    "BUG Tablet Login Stays on Login Page".)
+ *  - A failure inside the worker falls back to a plain network request, so the worker can never block a file.
+ *  - APP_VERSION comes from the registration URL (sw.js?v=<config version>). CACHE_NAME also carries SW_GENERATION,
+ *    so this worker always uses a new cache and deletes every older malbcoff cache on activate (self-heal).
  *  - Turn off: config 'enable_service_worker' => false (sw-register.js then unregisters it and clears caches).
  */
 'use strict';
 
 const APP_VERSION = new URL(self.location.href).searchParams.get('v') || '0';
-const CACHE_PREFIX = 'malbcoff-static-';
-const CACHE_NAME = CACHE_PREFIX + APP_VERSION;
+const SW_GENERATION = 'g2';
+const CACHE_PREFIX = 'malbcoff-';              // every cache this app ever made starts with this
+const CACHE_NAME = CACHE_PREFIX + 'static-' + SW_GENERATION + '-' + APP_VERSION;
 
 // Everything is relative to where sw.js lives, so it works at the web root and in a sub-folder.
 const BASE = new URL('./', self.location.href);
-const BASE_PATH = BASE.pathname;
-const ASSETS_PATH = BASE_PATH + 'assets/';
+const ASSETS_PATH = BASE.pathname + 'assets/';
 const VENDOR_PATH = ASSETS_PATH + 'vendor/';
-const OFFLINE_URL = new URL('offline.html', BASE).href;
-const PRECACHE = [OFFLINE_URL, new URL('assets/favicon.svg', BASE).href, new URL('assets/icons/icon-192.png', BASE).href];
 let disabled = false; // set by the kill switch message; this worker then leaves every request alone
 const STATIC_EXT = /\.(?:css|js|mjs|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|ico|wasm|gz)$/i;
 
@@ -39,24 +40,17 @@ function isCacheable(response) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.all(PRECACHE.map(async (url) => {
-      try {
-        const response = await fetch(new Request(url, { cache: 'reload' }));
-        if (response.ok) await cache.put(url, response);
-      } catch (error) { /* offline during install: the page still works, offline page just isn't ready yet */ }
-    }));
-    await self.skipWaiting();
-  })());
+  event.waitUntil(self.skipWaiting()); // nothing to pre-cache: a new worker takes over at once
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const names = await caches.keys();
-    await Promise.all(names
-      .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
-      .map((name) => caches.delete(name)));
+    try {
+      const names = await caches.keys();
+      await Promise.all(names
+        .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+        .map((name) => caches.delete(name)));
+    } catch (error) { /* cache storage unavailable: nothing to clean */ }
     await self.clients.claim();
   })());
 });
@@ -72,7 +66,7 @@ async function staleWhileRevalidate(request, event) {
     event.waitUntil(refresh);
     return cached;
   }
-  return (await refresh) || Response.error();
+  return (await refresh) || fetch(request);
 }
 
 // Large vendor files (scanner / OCR, ~14 MB) never change in place → cache-first, no background re-download.
@@ -85,34 +79,19 @@ async function cacheFirst(request) {
   return response;
 }
 
-async function offlinePage() {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(OFFLINE_URL);
-  if (cached) return cached;
-  return new Response('No internet. Your data is safe. Reconnect and try again.', {
-    status: 503,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-  });
-}
-
 self.addEventListener('fetch', (event) => {
   if (disabled) return;
   const request = event.request;
-  // Anything but GET (every save, login, logout) is left completely alone → straight to the network.
+  // Only GET of a static file. Pages, form POSTs, actions, login, session, CSRF = not intercepted.
   if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
-
-  if (request.mode === 'navigate') {
-    // PHP pages: network only. Only a failed connection shows the offline page; nothing is stored.
-    event.respondWith(fetch(request).catch(() => offlinePage()));
-    return;
-  }
-
-  if (!isStaticAsset(url)) return;       // actions/*, ping, JSON, anything else → network, untouched
+  if (request.mode === 'navigate' || request.destination === 'document' || request.destination === 'iframe') return;
   if (request.headers.has('range')) return;
+  let url;
+  try { url = new URL(request.url); } catch (error) { return; }
+  if (!isStaticAsset(url)) return;
 
-  event.respondWith(url.pathname.startsWith(VENDOR_PATH) ? cacheFirst(request) : staleWhileRevalidate(request, event));
+  const answer = url.pathname.startsWith(VENDOR_PATH) ? cacheFirst(request) : staleWhileRevalidate(request, event);
+  event.respondWith(answer.catch(() => fetch(request)));
 });
 
 async function deleteAllCaches() {
@@ -125,7 +104,7 @@ self.addEventListener('message', (event) => {
   // Kill switch (config enable_service_worker = false): stop touching requests and drop every cache.
   if (data && data.type === 'disable') {
     disabled = true;
-    event.waitUntil(deleteAllCaches());
+    event.waitUntil(deleteAllCaches().catch(() => {}));
     return;
   }
   // The page lists the static files it already loaded, so the 2nd page load is served from the cache.

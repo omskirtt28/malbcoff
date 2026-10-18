@@ -86,6 +86,13 @@ DirectoryIndex index.php
     Header set Cache-Control "public, max-age=31536000, immutable" env=ASSET_VERSIONED
     Header set Cache-Control "public, max-age=31536000, immutable" env=REDIRECT_ASSET_VERSIONED
 
+    # Login / session pages (and the session/CSRF helper endpoints) are never stored by a browser, proxy or CDN.
+    # (PHP sends the same header; this keeps it true even if a PHP notice or a host default would change it.)
+    <FilesMatch "^(?:login|logout|change-password|maintenance|ping|outbox_status)\.php$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+    </FilesMatch>
+
     # The service worker, its offline page and the manifest must always be re-checked, so a new deploy is seen at once.
     <FilesMatch "^(?:sw\.js|offline\.html|manifest\.webmanifest)$">
         Header set Cache-Control "no-cache"

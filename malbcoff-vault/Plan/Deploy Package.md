@@ -1,12 +1,14 @@
 ---
 tags: [plan, deploy]
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 # Deploy Package
 
 Log ng bawat live-deploy package. **Next package = ang nabago pagkatapos ng huling baseline sa baba lang.**
 
 ## Baseline para sa susunod na package
+> **UPDATE 2026-10-18 (PERMANENTE):** hindi na ito manu-manong hambingan. Ang baseline ay nasa `deploy/baseline-manifest.json` (**v1 = Package #2 live**) at ang package ay binubuo ng `deploy/build-update-package.ps1` — tingnan ang [[Deploy Rule]]. Ang listahan sa ibaba ay kasaysayan na lang. Nakabinbin: **Package #4** (hindi pa confirmed na deployed).
+> **UPDATE 2026-10-18:** may Package #3 (tablet login fix, tingnan sa baba) — incremental sa ibabaw ng #2; ang susunod na package ay ihambing sa #2 + #3 files.
 > **UPDATE 2026-10-17:** ang bagong baseline ay **Package #2** (`Desktop\malbcoff-deploy-update-2026-10-17.zip`, tingnan sa baba). Ang susunod na package ay dapat ihambing sa package #2 (SHA-256), hindi na sa package #1.
 - Git: wala pang tag/commit para sa deployed state (lahat ng patch ay uncommitted sa working tree nang gawin ang package #1).
 - **Gawin muna:** i-commit ang kasalukuyang state at mag-tag, hal. `git tag deployed-2026-10-17`, at isulat dito ang tag. Hanggang wala, gamitin ang listahan sa ibaba (files "covered" na).
@@ -51,3 +53,17 @@ Method: compared every app file with package #1 (SHA-256); files that package #1
 **Patch 6b files:** `sw.js`*, `offline.html`*, `manifest.webmanifest`*, `assets/icons/*.png`*, `assets/js/sw-register.js`*, `assets/js/safe-submit.js`, `partials/pwa-head.php`*, `partials/pwa-register.php`*, `partials/header.php`, `partials/footer.php`, `login.php`, `change-password.php`, `maintenance.php`, `config/app.php`, `config/app.production.example.php`, `.htaccess` (6b blocks + this block must be copied — it was not part of package #1).
 (* = new.) `assets/css/app.css` carries both patches. After deploy: bump `version` in `config/app.local.php` (e.g. 1.0.1) so phones drop the old cache; emergency off switch: [[How to turn off the service worker]].
 **Smoke test after deploy:** log in as a branch user → scan an item → Checkout → type prices → Confirm Sale → pay → check Sales Records shows the typed totals; try to save a price of 0 (button must stay disabled).
+
+## Package #4 — 2026-10-18 — BUILT with the Deploy Rule — **NOT deployed yet** (baseline stays v1)
+Folder + zip: `Desktop\malbcoff-deploy-update-2026-10-18-1154\` / `.zip` (real zip, 15 entries: 13 files + `deploy/migrations.sql` + `deploy/README.txt`). Baseline used: **v1** (Package #2 live, confirmed 2026-10-18 by the user's statement). Method: SHA-256 of every app file vs `deploy/baseline-manifest.json`; zip entries re-hashed against the project (0 mismatches); no forbidden path inside.
+**0 new + 13 changed** — the tablet login fix, same set as package #3: `.htaccess`, `assets/css/app.css`, `assets/js/safe-submit.js`, `assets/js/sw-register.js`, `change-password.php`, `config/app.php`, `config/app.production.example.php`, `core/Security.php`, `index.php`, `login.php`, `maintenance.php`, `partials/pwa-register.php`, `sw.js`.
+**Migrations:** none (`deploy/migrations.sql` only says "no new database changes"). **Manual config (live `config/app.local.php`):** `'version' => '1.1.1'`, `'enable_service_worker' => true`; optional `'login_debug' => true` only while diagnosing. README has the `.htaccess` block, the tablet clear-cache step and a test checklist.
+**Use this one instead of package #3** (same files; #3 stays on the Desktop as history). When the user replies "deployed": run `deploy\confirm-deployed.ps1` → baseline v2, then note the date here and in [[Changelog]].
+
+## Package #3 — 2026-10-18 — BUILT (incremental) — tablet login fix
+Folder + zip: `Desktop\malbcoff-deploy-tablet-login-fix-2026-10-18` / `.zip` (13 files + `deploy/README.txt`; **no migration**). Method: every app file compared byte-for-byte with package #2 (12 differ) and with git HEAD for files not in #2 (`core/Security.php`); equals `git status`. Not included: vault, `config/*.local.php`, `offline.html` (unchanged, now unused).
+Fixes [[BUG Tablet Login Stays on Login Page]].
+
+**Changed files (13):** `sw.js`, `assets/js/sw-register.js`, `assets/js/safe-submit.js`, `assets/css/app.css`, `partials/pwa-register.php`, `login.php`, `change-password.php`, `maintenance.php`, `index.php`, `core/Security.php`, `config/app.php`, `config/app.production.example.php`, `.htaccess` (add the `FilesMatch` no-store block above the "service worker, offline page and manifest" comment if the live file is host-specific).
+**Manual config (live `config/app.local.php`):** `'version' => '1.1.1'` (any new value); optional `'login_debug' => true` only while diagnosing, then back to false.
+**README includes** a "tablet clear cache" step (Chrome / Samsung Internet / Safari / home-screen app) and a real-tablet test list. Check afterwards that Security Logs show no `auth.session_rejected` / `user_agent_changed` for tablets.

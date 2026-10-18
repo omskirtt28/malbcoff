@@ -33,7 +33,9 @@
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
     var bytes = new Uint8Array(16);
-    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    var rng = window.crypto || window.msCrypto;
+    if (rng && typeof rng.getRandomValues === 'function') rng.getRandomValues(bytes);
+    else for (var r = 0; r < 16; r++) bytes[r] = Math.floor(Math.random() * 256); // last resort: still unique enough for one save
     bytes[6] = (bytes[6] & 15) | 64;
     bytes[8] = (bytes[8] & 63) | 128;
     var h = [];

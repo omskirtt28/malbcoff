@@ -3628,3 +3628,10 @@ body.net-weak.is-impersonating .topbar{top:calc(var(--net-banner-h,0px) + 46px)}
 .outbox-item-real{color:#0b5d2e}
 .sales-offline-tag{color:#8a5a00;font-size:14px;font-weight:700}
 .sales-records-table .sales-offline-tag{white-space:normal}
+
+/* BUG Tablet Login: login form safe on tablets (768-1024, both orientations). 16px inputs stop the iPad Safari zoom-on-focus, 48px targets, nothing can sit on top of the form. */
+.auth-card{position:relative;z-index:1}
+.auth-card .field input{font-size:16px;min-height:48px}
+.auth-card .btn-block{min-height:48px;font-size:16px;touch-action:manipulation}
+.auth-card .alert{font-size:14px;line-height:1.45}
+.login-debug{margin:18px 0 0;padding:10px 12px;border:1px dashed #9aa6b8;border-radius:10px;background:#f4f6fa;color:#33405a;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}

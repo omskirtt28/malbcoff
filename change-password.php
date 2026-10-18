@@ -110,6 +110,6 @@ function validate_account_password(string $password): void
         <?php if ($forced): ?><a class="auth-secondary-link" href="<?= e(app_url('logout')) ?>">Sign out instead</a><?php endif; ?>
     </section>
 </div>
-<?php require __DIR__ . '/partials/pwa-register.php'; ?>
+<?php $pwaAuthPage = true; require __DIR__ . '/partials/pwa-register.php'; ?>
 </body>
 </html>

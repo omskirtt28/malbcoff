@@ -86,6 +86,60 @@ final class Security
         return mb_substr($ua, 0, 255);
     }
 
+    /* ---- Login diagnostics: only when config 'login_debug' is true. Never pass a password or token in $context. ---- */
+    private static array $debugLines = [];
+
+    public static function loginDebugEnabled(): bool
+    {
+        return !empty(self::app()['login_debug']);
+    }
+
+    public static function loginDebug(string $event, array $context = []): void
+    {
+        if (!self::loginDebugEnabled()) return;
+        foreach (array_keys($context) as $key) {
+            if (preg_match('/pass|pwd|token|csrf|secret/i', (string)$key)) unset($context[$key]);
+        }
+        $line = $event . ($context ? ' ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '');
+        self::$debugLines[] = $line;
+        error_log('[Malbcoff login-debug][' . self::requestId() . '] ' . $line);
+    }
+
+    public static function loginDebugLines(): array
+    {
+        return self::$debugLines;
+    }
+
+    /** One-time message for the login page after the guard ended a session (cookie holds only a whitelisted code). */
+    private const LOGIN_NOTICES = [
+        'expired' => 'Your session expired. Please sign in again.',
+        'device' => 'Your session was ended because your browser changed. Please sign in again. If this keeps happening, refresh the page or clear your browser cache.',
+        'revoked' => 'Your session was ended. Please sign in again or contact the owner.',
+    ];
+
+    public static function setLoginNotice(string $code): void
+    {
+        if (!isset(self::LOGIN_NOTICES[$code]) || headers_sent()) return;
+        setcookie('malbcoff_notice', $code, [
+            'expires' => time() + 120,
+            'path' => '/',
+            'secure' => self::isHttps(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+
+    /** Returns the notice text (and clears it) or null. */
+    public static function takeLoginNotice(): ?string
+    {
+        $code = (string)($_COOKIE['malbcoff_notice'] ?? '');
+        if ($code === '') return null;
+        if (!headers_sent()) {
+            setcookie('malbcoff_notice', '', ['expires' => time() - 3600, 'path' => '/', 'secure' => self::isHttps(), 'httponly' => true, 'samesite' => 'Lax']);
+        }
+        return self::LOGIN_NOTICES[$code] ?? null;
+    }
+
     public static function initializeAuthenticatedSession(): void
     {
         $now = time();
@@ -121,15 +175,20 @@ final class Security
 
         if (($now - $lastActivity) > $idleTimeout || ($now - $createdAt) > $absoluteTimeout) {
             self::audit('auth.session_expired', 'session', null, ['reason' => ($now - $lastActivity) > $idleTimeout ? 'idle_timeout' : 'absolute_timeout']);
+            self::loginDebug('guard.expired', ['idle_s' => $now - $lastActivity, 'age_s' => $now - $createdAt]);
             self::closeImpersonationSession('session_expired');
             Auth::logout();
+            self::setLoginNotice('expired');
             return;
         }
 
         if ($uaHash !== '' && !hash_equals($uaHash, $currentUaHash)) {
-            self::audit('auth.session_rejected', 'session', null, ['reason' => 'user_agent_changed']);
+            // Short hash prefixes (not secrets) so the audit row shows that the browser identity really differed.
+            self::audit('auth.session_rejected', 'session', null, ['reason' => 'user_agent_changed', 'stored' => substr($uaHash, 0, 8), 'now' => substr($currentUaHash, 0, 8)]);
+            self::loginDebug('guard.user_agent_changed', ['stored' => substr($uaHash, 0, 8), 'now' => substr($currentUaHash, 0, 8), 'ua' => self::userAgent(), 'sec_fetch_mode' => (string)($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '')]);
             self::closeImpersonationSession('user_agent_changed');
             Auth::logout();
+            self::setLoginNotice('device');
             return;
         }
 
@@ -141,6 +200,7 @@ final class Security
                     self::audit('auth.session_revoked', 'user', $userId ?: null, ['reason' => 'inactive_or_missing_effective_user']);
                     self::closeImpersonationSession('effective_user_revoked');
                     Auth::logout();
+                    self::setLoginNotice('revoked');
                     return;
                 }
                 $_SESSION['user'] = $fresh;

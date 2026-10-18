@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 if (!Auth::check()) {
+    Security::loginDebug('index.no_session', ['session_cookie_sent' => isset($_COOKIE[session_name()]) && $_COOKIE[session_name()] !== '', 'redirect' => app_url('login')]);
     redirect(app_url('login'));
 }
 

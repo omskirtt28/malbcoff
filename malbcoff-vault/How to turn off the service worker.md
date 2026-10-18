@@ -9,7 +9,7 @@ Use this if the live site shows old files, odd screens after a deploy, or any pr
 1. On the server open `config/app.local.php` (create it from `config/app.production.example.php` if it does not exist).
 2. Set `'enable_service_worker' => false,`  
    (or set the environment variable `ENABLE_SERVICE_WORKER=false`).
-3. Save. Reload the app once on a device: it unregisters the worker and deletes the `malbcoff-static-*` caches by itself.
+3. Save. Reload the app once on a device: it unregisters the worker and deletes the `malbcoff-*` caches by itself (works from any page, login included).
 4. To turn it back on, set it to `true` (or remove the line — default is on).
 
 ## Option 2 — one force-refresh after a deploy

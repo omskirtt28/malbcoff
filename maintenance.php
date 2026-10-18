@@ -31,6 +31,6 @@ header('Retry-After: 300');
     </div>
     <small>Version <?= e($app['version'] ?? '1.0.0') ?></small>
 </div>
-<?php require __DIR__ . '/partials/pwa-register.php'; ?>
+<?php $pwaAuthPage = true; require __DIR__ . '/partials/pwa-register.php'; ?>
 </body>
 </html>

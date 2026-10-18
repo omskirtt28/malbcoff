@@ -19,3 +19,8 @@ backups/
 Thumbs.db
 .vscode/
 .idea/
+
+# Deploy tooling state (what is LIVE / last package delivered) - never commit, never packaged
+deploy/baseline-manifest.json
+deploy/last-package.json
+deploy/package-notes.txt
