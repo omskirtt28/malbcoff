@@ -1049,8 +1049,8 @@ $resetHref = app_url('inventory', $resetParams);
             <div class="delete-warning-panel">
                 <div class="delete-warning-icon">!</div>
                 <div>
-                    <strong>Permanent inventory deletion</strong>
-                    <span>Use this only for a unit entered under the wrong variant or with an incorrect inventory record. Sold, transferred, reserved, returned, or otherwise historical units are blocked.</span>
+                    <strong>Remove from inventory</strong>
+                    <span>Use this only for a unit entered under the wrong variant or with an incorrect inventory record. Only available units can be removed. The System Admin can release their identifiers in Deleted Records.</span>
                 </div>
             </div>
 
@@ -1075,7 +1075,7 @@ $resetHref = app_url('inventory', $resetParams);
         <div class="modal-body inventory-delete-body" data-delete-device-review hidden>
             <div class="delete-review-heading">
                 <span class="eyebrow delete-eyebrow">FINAL REVIEW</span>
-                <h3>Confirm permanent deletion</h3>
+                <h3>Confirm inventory removal</h3>
                 <p>Review the exact unit identifiers before deleting them from inventory.</p>
             </div>
             <div class="delete-summary-grid">
@@ -1086,7 +1086,7 @@ $resetHref = app_url('inventory', $resetParams);
             <div class="delete-review-units"><strong>Units to Delete</strong><div data-delete-review-units>—</div></div>
             <label class="stock-confirm-acknowledgement delete-confirm-ack">
                 <input type="checkbox" data-delete-device-ack>
-                <span><strong>I confirm these are incorrect inventory entries.</strong><small>The selected available inventory unit(s) and their erroneous stock-in/correction movement records will be permanently removed. This cannot be undone.</small></span>
+                <span><strong>I confirm these are incorrect inventory entries.</strong><small>The selected units will be hidden from stock. Their history stays intact. Only the System Admin can permanently clean them and release their IMEI or serial.</small></span>
             </label>
             <div class="alert alert-error hidden" data-delete-device-review-error></div>
         </div>
@@ -1105,7 +1105,7 @@ $resetHref = app_url('inventory', $resetParams);
 (()=>{
   const modal=document.getElementById('deleteDeviceInventoryModal');
   if(!modal)return;
-  const csrf=<?= json_encode(Csrf::token(), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
+  let csrf=<?= json_encode(Csrf::token(), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;
   const q=(sel,root=modal)=>root.querySelector(sel);
   const qa=(sel,root=modal)=>Array.from(root.querySelectorAll(sel));
   const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
@@ -1141,7 +1141,7 @@ $resetHref = app_url('inventory', $resetParams);
     state.units=rows||[];
     const list=q('[data-delete-device-units]');
     if(!state.units.length){
-      list.innerHTML='<div class="empty-state small"><strong>No deletable available units</strong><span>This item may already have history that prevents deletion.</span></div>';
+      list.innerHTML='<div class="empty-state small"><strong>No deletable available units</strong><span>Refresh Inventory to see the latest available units.</span></div>';
       syncSelection();return;
     }
     list.innerHTML=state.units.map(unit=>{
@@ -1172,7 +1172,7 @@ $resetHref = app_url('inventory', $resetParams);
     state={productId:Number(button.dataset.productId||0),branchId:Number(button.dataset.branchId||0),product:button.dataset.product||'Product',branch:button.dataset.branch||'Branch',available:Number(button.dataset.available||0),units:[]};
     q('[data-delete-device-product]').textContent=state.product;q('[data-delete-device-branch]').textContent=state.branch;q('[data-delete-device-current]').textContent=state.available.toLocaleString();
     q('[data-delete-device-impact-current]').textContent=state.available.toLocaleString();q('[data-delete-device-impact-remove]').textContent='0';q('[data-delete-device-impact-after]').textContent=state.available.toLocaleString();
-    showEditor();modal.hidden=false;document.body.classList.add('modal-open');await loadUnits();
+    delete modal.dataset.clientKey;showEditor();modal.hidden=false;document.body.classList.add('modal-open');await loadUnits();
   }
 
   document.querySelectorAll('[data-delete-device-inventory]').forEach(button=>button.addEventListener('click',()=>open(button)));
@@ -1188,11 +1188,10 @@ $resetHref = app_url('inventory', $resetParams);
   q('[data-delete-device-ack]').addEventListener('change',event=>{q('[data-delete-device-confirm]').disabled=!event.target.checked;});
   q('[data-delete-device-confirm]').addEventListener('click',async()=>{
     const units=selectedUnits();if(!state||!units.length||!q('[data-delete-device-ack]').checked)return;
-    const button=q('[data-delete-device-confirm]');button.disabled=true;button.textContent='Deleting…';setError('',true);
-    try{
-      const response=await fetch('actions/delete_inventory_unit.php',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({_csrf:csrf,confirmed:true,product_id:state.productId,branch_id:state.branchId,unit_ids:units.map(unit=>Number(unit.unit_id))})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||'Unable to delete inventory unit.');window.location.reload();
-    }catch(error){button.disabled=false;button.textContent=units.length>1?'Delete Inventory Units':'Delete Inventory Unit';setError(error.message||'Unable to delete inventory unit.',true);}
+    const button=q('[data-delete-device-confirm]');
+    const payload={confirmed:true,product_id:state.productId,branch_id:state.branchId,unit_ids:units.map(unit=>Number(unit.unit_id))};
+    await SafeSubmit.run({keyHolder:modal,button,host:q('[data-delete-device-review]'),url:'actions/delete_inventory_unit.php',
+      getBody:()=>({...payload,_csrf:csrf}),onCsrf:token=>{csrf=token;},successDetail:data=>data.message,onDismiss:()=>window.location.reload()});
   });
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!modal.hidden)close();});
 })();

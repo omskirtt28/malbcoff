@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__.'/../core/InventoryDeletion.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
@@ -47,14 +48,25 @@ try {
 
     $units = [];
     if (($row['product_type'] ?? '') !== 'accessory') {
+        $snapshotSelect = InventoryDeletion::snapshotsReady() ? ',itu.deleted_unit_id,itu.unit_snapshot' : ',NULL deleted_unit_id,NULL unit_snapshot';
+        $identifierSelect = InventoryDeletion::ready() ? 'COALESCE(iu.imei,iu.archived_imei) imei,COALESCE(iu.imei2,iu.archived_imei2) imei2,COALESCE(iu.serial_no,iu.archived_serial_no) serial_no' : 'iu.imei,iu.imei2,iu.serial_no';
         $units = Database::query(
-            "SELECT iu.id unit_id,iu.imei,iu.imei2,iu.serial_no,iu.condition_type,iu.condition_grade
+            "SELECT iu.id unit_id,{$identifierSelect},iu.condition_type,iu.condition_grade{$snapshotSelect}
              FROM inventory_transfer_units itu
-             JOIN inventory_units iu ON iu.id=itu.unit_id
+             LEFT JOIN inventory_units iu ON iu.id=itu.unit_id
              WHERE itu.transfer_id=?
              ORDER BY itu.id",
             [$transferId]
         )->fetchAll();
+        foreach ($units as &$unit) {
+            $unit['unit_deleted'] = !empty($unit['deleted_unit_id']);
+            if ($unit['unit_deleted']) {
+                $snapshot = json_decode((string)$unit['unit_snapshot'], true) ?: [];
+                foreach (['imei','imei2','serial_no','condition_type','condition_grade','product_label'] as $key) $unit[$key] = $snapshot[$key] ?? null;
+            }
+            unset($unit['unit_snapshot']);
+        }
+        unset($unit);
     }
 
     $name = ($row['product_type'] ?? '') === 'accessory'

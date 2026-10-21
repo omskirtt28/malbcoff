@@ -1,8 +1,19 @@
 ---
 tags: [plan, deploy, rule]
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 # Deploy Rule — "patch delivery" (permanent)
+
+## Admin/profile scoped delivery - 2026-10-21
+**Status: done locally, not yet live.** No live hosting access or deployment confirmation.
+
+ZIP: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.zip`. Separate upload/rollback guide: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.txt`.
+
+User explicitly requested latest-only runtime files and a separate TXT, so this scoped package does not run the cumulative builder or overwrite `deploy/last-package.json`. Baseline remains v3; pending FIX 8C-2 record/files/migration remain unchanged. Its old ZIP was not found at the recorded Desktop path; no deployment was inferred. No migration. Requires the existing security/impersonation schema, must_change_password, P3_001 snapshot columns/triggers and P3_002 idempotency_keys, already in confirmed-live baseline v3. No dependency on FIX 8C-2/P3_007.
+
+Immutable scoped record: `deploy/admin-profile-update-20261021-225800.json`; pre-task versions/hashes, exact 13-file list, ZIP/source hashes, dependency audit and 349-check evidence are in [[Deploy Package]] and `output/admin-profile-update/`. On a future explicit deployed confirmation, identify which package was uploaded and reconcile only that manifest. Never advance this task or FIX 8C-2 merely because either package was created. Earlier status paragraphs below describe their prior checkpoints.
+
+**Deployment status confirmed 2026-10-20:** Everything before the two inventory fixes in this task is **LIVE**, including the 2026-10-17 package and all earlier patches (including tablet login). Only this task is **done, not yet live**. Baseline is **v2**, confirmed from the last delivered package before any task edits. Earlier build-time pending statements are historical and superseded by this confirmation.
 
 Ito ang permanenteng rule kung paano magbigay ng patch/deploy package. Nakasulat din sa `CLAUDE.md` at [[00 Start Here]]. Log ng bawat package: [[Deploy Package]].
 
@@ -45,4 +56,7 @@ Sabi ng user: live na ang lahat hanggang sa huling incremental package na na-dep
 Bilang: 45 (Package #2) + 14 (Package #1) + 74 (git `021cbad`: 6 identical, 67 line-ending lang, 1 may pagbabago = `core/Security.php`) = **133 files** sa baseline; lahat ay nasa project pa.
 
 ## Baseline history
+- **v3 — 2026-10-21** — reconciled only nine files untouched by FIX 8C-2 plus P3_006, based on the user's explicit confirmation that all preceding work is LIVE. Kept every current FIX 8C-2 change pending. Manifest backup: `backups/baseline-before-fix8c2-package-v2.json`. Builder dry run now selects exactly the 12 FIX 8C-2 app files and P3_007. Three pre-existing files absent from v2 still classify NEW to tooling; they are hosting replacements per user confirmation. Exact pending delivery recorded in `deploy/last-package.json`: `Desktop/malbcoff-FIX8C2-only-2026-10-21-004916.zip`, 12 app files + only P3_007 + README, 14 hash-verified entries. Do not confirm this package until the user says deployed.
 - **v1 — 2026-10-18** — estado ng Package #2 + mga hindi nagbagong lumang files (ayon sa user na live na). Hanggang P3_005.
+
+- **v2 — 2026-10-20** — user confirms ALL work before this task LIVE. Ran confirm-deployed.ps1 before edits; applied the last-package hashes for package #4 (13 files), earlier migrations P3_001–P3_005 remain applied. This task and P3_006 remain **done, not yet live**.

@@ -25,3 +25,16 @@ Offline outbox (Patch 6c-1) exists only for assigned branch users (not owner, Sy
 - System Admin uses impersonation ("Enter Account") to view owner/branch screens.
 
 Related: [[Users and Accounts]] · [[Auth and Session]]
+
+## 2026-10-21 - Current account mutation permissions
+**Status: done locally, not yet live.** No live hosting access or deployment confirmation.
+
+| Action | Direct System Admin | Owner | Branch Manager / Inventory / Cashier | Impersonation |
+|---|---|---|---|---|
+| New System Admin Add User endpoint | Yes | No | No | No |
+| Rename Branch | Yes | No | No | No |
+| Own display name via My Account | No (business account page) | Yes | Yes | No |
+| Existing Owner user management | Via existing Owner Enter Account view | Yes, unchanged | Existing manager view only | Existing Owner permissions preserved |
+| Enter Account / Return | Yes, existing workflow | No start | No start | Return only |
+
+The new admin endpoints check effective direct role plus `!Auth::isImpersonating()`, then re-read active-user permission from the database and revalidate under lock. Self rename derives ID from Auth session, rejects another account ID, and cannot alter email, role, branch or account status. POST + CSRF + idempotency + transaction are enforced server-side. No client-only permission gates. See [[Users and Accounts]] and [[Deploy Package]] for 349-check evidence and package details.

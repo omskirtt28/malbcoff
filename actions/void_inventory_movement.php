@@ -35,6 +35,7 @@ try{
     $scope=current_branch_scope();
     $saleRows=[];$saleItems=[];
     foreach($movements as $movement){
+        if(!empty($movement['deleted_unit_id']) || str_starts_with((string)$movement['reference_no'],'REMOVE-'))throw new RuntimeException('Removed inventory history cannot be restored with Void.');
         if($scope && (int)$movement['branch_id']!==(int)$scope)throw new RuntimeException('A selected record belongs to another branch.');
         if(!in_array($movement['movement_type'],['sale','stock_out','adjustment','defective'],true) || (int)$movement['quantity']>=0)throw new RuntimeException('Select an outgoing Sold, Stock Out, Adjustment or Defective record.');
         if(Database::query('SELECT id FROM inventory_movement_voids WHERE movement_id=?',[(int)$movement['id']])->fetchColumn())throw new RuntimeException('A selected record has already been voided. Nothing was added again.');

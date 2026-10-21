@@ -122,6 +122,21 @@ if ($isMatrix) {
     $rows[] = $grand;
 }
 
+if (($_GET['format'] ?? '') === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="malbcoff-stock-monitoring-'.($isAccessoriesTab?'accessories':'units').'-'.$report['date'].'.csv"');
+    $stream = fopen('php://output', 'w');
+    fwrite($stream, "\xEF\xBB\xBF");
+    foreach ($rows as $line) {
+        fputcsv($stream, array_map(static function($cell) {
+            $value = $cell['v'] ?? '';
+            return is_string($value) && preg_match('/^[=+@\t\r]/', $value) ? "'".$value : $value;
+        }, $line));
+    }
+    fclose($stream);
+    exit;
+}
+
 $slugScope = preg_replace('/[^a-z0-9]+/i', '-', strtolower($scope));
 $slugScope = trim((string)$slugScope, '-') ?: 'stock';
 $baseName = 'malbcoff-stock-monitoring-' . ($isAccessoriesTab ? 'accessories' : 'phones-tablets') . '-' . $slugScope . '-' . $report['date'];

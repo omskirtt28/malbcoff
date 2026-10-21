@@ -9,7 +9,7 @@ $script:NotesFile    = Join-Path $PSScriptRoot 'package-notes.txt'
 
 # Folders that are never part of a deploy package (matched on any path segment, exact name).
 $script:ExcludeDirs  = @('.git', '.github', '.vscode', '.idea', 'malbcoff-vault', 'node_modules', 'backups', 'logs',
-                         'uploads', 'cache', 'caches', 'tmp', 'tests', 'test', 'deploy', 'database', 'design-reference')
+                         'uploads', 'cache', 'caches', 'tmp', 'tests', 'test', 'output', '.playwright-cli', 'deploy', 'database', 'design-reference')
 # Files that are never part of a deploy package (wildcards, matched on the file name).
 $script:ExcludeFiles = @('CLAUDE.md', '*.md', '.gitignore', 'preview.html', 'NGINX_SECURITY_RULES.example.conf',
                          '*.zip', '*.sql', '*.log', '*.bak', '*.backup', '*.local.php', '.env', '.env.*',

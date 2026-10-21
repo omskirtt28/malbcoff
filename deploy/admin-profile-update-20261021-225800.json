@@ -1,0 +1,84 @@
+{
+  "scope": "System Admin Add User, Rename Branch, self-profile name",
+  "status": "done locally, not yet live",
+  "built_at": "2026-10-21T22:58:00",
+  "baseline_version": "v3",
+  "zip": "C:\\Users\\John Joshua\\Desktop\\malbcoff-admin-profile-update-20261021-225800.zip",
+  "guide": "C:\\Users\\John Joshua\\Desktop\\malbcoff-admin-profile-update-20261021-225800.txt",
+  "zip_sha256": "9f9a3db5a11c885dd8c6c9d30ac6ab0678b280890b10306b3376bd51a84750df",
+  "guide_sha256": "35da29c9f0036a507f83a1a95bd0a672c9f281a104e09bfff4358e27182d802e",
+  "files": {
+    "actions/account_update.php": "c6edb7959f0cf62c32b24ef84fb5acecddfae66e91bca7ae81962130509b726c",
+    "actions/system_admin_branch_rename.php": "2032d8cb09588f9c49fa50afa38a7fd0d551588a568d5392df9d1a8766321e55",
+    "actions/system_admin_user_create.php": "82b9169baf485be8ce8828748115aecb3902fabb0080c008968a377a847e1b6f",
+    "actions/user_management.php": "30ef96eb9b6dcb080ef8526f174f64fdffc78e6ce0cf1678ec1776a1a5877d95",
+    "assets/css/admin-profile.css": "5772f5d395c8aea0a4fab7c4c47cbf4b8a7ca98aab0d6377470f4f84e5fad252",
+    "assets/js/admin-profile.js": "1c23b05c93e23641f6c56091395fb1aad323894f099a58ef962f77d07fdd79dd",
+    "core/AccountChanges.php": "57588ef6de6f2e871c4b99ad9c8d16d8536517e5e37775abb4315a5818f62628",
+    "core/UserManagement.php": "9a1d462f9ab2dd2c110b70076c1b39967bf6d24e1355c254974aa678ef59a29f",
+    "pages/account.php": "bed17c8842fe0b4deabf1faacd5a0ed3517d2f986fc6cb0fd332e03a12af129f",
+    "pages/system-admin-users.php": "f0beb77c54daee27f86c403cecbcf0b9cc8cf94111f8d529baf00d6d9d63428b",
+    "partials/admin-profile-dialogs.php": "886b716c1d29111dbb8aca6b25ee4b72ee1ee33d58ee00d1da3a97ad1a0fa78b",
+    "partials/footer.php": "d949d5e350bfb7ca8021663ad3b064903522c3f3ac199cc2cf9a29afbebe08cc",
+    "partials/header.php": "b8b74220f55acfa5e8fb3e256c4d307ad580cbee74345e923a75557f08d33d4a"
+  },
+  "new_files": [
+    "actions/system_admin_branch_rename.php",
+    "actions/system_admin_user_create.php",
+    "assets/css/admin-profile.css",
+    "assets/js/admin-profile.js",
+    "core/AccountChanges.php",
+    "core/UserManagement.php",
+    "partials/admin-profile-dialogs.php"
+  ],
+  "changed_files": [
+    "actions/account_update.php",
+    "actions/user_management.php",
+    "pages/account.php",
+    "pages/system-admin-users.php",
+    "partials/footer.php",
+    "partials/header.php"
+  ],
+  "pre_task_files": {
+    "actions/account_update.php": "dc6f6f0eb989edc2d8a1d6477f800d88ab615ec9ae33003de0c79683d7eae5c4",
+    "actions/user_management.php": "5c7d5c713800a72c95d946f4909c847a64e6563cab484c990ece3e1fe697058d",
+    "pages/account.php": "cd1309e4fc691919dd1fce4946d90c17062319fa907007a91f2b0b881e3755ee",
+    "pages/system-admin-users.php": "e7443bd05f0fe6197eccbdb87590eb5a20312eb606b842d1c9d3e33f7374fdda",
+    "partials/footer.php": "82816efed9cf0ab6f335a1889f2ffb04eb2107ffe66b5d736a2db6f4fa3d549b",
+    "partials/header.php": "9fe5a0f2151521e25ec4844753cd8bbc03194e53aca569dc1c6466fd34afe3ea"
+  },
+  "unchanged_dependencies": {
+    "core/Idempotency.php": "b2807a102c76574d8c68ab79b24e6eddfad1bbf9996f2a62ffc63ef86d94f1d7",
+    "core/helpers.php": "f9a2d91224e3e6e1498bb34172a458e91532a8d189fc87d5138378ad2c90b4cc",
+    "core/Auth.php": "993cd496a1551355827c6645e45343484ad8b3cf26e358d5d728e62e4df2730f",
+    "core/Security.php": "af913143594e7524ff7295bcf1e1af780d86424e6b84eb185ec8245cd4552565",
+    "assets/js/safe-submit.js": "d56fb3936393da93a5f51f42fab4a212479c029c6187e4a82877432460f0d9fd",
+    "assets/js/app.js": "6ff1a022e373ae44db24c78f1e16a95305dc6be72dc74d6f4699f5045cdcc9fa",
+    "index.php": "ea3b7b4a0cd5c9534b971c4649f570fa9f77857ccf4f476cb90c4abcab0b55b0",
+    ".htaccess": "f7d0caf40fbcfdd57b5313169775f15b59ee2b75f87c0525c71f3ef9f9d29095"
+  },
+  "pending_package_dependencies": [],
+  "migrations": [],
+  "prerequisites": [
+    "Existing security/impersonation schema",
+    "P3_001 snapshot triggers",
+    "P3_002 idempotency_keys"
+  ],
+  "verification_counts": {
+    "checks": 287,
+    "extra": 19,
+    "ui": 34,
+    "history": 9
+  },
+  "verification_total": 349,
+  "preserved_deploy_state": {
+    "deploy/baseline-manifest.json": "c428fe36de071f8429c568ee6f78b8923360eab1c6a3bc305872b17f5a9fa99b",
+    "deploy/last-package.json": "0c2008a6e7ac6b402573b4aa9d76cfa678d8388f95461542333b886ba5a66a57",
+    "deploy/migrations.sql": "3e1ccc8670ad6762073743f0982c532637a52bed5405ee07e46ab51250502916",
+    "deploy/package-notes.txt": "bef13c4d503b6864ba169ab57bf8cf3607db8317191160bb71dce1540d61b233"
+  },
+  "earlier_pending_zip_exists": false,
+  "staged_zip": "C:\\xampp\\htdocs\\malbcoff\\output\\admin-profile-update\\delivery\\malbcoff-admin-profile-update-20261021-225800.zip",
+  "staged_guide": "C:\\xampp\\htdocs\\malbcoff\\output\\admin-profile-update\\delivery\\malbcoff-admin-profile-update-20261021-225800.txt",
+  "scoped_record": "deploy/admin-profile-update-20261021-225800.json"
+}

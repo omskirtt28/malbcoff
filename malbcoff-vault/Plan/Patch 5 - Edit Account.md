@@ -23,3 +23,8 @@ Triggers need the MySQL `TRIGGER` privilege. If a host refuses, the migration st
 - [x] Responsive 360 / 768 / 1280: no horizontal scroll, 44px controls.
 
 Related: [[Users and Accounts]] · [[Auth and Session]] · [[Data Model]]
+
+## 2026-10-21 amendment
+**Status: done locally, not yet live.** No live hosting access or deployment confirmation.
+
+The earlier acceptance above records historical behavior. Current action now explicitly rejects another account's id/user_id/target_user_id (rather than ignoring it), rejects protected-field attempts, and uses CSRF + SafeSubmit + transactional idempotency/audit. The session and topbar refresh immediately. Existing profile-menu My Account access and 60-character validation remain. Old snapshot rows stay unchanged; current trigger capture was reverified. See [[Users and Accounts]] and [[Deploy Package]] for the 349-check evidence, 13 runtime files, separate Desktop ZIP/TXT and prerequisites.

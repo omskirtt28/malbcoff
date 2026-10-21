@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../core/Idempotency.php';
+require_once __DIR__ . '/../core/InventoryDeletion.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
@@ -366,7 +367,12 @@ try {
             }
 
             $targetStatus = $reasons[$reason]['status'];
+            if ($targetStatus === 'adjusted_out') InventoryDeletion::requireReady();
             foreach ($rows as $row) {
+                if ($targetStatus === 'adjusted_out') {
+                    InventoryDeletion::softDelete($row + ['product_id'=>$productId,'branch_id'=>$branchId], $actorId, $movementNote);
+                    continue;
+                }
                 $updated = Database::query(
                     "UPDATE inventory_units SET status=? WHERE id=? AND product_id=? AND branch_id=? AND status='available'",
                     [$targetStatus, (int)$row['id'], $productId, $branchId]

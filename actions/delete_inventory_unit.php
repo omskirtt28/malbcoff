@@ -1,5 +1,7 @@
 <?php
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../core/Idempotency.php';
+require_once __DIR__ . '/../core/InventoryDeletion.php';
 header('Content-Type: application/json; charset=utf-8');
 
 if (!Auth::check()) {
@@ -27,9 +29,7 @@ $payload = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($payload)) $payload = $_POST;
 
 if (!Csrf::verify($payload['_csrf'] ?? null)) {
-    http_response_code(419);
-    echo json_encode(['error' => 'Your session expired. Refresh the page and try again.']);
-    exit;
+    Idempotency::csrfFailure();
 }
 
 if (($payload['confirmed'] ?? false) !== true && (string)($payload['confirmed'] ?? '') !== '1') {
@@ -71,9 +71,18 @@ if ($effectiveRole === 'branch_manager') {
     }
 }
 
+$actorId = Auth::actorId() ?: (int)(Auth::user()['id'] ?? 0);
+$key = Idempotency::key($payload);
+$fingerprint = Idempotency::fingerprint($payload);
+Idempotency::replayJsonAndExit($key, 'inventory_soft_delete', $actorId, $fingerprint);
 $pdo = Database::connection();
 try {
+    InventoryDeletion::requireReady();
     $pdo->beginTransaction();
+    if ($key && !Idempotency::claim($key, 'inventory_soft_delete', $actorId, $fingerprint)) {
+        $pdo->rollBack();
+        Idempotency::replayAfterLostClaim($key, 'inventory_soft_delete', $actorId, $fingerprint);
+    }
 
     $product = Database::query(
         "SELECT p.id,p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,
@@ -87,7 +96,7 @@ try {
     )->fetch();
     if (!$product) throw new RuntimeException('Product not found or no longer active.');
     if (!in_array((string)$product['product_type'], ['phone','tablet'], true)) {
-        throw new RuntimeException('Permanent unit deletion is only available for serialized phones and tablets. Use Adjust for accessory quantities.');
+        throw new RuntimeException('Unit removal is only available for serialized phones and tablets. Use Adjust for accessory quantities.');
     }
 
     $branch = Database::query('SELECT id,name,code FROM branches WHERE id=? AND is_active=1 LIMIT 1 FOR UPDATE', [$branchId])->fetch();
@@ -96,7 +105,7 @@ try {
     $placeholders = implode(',', array_fill(0, count($unitIds), '?'));
     $params = array_merge([$productId, $branchId], $unitIds);
     $units = Database::query(
-        "SELECT id,imei,imei2,serial_no,status,created_at
+        "SELECT *
          FROM inventory_units
          WHERE product_id=? AND branch_id=? AND id IN ($placeholders)
          FOR UPDATE",
@@ -107,57 +116,8 @@ try {
         throw new RuntimeException('One or more selected units no longer belong to this product and branch. Refresh Inventory and try again.');
     }
 
-    $snapshots = [];
     foreach ($units as $unit) {
-        $unitId = (int)$unit['id'];
-        if ((string)$unit['status'] !== 'available') {
-            throw new RuntimeException('Only currently available units can be permanently deleted.');
-        }
-
-        if (Database::query('SELECT 1 FROM sale_items WHERE unit_id=? LIMIT 1', [$unitId])->fetchColumn()) {
-            throw new RuntimeException('A selected unit already has sales history and cannot be permanently deleted.');
-        }
-        if (Database::query('SELECT 1 FROM inventory_transfer_units WHERE unit_id=? LIMIT 1', [$unitId])->fetchColumn()) {
-            throw new RuntimeException('A selected unit already has transfer history and cannot be permanently deleted.');
-        }
-
-        $movements = Database::query(
-            'SELECT id,movement_type,quantity,reference_no,notes,created_at FROM stock_movements WHERE unit_id=? ORDER BY id ASC FOR UPDATE',
-            [$unitId]
-        )->fetchAll();
-
-        foreach ($movements as $movement) {
-            $movementType = (string)$movement['movement_type'];
-            $movementQty = (int)$movement['quantity'];
-            $safeCorrection = $movementType === 'adjustment' && $movementQty === 0;
-            $safeOriginalStockIn = $movementType === 'stock_in' && $movementQty > 0;
-            if (!$safeCorrection && !$safeOriginalStockIn) {
-                throw new RuntimeException('A selected unit already has stock, transfer, sale, return, or adjustment history that must be preserved. It cannot be permanently deleted.');
-            }
-        }
-
-        $snapshots[] = [
-            'unit_id' => $unitId,
-            'imei' => $unit['imei'] ?: null,
-            'imei2' => $unit['imei2'] ?: null,
-            'serial_no' => $unit['serial_no'] ?: null,
-            'received_at' => $unit['created_at'] ?? null,
-            'movement_references' => array_values(array_filter(array_map(static fn($row) => $row['reference_no'] ?? null, $movements))),
-        ];
-    }
-
-    // Remove only the movement rows that belong to these incorrect, never-used
-    // units. This releases their IMEI/Serial unique values for correct receiving.
-    Database::query("DELETE FROM stock_movements WHERE unit_id IN ($placeholders)", $unitIds);
-
-    $deleteParams = array_merge([$productId, $branchId], $unitIds);
-    $deleted = Database::query(
-        "DELETE FROM inventory_units
-         WHERE product_id=? AND branch_id=? AND status='available' AND id IN ($placeholders)",
-        $deleteParams
-    );
-    if ($deleted->rowCount() !== count($unitIds)) {
-        throw new RuntimeException('Inventory changed while the deletion was being saved. Refresh and try again.');
+        InventoryDeletion::softDelete($unit, $actorId, trim((string)($payload['reason'] ?? '')));
     }
 
     $remaining = (int)Database::query(
@@ -165,34 +125,13 @@ try {
         [$productId, $branchId]
     )->fetchColumn();
 
+    $result = ['success' => true, 'message' => count($unitIds).' inventory unit(s) removed. The System Admin can release their identifiers in Deleted Records.', 'deleted_count' => count($unitIds), 'branch_available' => $remaining];
+    if ($key) Idempotency::complete($key, $result);
     $pdo->commit();
-
-    $actorId = Auth::actorId() ?: (int)(Auth::user()['id'] ?? 0);
-    Security::audit('inventory.units_permanently_deleted', 'product', $productId, [
-        'branch_id' => $branchId,
-        'branch_name' => $branch['name'] ?? null,
-        'deleted_count' => count($unitIds),
-        'remaining_available' => $remaining,
-        'deleted_units' => $snapshots,
-        'actor_user_id' => $actorId,
-        'effective_role' => $effectiveRole,
-        'purpose' => 'incorrect_inventory_entry_cleanup',
-    ]);
-
-    $message = count($unitIds) === 1
-        ? 'Incorrect inventory unit permanently deleted.'
-        : count($unitIds) . ' incorrect inventory units permanently deleted.';
-    flash('success', $message . ' The deleted IMEI/Serial can now be received under the correct variant.');
-
-    echo json_encode([
-        'success' => true,
-        'message' => $message,
-        'deleted_count' => count($unitIds),
-        'branch_available' => $remaining,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
-    $status = $e instanceof RuntimeException ? 422 : 500;
+    $status = $e instanceof RuntimeException && !($e instanceof PDOException) ? 422 : 500;
     http_response_code($status);
     echo json_encode(['error' => $status === 500 ? 'Unable to delete the inventory unit right now.' : $e->getMessage()]);
 }

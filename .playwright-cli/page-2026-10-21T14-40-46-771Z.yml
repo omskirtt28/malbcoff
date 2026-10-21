@@ -1,0 +1,1 @@
+- generic [active] [ref=e1]: "{\"csrf\":\"bc3cb5bab1a1ce0098e4cd435e09b255adf4cf4d79bd155f390e3d10d1b14385\",\"user\":{\"id\":7,\"branch_id\":null,\"name\":\"Original system_admin\",\"email\":\"system_admin@test.invalid\",\"role\":\"system_admin\",\"is_active\":1,\"must_change_password\":0,\"password_changed_at\":null,\"last_login_at\":null,\"branch_name\":null}}"

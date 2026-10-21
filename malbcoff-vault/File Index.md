@@ -12,7 +12,7 @@ Sizes in lines. "Tables" = main DB tables touched. ⚠ = huge file, read only th
 | `bootstrap.php` | Config, secure session cookie, loads core, `Security::guardAuthenticatedSession()`, forced password change + maintenance gates |
 | `login.php` | Login form + throttle (`Security::loginRateStatus`) → `Auth::attempt` |
 | `logout.php` | Ends session |
-| `change-password.php` | Self-service password change (only self-edit that exists today) |
+| `change-password.php` | Self-service password change |
 | `maintenance.php` | Maintenance screen |
 | `preview.html` | Static UI preview |
 
@@ -82,3 +82,49 @@ Sizes in lines. "Tables" = main DB tables touched. ⚠ = huge file, read only th
 
 Related: [[Architecture Map]] · [[Data Model]]
 
+
+## Added / changed for 2026-10-20 inventory fixes — now LIVE (confirmed 2026-10-21)
+- `core/InventoryDeletion.php`: schema readiness, reference counts, soft deletion, archival/physical cleanup and transactional audit snapshots.
+- `partials/deleted-inventory-units.php`: paginated/filtered admin unit section and confirmation dialog.
+- `assets/js/deleted-inventory-units.js`: page selection, exact-count review, typed bulk DELETE and SafeSubmit.
+- `database/migrations/P3_006_inventory_soft_delete.sql`: columns/statuses/nullable identifiers/audit/index and legacy removal backfill; copied to `deploy/migrations.sql`.
+- `core/helpers.php`: shared current catalog stock predicate. `pages/dashboard.php` + StockMonitoringReport live drawer use it.
+- `actions/system_admin_deleted_records.php`: direct-admin-only unit cleanup; keeps existing catalog actions.
+- `actions/delete_inventory_unit.php`: soft-delete service + Idempotency. `actions/adjust_inventory.php`: previous adjusted_out reasons use same service. `actions/stock_in.php`: clear deleted-identifier release message.
+- `actions/export_stock_monitoring.php`: Excel and CSV from the same filtered report, zero rows included.
+- Full changed-file list and deployment status: [[Deploy Package]]. All files before this task are LIVE.
+
+## FIX 8C-2 — done, not yet live
+- `database/migrations/P3_007_inventory_delete_snapshots.sql` (NEW): nullable transfer unit reference; deleted_unit_id + JSON unit_snapshot on transfer lines/movements. Schema only; guards and re-runnable DDL. Only pending migration in `deploy/migrations.sql`.
+- `core/InventoryDeletion.php`: sale/void-only archival; hard-delete no-sales archives; global preview; required audit then detach transfer/movement references. `core/StockMonitoringReport.php`: historical snapshot drawer labels and safe batch inference.
+- `actions/system_admin_deleted_records.php`, `partials/deleted-inventory-units.php`, `assets/js/deleted-inventory-units.js`: global preview/delete-all, selection, typed DELETE, direct-admin/CSRF/idempotency and stale-set guard.
+- `actions/transfer_details.php`, `assets/js/branch-transfers.js`, `actions/receive_transfer.php`: retained transfer snapshot display and atomic missing-unit receipt refusal.
+- `pages/system-admin-deleted-records.php`: durable audit snapshot viewer. `pages/stock-movement.php`, `actions/void_inventory_movement.php`: snapshot labels, no restoration of removed history. `assets/css/app.css`: compact pills, 14px/44px scale and bounded transfer tabs.
+- `tests/inventory-lifecycle/fix8c2-*`: isolated verification/support, never upload. Full 12 app-file list/status: [[Deploy Package]]. Everything before FIX 8C-2 is LIVE.
+
+## 2026-10-21 - Admin/profile runtime patch (13 files)
+**Status: done locally, not yet live.** No live hosting access or deployment confirmation.
+
+- `actions/account_update.php` (changed)
+- `actions/system_admin_branch_rename.php` (new)
+- `actions/system_admin_user_create.php` (new)
+- `actions/user_management.php` (changed)
+- `assets/css/admin-profile.css` (new)
+- `assets/js/admin-profile.js` (new)
+- `core/AccountChanges.php` (new)
+- `core/UserManagement.php` (new)
+- `pages/account.php` (changed)
+- `pages/system-admin-users.php` (changed)
+- `partials/admin-profile-dialogs.php` (new)
+- `partials/footer.php` (changed)
+- `partials/header.php` (changed)
+
+`core/UserManagement.php` holds the unchanged Owner validation functions shared with admin creation. `core/AccountChanges.php` owns session/role/CSRF checks, server-generated form keys, idempotent transactional save/replay and safe replies. Admin endpoints create business users and rename only branch names; `account_update.php` updates only the session user's display name. Existing topbar My Account link and Enter Account endpoint were verified without edits. Header/footer include the new assets only on User Accounts/My Account.
+
+No migration. Requires the existing security/impersonation schema, must_change_password, P3_001 snapshot columns/triggers and P3_002 idempotency_keys, already in confirmed-live baseline v3. No dependency on FIX 8C-2/P3_007.
+
+Tests (excluded): `tests/admin-profile/setup.php`, `router.php`, `checks.js`, `extra.js`, `ui.js`, `history.php`; JSON evidence and pre-task versions/hashes/task diff/scoped package manifest in `output/admin-profile-update/`; screenshots `output/playwright/admin-profile-*`. 349 isolated assertions passed (287 main HTTP/browser + 19 retry/Owner/native-form + 34 UI/responsive + 9 original-history/new-snapshot/validator checks); 11 runtime PHP syntax checks, JavaScript syntax and task-scoped whitespace checks passed.
+
+ZIP: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.zip`. Separate upload/rollback guide: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.txt`.
+
+Local immutable deployment record: `deploy/admin-profile-update-20261021-225800.json`. Existing `deploy/last-package.json`, baseline v3, pending FIX 8C-2 files and migrations are preserved.

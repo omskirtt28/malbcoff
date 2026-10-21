@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../core/StockMonitoringReport.php';
 $scope = current_branch_scope();
+$catalogStockSql = inventory_catalog_product_sql('p');
 $whereUnit = $scope ? ' WHERE iu.branch_id=:branch ' : '';
 $whereBalance = $scope ? ' WHERE ib.branch_id=:branch ' : '';
 $params = $scope ? ['branch' => $scope] : [];
@@ -32,15 +33,15 @@ $salesDbError = null;
 
 try {
     $unitTotal = (int)Database::query(
-        "SELECT COUNT(*) FROM inventory_units iu JOIN products p ON p.id=iu.product_id {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available'",
+        "SELECT COUNT(*) FROM inventory_units iu JOIN products p ON p.id=iu.product_id {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available' AND {$catalogStockSql}",
         $params
     )->fetchColumn();
     $accessoryTotal = (int)Database::query(
-        "SELECT COALESCE(SUM(ib.quantity),0) FROM inventory_balances ib JOIN products p ON p.id=ib.product_id {$whereBalance} " . ($whereBalance ? 'AND' : 'WHERE') . " p.product_type='accessory'",
+        "SELECT COALESCE(SUM(ib.quantity),0) FROM inventory_balances ib JOIN products p ON p.id=ib.product_id {$whereBalance} " . ($whereBalance ? 'AND' : 'WHERE') . " p.product_type='accessory' AND {$catalogStockSql}",
         $params
     )->fetchColumn();
     $deviceCounts = Database::query(
-        "SELECT p.product_type,COUNT(*) qty FROM inventory_units iu JOIN products p ON p.id=iu.product_id {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available' GROUP BY p.product_type",
+        "SELECT p.product_type,COUNT(*) qty FROM inventory_units iu JOIN products p ON p.id=iu.product_id {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available' AND {$catalogStockSql} GROUP BY p.product_type",
         $params
     )->fetchAll();
     foreach ($deviceCounts as $row) {
@@ -48,7 +49,7 @@ try {
         if ($row['product_type'] === 'tablet') $stats['tablets'] = (int)$row['qty'];
     }
     $stats['preloved'] = (int)Database::query(
-        "SELECT COUNT(*) FROM inventory_units iu {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available' AND iu.condition_type='preloved'",
+        "SELECT COUNT(*) FROM inventory_units iu JOIN products p ON p.id=iu.product_id {$whereUnit} " . ($whereUnit ? 'AND' : 'WHERE') . " iu.status='available' AND {$catalogStockSql} AND iu.condition_type='preloved'",
         $params
     )->fetchColumn();
     $stats['accessories'] = $accessoryTotal;
@@ -80,8 +81,8 @@ try {
     if ($isOwnerDashboard) {
         $branchSummary = Database::query(
             "SELECT b.id,b.name,
-                    COALESCE((SELECT COUNT(*) FROM inventory_units iu WHERE iu.branch_id=b.id AND iu.status='available'),0)
-                    + COALESCE((SELECT SUM(ib.quantity) FROM inventory_balances ib WHERE ib.branch_id=b.id),0) qty
+                    COALESCE((SELECT COUNT(*) FROM inventory_units iu JOIN products p ON p.id=iu.product_id WHERE iu.branch_id=b.id AND iu.status='available' AND {$catalogStockSql}),0)
+                    + COALESCE((SELECT SUM(ib.quantity) FROM inventory_balances ib JOIN products p ON p.id=ib.product_id WHERE ib.branch_id=b.id AND {$catalogStockSql}),0) qty
              FROM branches b WHERE b.is_active=1 ORDER BY b.id"
         )->fetchAll();
     }

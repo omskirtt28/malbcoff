@@ -11,6 +11,8 @@ if (!in_array($type, ['all','device','accessory'], true)) $type = 'all';
 $rows = [];
 $models = [];
 $recentDeletes = [];
+$permanentUnitDeletes = [];
+$durableUnitIds = [];
 $stats = ['records' => 0, 'ready' => 0, 'protected' => 0, 'models' => 0];
 $dbError = null;
 
@@ -79,6 +81,10 @@ try {
          ORDER BY l.id DESC
          LIMIT 40"
     )->fetchAll();
+    if (Database::query("SHOW TABLES LIKE 'inventory_unit_delete_audits'")->fetchColumn()) {
+        $permanentUnitDeletes = Database::query("SELECT a.*,u.name actor_name,b.name branch_name FROM inventory_unit_delete_audits a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN branches b ON b.id=a.branch_id WHERE a.operation='permanent_delete' ORDER BY a.id DESC LIMIT 40")->fetchAll();
+        $durableUnitIds = array_column($permanentUnitDeletes, 'unit_id');
+    }
 
     $stats['records'] = count($rows);
     $stats['ready'] = count(array_filter($rows, static fn($r) => !empty($r['purge_ready'])));
@@ -105,12 +111,14 @@ function cleanup_record_label(array $row): string {
     <div>
         <span class="eyebrow">SYSTEM CLEANUP</span>
         <h1>Deleted Records</h1>
-        <p>Review records hidden from branch workflows and permanently purge only incorrect entries that no longer have protected sales or transfer data.</p>
+        <p>Review deleted inventory units and catalog records. Release unit identifiers while keeping sales, transfers and stock history intact.</p>
     </div>
     <a class="btn btn-secondary" href="<?= e(app_url('system-admin-dashboard')) ?>"><?= icon('dashboard') ?> System Admin</a>
 </section>
 
 <?php if ($dbError): ?><div class="alert alert-error"><?= e($dbError) ?></div><?php endif; ?>
+
+<?php require __DIR__.'/../partials/deleted-inventory-units.php'; ?>
 
 <div class="kpi-grid system-cleanup-kpis">
     <article class="kpi-card tint-blue"><span>Deleted / Archived</span><strong><?= (int)$stats['records'] ?></strong><small>Product and variant records</small></article>
@@ -209,15 +217,24 @@ function cleanup_record_label(array $row): string {
 </section>
 
 <section class="card table-card system-cleanup-audit">
-    <div class="card-header"><div><span class="section-kicker">RECENT ACTIVITY</span><h2>Permanent Inventory Deletes</h2><p>Audit-only history of device units that Branch Managers or System Admin already removed from inventory.</p></div></div>
-    <div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>Date</th><th>User</th><th>Branch</th><th>Product ID</th><th>Deleted Units</th></tr></thead><tbody>
+    <div class="card-header"><div><span class="section-kicker">RECENT ACTIVITY</span><h2>Permanent Inventory Deletes</h2><p>Audit-only snapshots of permanently removed units. Transfer and movement history is kept separately.</p></div></div>
+    <div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>Date</th><th>Deleted by</th><th>Branch</th><th>Unit / Product</th><th>Snapshot / References</th></tr></thead><tbody>
+    <?php foreach ($permanentUnitDeletes as $log):
+        $snapshot = json_decode((string)$log['snapshot_json'], true) ?: [];
+        $unit = $snapshot['unit'] ?? [];
+        $details = $snapshot['details'] ?? [];
+    ?>
+    <tr><td><?= e($unit['permanently_deleted_at'] ?? $log['created_at']) ?></td><td><?= e($unit['permanently_deleted_by_name'] ?? $log['actor_name'] ?? 'Unknown') ?></td><td><?= e($unit['branch_name'] ?? $log['branch_name'] ?? 'Unknown') ?></td><td><strong><?= e($unit['product_label'] ?? 'Product #'.($unit['product_id'] ?? '')) ?></strong><span class="table-subtext">Unit #<?= (int)$log['unit_id'] ?></span></td><td><?php foreach (['imei'=>'IMEI','imei2'=>'IMEI 2','serial_no'=>'Serial'] as $key=>$title): $value = $unit[$key] ?: ($unit['archived_'.$key] ?? null); if ($value): ?><span class="table-subtext"><?= e($title.': '.$value) ?></span><?php endif; endforeach; ?><span class="table-subtext">Originally removed by <?= e($unit['deleted_by_name'] ?: 'Unknown (legacy removal)') ?><?= !empty($unit['deleted_at']) ? ' · '.e($unit['deleted_at']) : '' ?></span><span class="table-subtext">Transfer lines detached: <?= (int)($details['transfer_lines_detached'] ?? 0) ?> · Movement rows kept as snapshots: <?= (int)($details['movement_rows_detached'] ?? 0) ?> · Movement rows removed: <?= (int)($details['movement_rows_removed'] ?? 0) ?></span></td></tr>
+    <?php endforeach; ?>
     <?php foreach ($recentDeletes as $log):
         $meta = json_decode((string)($log['metadata_json'] ?? ''), true);
         if (!is_array($meta)) $meta = [];
+        if (($meta['result'] ?? '') === 'archive') continue;
+        if (count($meta['deleted_units'] ?? []) === 1 && in_array($meta['deleted_units'][0]['id'] ?? null, $durableUnitIds)) continue;
         $deletedCount = (int)($meta['deleted_count'] ?? 0);
     ?>
     <tr><td><?= e(date('M j, Y • g:i A',strtotime((string)$log['created_at']))) ?></td><td><strong><?= e($log['user_name'] ?: 'System User') ?></strong></td><td><?= e($meta['branch_name'] ?? $log['branch_name'] ?? '—') ?></td><td><?= e((string)($log['entity_id'] ?? '—')) ?></td><td><span class="cleanup-state removed"><?= $deletedCount ?> unit<?= $deletedCount===1?'':'s' ?></span></td></tr>
     <?php endforeach; ?>
-    <?php if (!$recentDeletes): ?><tr><td colspan="5"><div class="empty-state small"><strong>No permanent inventory deletions yet.</strong></div></td></tr><?php endif; ?>
+    <?php if (!$recentDeletes && !$permanentUnitDeletes): ?><tr><td colspan="5"><div class="empty-state small"><strong>No permanent inventory deletions yet.</strong></div></td></tr><?php endif; ?>
     </tbody></table></div>
 </section>

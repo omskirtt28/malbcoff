@@ -2,6 +2,9 @@
 tags: [schema]
 ---
 # Migrations
+## Current deployment status — 2026-10-21
+Everything through P3_006 is LIVE per user confirmation. Only P3_007_inventory_delete_snapshots.sql is not yet deployed (FIX 8C-2, done, not yet live). Run it before uploading the 8C-2 app files. It makes transfer unit_id nullable while preserving its type/FK and adds deleted_unit_id (audit identity, no FK) + unit_snapshot LONGTEXT to transfer lines and movements. Re-runnable; tested twice on the isolated DB; schema-only migration applied locally after backup. It deletes no units or history. Runtime SHOW COLUMNS guards refuse cleanup until installed. deploy/migrations.sql now contains only P3_007.
+
 Files live in `database/migrations/` (blocked from the web by `.htaccess`). Import with phpMyAdmin or `mysql -u USER -p DB < file.sql`. Every file must be **re-runnable**.
 
 | File | Purpose | Notes |

@@ -1,6 +1,6 @@
 ---
 tags: [bug, auth, service-worker, tablet]
-status: fixed (local-tested; confirm on a real tablet after deploy)
+status: LIVE (user confirmed 2026-10-20; earlier local validation retained)
 fixed: 2026-10-18
 ---
 # BUG: On tablets the correct email + password returns to the login page

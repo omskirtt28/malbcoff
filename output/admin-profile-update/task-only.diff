@@ -1,0 +1,541 @@
+--- pre-task/actions/account_update.php
++++ task/actions/account_update.php
+@@ -1,35 +1,20 @@
+ <?php
+-// Self-service: a logged-in user changes ONLY their own display name.
+-// The record id comes from the session — nothing in the request can select another user.
+ require __DIR__ . '/../bootstrap.php';
++require_once __DIR__ . '/../core/AccountChanges.php';
+ 
+-if (!Auth::check()) redirect(app_url('login'));
+-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('account'));
+-if (!Csrf::verify($_POST['_csrf'] ?? null)) {
+-    flash('error', 'Your session expired. Please try again.');
+-    redirect(app_url('account'));
+-}
+-if (Auth::isImpersonating() || Auth::isSystemAdmin()) {
+-    flash('error', 'Return to your own account before changing a display name.');
+-    redirect(app_home_url());
+-}
+-
+-$userId = (int)(Auth::user()['id'] ?? 0);
+-$submitted = (string)($_POST['name'] ?? '');
+-
+-try {
+-    $name = validate_display_name($submitted);
+-    $updated = Database::query('UPDATE users SET name=? WHERE id=? AND is_active=1', [$name, $userId]);
+-    if ($updated->rowCount() === 0) {
+-        // Unchanged name also reports 0 rows on some drivers: make sure the account is still active.
+-        $exists = Database::query('SELECT 1 FROM users WHERE id=? AND is_active=1 LIMIT 1', [$userId])->fetchColumn();
+-        if (!$exists) throw new RuntimeException('Your account is no longer active.');
++$intent = array_intersect_key($_POST, array_flip(['name','id','user_id','target_user_id']));
++$intent['extra_fields'] = array_values(array_diff(array_keys($_POST), ['name','id','user_id','target_user_id','_csrf','client_key']));
++run_account_change('account_name_update', $intent, static function (array $me): array {
++    foreach (['id','user_id','target_user_id'] as $field) {
++        if (isset($_POST[$field]) && filter_var($_POST[$field], FILTER_VALIDATE_INT) !== (int)$me['id']) {
++            throw new RuntimeException('You can change only your own display name.');
++        }
+     }
+-    Auth::refreshCurrentUser();
+-    flash('success', 'Your display name is now "' . $name . '".');
+-} catch (Throwable $e) {
+-    flash('error', safe_exception_message($e, 'Unable to save your name right now. Please try again.'));
+-    flash('account_name', mb_substr($submitted, 0, 120));
+-}
+-
+-redirect(app_url('account'));
++    foreach (['email','role','branch_id','is_active','status','password','temporary_password','password_hash'] as $field) {
++        if (array_key_exists($field, $_POST)) throw new RuntimeException('Only your display name can be changed here.');
++    }
++    $name = validate_display_name($_POST['name'] ?? '');
++    Database::query('UPDATE users SET name=? WHERE id=? AND is_active=1', [$name,(int)$me['id']]);
++    Security::audit('user.name_updated', 'user', (int)$me['id']);
++    return ['ok'=>true, 'message'=>'Your display name has been saved.', 'name'=>$name];
++}, false);
+--- pre-task/actions/system_admin_branch_rename.php
++++ task/actions/system_admin_branch_rename.php
+@@ -0,0 +1,23 @@
++<?php
++require __DIR__ . '/../bootstrap.php';
++require_once __DIR__ . '/../core/AccountChanges.php';
++
++run_account_change('admin_branch_rename', array_intersect_key($_POST, array_flip(['branch_id','name'])), static function (array $actor): array {
++    $id = filter_var($_POST['branch_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
++    $name = preg_replace('/\s+/u', ' ', trim((string)($_POST['name'] ?? ''))) ?? '';
++    $limit = (int)Database::query("SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='branches' AND COLUMN_NAME='name'")->fetchColumn();
++    if ($name === '') throw new RuntimeException('Branch name is required.');
++    if ($limit < 1 || mb_strlen($name) > $limit) throw new RuntimeException('Branch name is too long. Use up to ' . $limit . ' characters.');
++    if (preg_match('/[<>\x00-\x1F\x7F]/u', $name)) throw new RuntimeException('Branch name cannot contain HTML or special control characters.');
++    // Serialize renames in ID order: branches has no unique name index.
++    $branches = Database::query('SELECT id,name FROM branches ORDER BY id FOR UPDATE')->fetchAll();
++    $target = null;
++    foreach ($branches as $branch) if ((int)$branch['id'] === $id) $target = $branch;
++    if (!$target) throw new RuntimeException('Branch not found.');
++    if (Database::query('SELECT id FROM branches WHERE name=? AND id<>? LIMIT 1', [$name,$id])->fetchColumn()) {
++        throw new RuntimeException('That branch name is already in use.');
++    }
++    Database::query('UPDATE branches SET name=? WHERE id=?', [$name,$id]);
++    Security::audit('branch.renamed', 'branch', $id, ['old_name'=>$target['name'], 'new_name'=>$name]);
++    return ['ok'=>true, 'message'=>'Branch name saved.'];
++});
+--- pre-task/actions/system_admin_user_create.php
++++ task/actions/system_admin_user_create.php
+@@ -0,0 +1,29 @@
++<?php
++require __DIR__ . '/../bootstrap.php';
++require_once __DIR__ . '/../core/UserManagement.php';
++require_once __DIR__ . '/../core/AccountChanges.php';
++
++// Whitelist non-secret intent fields; no password-derived hash is persisted here.
++$intent = array_intersect_key($_POST, array_flip(['name','email','role','branch_id']));
++run_account_change('admin_user_create', $intent, static function (array $actor): array {
++    $name = clean_user_name($_POST['name'] ?? '');
++    $email = clean_user_email($_POST['email'] ?? '');
++    $role = clean_user_role($_POST['role'] ?? '', ['owner','branch_manager','inventory','cashier']);
++    $branchId = resolve_user_branch($role, $_POST['branch_id'] ?? null);
++    $password = (string)($_POST['temporary_password'] ?? '');
++    validate_new_password($password);
++    if ($name === '') throw new RuntimeException('Name is required.');
++    if ($email === '') throw new RuntimeException('Enter a valid email address.');
++    if (Security::isProduction() && str_ends_with($email, '@malbcoff.local')) throw new RuntimeException('Use a real production email address.');
++    if ($branchId !== null && !Database::query('SELECT id FROM branches WHERE id=? AND is_active=1 FOR UPDATE', [$branchId])->fetchColumn()) {
++        throw new RuntimeException('Select an active branch.');
++    }
++    if (Database::query('SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1', [$email])->fetchColumn()) {
++        throw new RuntimeException('That email address is already assigned to another user.');
++    }
++    Database::query('INSERT INTO users (branch_id,name,email,password_hash,role,is_active,must_change_password,password_changed_at) VALUES (?,?,?,?,?,1,1,NULL)',
++        [$branchId,$name,$email,password_hash($password, PASSWORD_DEFAULT),$role]);
++    $id = (int)Database::connection()->lastInsertId();
++    Security::audit('user.created', 'user', $id, ['role'=>$role, 'branch_id'=>$branchId]);
++    return ['ok'=>true, 'message'=>'User created. They must change the temporary password on first sign in.'];
++});
+--- pre-task/actions/user_management.php
++++ task/actions/user_management.php
+@@ -1,5 +1,6 @@
+ <?php
+ require __DIR__ . '/../bootstrap.php';
++require_once __DIR__ . '/../core/UserManagement.php';
+ 
+ if (!Auth::check()) redirect(app_url('login'));
+ if (!Auth::isOwner()) {
+@@ -101,53 +102,3 @@
+ }
+ 
+ redirect(app_url('users'));
+-
+-function clean_user_name(mixed $value): string
+-{
+-    $value = trim((string)$value);
+-    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+-    return mb_substr($value, 0, 120);
+-}
+-
+-function clean_user_email(mixed $value): string
+-{
+-    $email = Security::normalizeEmail((string)$value);
+-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 160) return '';
+-    return $email;
+-}
+-
+-function clean_user_role(mixed $value, array $allowed): string
+-{
+-    $role = strtolower(trim((string)$value));
+-    if (!in_array($role, $allowed, true)) throw new RuntimeException('Select a valid role.');
+-    return $role;
+-}
+-
+-function resolve_user_branch(string $role, mixed $branchValue): ?int
+-{
+-    if ($role === 'owner') return null;
+-    $branchId = filter_var($branchValue, FILTER_VALIDATE_INT) ?: 0;
+-    if ($branchId <= 0) throw new RuntimeException('Select the branch assigned to this user.');
+-    $exists = Database::query('SELECT 1 FROM branches WHERE id=? AND is_active=1 LIMIT 1', [$branchId])->fetchColumn();
+-    if (!$exists) throw new RuntimeException('Select an active branch.');
+-    return $branchId;
+-}
+-
+-function require_managed_user(int $id): array
+-{
+-    if ($id <= 0) throw new RuntimeException('User account not found.');
+-    $row = Database::query('SELECT id,name,email,role,branch_id,is_active FROM users WHERE id=? LIMIT 1', [$id])->fetch();
+-    if (!$row) throw new RuntimeException('User account not found.');
+-    if (($row['role'] ?? '') === 'system_admin') throw new RuntimeException('System Admin accounts are managed separately.');
+-    return $row;
+-}
+-
+-function validate_new_password(string $password): void
+-{
+-    $length = strlen($password);
+-    if ($length < 12) throw new RuntimeException('Password must be at least 12 characters.');
+-    if ($length > 128) throw new RuntimeException('Password is too long.');
+-    if (!preg_match('/[A-Za-z]/', $password) || !preg_match('/\d/', $password)) {
+-        throw new RuntimeException('Password must contain at least one letter and one number.');
+-    }
+-}
+--- pre-task/assets/css/admin-profile.css
++++ task/assets/css/admin-profile.css
+@@ -0,0 +1,44 @@
++/* Scoped to these pages so the pending inventory stylesheet is not a dependency. */
++.admin-profile-actions { display:flex; flex-wrap:wrap; gap:10px; }
++.admin-profile-dialog { width:min(560px,calc(100% - 24px)); max-height:calc(100dvh - 32px); padding:24px; border:1px solid var(--border,#dfe5ee); border-radius:18px; color:var(--text,#1d2939); background:#fff; overflow:auto; box-sizing:border-box; }
++.admin-profile-dialog::backdrop { background:rgba(15,23,42,.5); }
++.admin-profile-dialog-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
++.admin-profile-dialog-heading h2 { margin:0; }
++.admin-profile-dialog form { display:grid; gap:16px; min-width:0; }
++.admin-profile-dialog .field { display:grid; gap:8px; min-width:0; }
++.admin-profile-dialog :is(input,select) { width:100%; min-width:0; box-sizing:border-box; }
++.admin-profile-dialog :is(input,select,button,summary), .admin-profile-actions button, .page-account .account-save { min-height:44px; font-size:14px; }
++.admin-profile-dialog :is(small,p,span,strong), .page-account .account-card :is(small,dt,dd) { font-size:14px; overflow-wrap:anywhere; }
++.admin-profile-dialog [hidden] { display:none !important; }
++.admin-profile-dialog .save-status { max-width:100%; min-width:0; }
++.admin-profile-dialog :focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
++.admin-profile-branch-list { display:grid; gap:16px; }
++.admin-profile-branch { border:1px solid var(--border,#dfe5ee); border-radius:12px; padding:16px; min-width:0; }
++.admin-profile-branch > div { display:grid; gap:4px; margin-bottom:12px; }
++.admin-profile-branch details form { margin-top:16px; }
++.page-system-admin-users .data-table td { overflow-wrap:anywhere; }
++.page-system-admin-users .page-content :is(button,input,select) { min-height:44px; font-size:14px; }
++.page-system-admin-users .page-content :is(td,th,p,.table-subtext,.status-pill,.user-role-pill,.security-note) { font-size:14px; }
++.page-system-admin-users .page-content .data-table td .table-subtext { font-size:14px !important; }
++.page-system-admin-users .user-role-pill { white-space:nowrap; overflow-wrap:normal; }
++.page-system-admin-users .user-password-pending { margin-left:0; white-space:normal; }
++.page-system-admin-users .table-wrap:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
++@media(min-width:761px) {
++  .page-system-admin-users .table-wrap { overflow:auto; }
++  .page-system-admin-users .system-admin-users-table { table-layout:auto; min-width:1020px; }
++  .page-system-admin-users .system-admin-users-table td:first-child { min-width:180px; }
++  .page-system-admin-users .system-admin-users-table td:nth-child(3) { min-width:160px; }
++  .page-system-admin-users .system-admin-users-table td:nth-child(4) { min-width:180px; }
++}
++@media(max-width:760px) {
++  .page-system-admin-users .system-admin-users-table td::before { font-size:14px; grid-column:1; grid-row:1 / span 3; }
++  .page-system-admin-users .system-admin-users-table td > * { grid-column:2; min-width:0; }
++}
++.page-account .account-card h2 { margin-bottom:16px; }
++.page-account .page-content :is(p,label>span) { font-size:14px; }
++@media(max-width:640px) {
++  .admin-profile-actions { width:100%; }
++  .admin-profile-actions button { flex:1 1 140px; }
++  .admin-profile-dialog { padding:16px; }
++  .page-system-admin-users .page-heading { flex-wrap:wrap; }
++}
+--- pre-task/assets/js/admin-profile.js
++++ task/assets/js/admin-profile.js
+@@ -0,0 +1,73 @@
++(() => {
++  'use strict';
++  document.querySelectorAll('[data-open-account-dialog]').forEach(button => {
++    button.addEventListener('click', () => document.getElementById(button.dataset.openAccountDialog)?.showModal());
++  });
++  document.querySelectorAll('[data-close-account-dialog]').forEach(button => {
++    button.addEventListener('click', () => button.closest('dialog').close());
++  });
++  document.querySelectorAll('.admin-profile-dialog').forEach(dialog => {
++    dialog.addEventListener('close', () => {
++      const password = dialog.querySelector('[name="temporary_password"]');
++      if (password) password.value = '';
++      if (dialog.querySelector('.save-status.is-success')) window.location.reload();
++    });
++  });
++  const role = document.querySelector('[data-admin-user-role]');
++  const branch = document.querySelector('[data-admin-user-branch]');
++  const syncBranch = () => {
++    if (!role || !branch) return;
++    const owner = role.value === 'owner';
++    branch.disabled = owner;
++    branch.required = !owner;
++    branch.hidden = owner;
++    if (owner) branch.value = '';
++    document.querySelector('[data-admin-all-branches]').hidden = !owner;
++  };
++  role?.addEventListener('change', syncBranch);
++  syncBranch();
++  document.querySelectorAll('[data-account-change-form]').forEach(form => {
++    // No outbox option: credentials are held only by the live form, never persisted on this device.
++    form.addEventListener('submit', event => {
++      if (!window.SafeSubmit) return; // The native POST keeps CSRF + server-generated retry key.
++      event.preventDefault();
++      const fields = [...form.elements].filter(field => field.type !== 'submit');
++      const disabled = fields.map(field => field.disabled);
++      form.dataset.clientKey = form.dataset.clientKey || form.elements.client_key.value;
++      const body = new FormData(form);
++      fields.forEach(field => { field.disabled = true; });
++      const restore = () => fields.forEach((field, index) => { field.disabled = disabled[index]; });
++      let csrf = body.get('_csrf');
++      SafeSubmit.run({
++        form, button: form.querySelector('[type="submit"]'), host: form,
++        url: form.action,
++        getBody: () => { body.set('_csrf', csrf); return body; },
++        onCsrf: token => { csrf = token; form.elements._csrf.value = token; },
++        successTitle: 'Saved', successDetail: data => data.message,
++        onSuccess: data => {
++          // Remove credentials from both the form and the in-memory retry body immediately.
++          const password = form.querySelector('[name="temporary_password"]');
++          if (password) password.value = '';
++          body.delete('temporary_password');
++          if (data.name) {
++            document.querySelectorAll('.user-copy strong, .user-dropdown-meta strong').forEach(node => { node.textContent = data.name; });
++            const avatar = document.querySelector('.user-menu .avatar');
++            if (avatar) avatar.textContent = [...data.name][0].toUpperCase();
++          }
++          form.elements.client_key.value = SafeSubmit.uuid();
++          const dialog = form.closest('dialog');
++          if (dialog && !dialog.open) window.location.reload();
++        },
++        onDismiss: () => window.location.reload(),
++      }).then(result => {
++        if (result.business || result.cancelled) {
++          restore();
++          if (result.business) {
++            delete form.dataset.clientKey;
++            form.elements.client_key.value = SafeSubmit.uuid();
++          }
++        }
++      }).catch(restore);
++    });
++  });
++})();
+--- pre-task/core/AccountChanges.php
++++ task/core/AccountChanges.php
+@@ -0,0 +1,81 @@
++<?php
++/** Online-only account mutations. Passwords never enter the saved intent or result. */
++require_once __DIR__ . '/Idempotency.php';
++
++function account_change_reply(int $status, array $body, string $route): never
++{
++    if (Idempotency::wantsJson()) Idempotency::send($status, $body);
++    flash($status < 300 ? 'success' : 'error', (string)($body['message'] ?? $body['error'] ?? 'Unable to save.'));
++    redirect(app_url($route));
++}
++
++function account_change_key(): string
++{
++    $hex = bin2hex(random_bytes(16));
++    return substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4) . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20);
++}
++
++function account_change_authorized(?array $user, bool $admin): bool
++{
++    return $user && (int)$user['is_active'] === 1 && !(int)$user['must_change_password']
++        && ($admin ? $user['role'] === 'system_admin' : in_array($user['role'], ['owner','branch_manager','inventory','cashier'], true));
++}
++
++/** The callback receives the locked session user. Writes and retry result commit together. */
++function run_account_change(string $action, array $intent, callable $save, bool $admin = true): never
++{
++    $route = $admin ? 'system-admin-users' : 'account';
++    if (!Auth::check()) account_change_reply(401, ['ok'=>false, 'error'=>'Please sign in again.', 'code'=>'auth'], $route);
++    if ($_SERVER['REQUEST_METHOD'] !== 'POST') account_change_reply(405, ['ok'=>false, 'error'=>'Use the save button to submit this request.'], $route);
++    if (Auth::isImpersonating() || ($admin ? !Auth::isSystemAdmin() : Auth::isSystemAdmin())) {
++        account_change_reply(403, ['ok'=>false, 'error'=>$admin ? 'Only a directly signed-in System Admin can make this change.' : 'Return to your own account before changing a display name.'], $route);
++    }
++    if (!Csrf::verify(is_string($_POST['_csrf'] ?? null) ? $_POST['_csrf'] : null)) {
++        if (Idempotency::wantsJson()) Idempotency::csrfFailure();
++        account_change_reply(419, ['ok'=>false, 'error'=>'Your session expired. Please try again.'], $route);
++    }
++    foreach ($_POST as $value) {
++        if (!is_string($value)) account_change_reply(422, ['ok'=>false, 'error'=>'Enter one value for each field.'], $route);
++    }
++    $pdo = Database::connection();
++    $userId = (int)Auth::user()['id'];
++    try {
++        if (!account_change_authorized(Auth::fetchUser($userId), $admin)) {
++            account_change_reply(403, ['ok'=>false, 'error'=>'Your account no longer has permission to make this change.'], $route);
++        }
++        $key = Idempotency::key();
++        if ($key === null) throw new RuntimeException('Refresh the page before saving. Safe saving must be available.');
++        $fingerprint = Idempotency::fingerprint($intent);
++        $pdo->beginTransaction();
++        $claimed = Idempotency::claim($key, $action, $userId, $fingerprint);
++        $user = Database::query('SELECT id,role,is_active,must_change_password FROM users WHERE id=? FOR UPDATE', [$userId])->fetch();
++        if (!account_change_authorized($user ?: null, $admin)) {
++            $pdo->rollBack();
++            account_change_reply(403, ['ok'=>false, 'error'=>'Your account no longer has permission to make this change.'], $route);
++        }
++        if (!$claimed) {
++            $prior = Idempotency::lookup($key, $action, $userId, $fingerprint);
++            $pdo->rollBack();
++            if ($prior === null) account_change_reply(409, ['ok'=>false, 'error'=>'This request is still being saved. Please try again.', 'code'=>'in_progress'], $route);
++            if (!$admin) Auth::refreshCurrentUser();
++            account_change_reply(200, $prior + ['replayed'=>true], $route);
++        }
++        $result = $save($user);
++        Idempotency::complete($key, $result);
++        $pdo->commit();
++        if (!$admin) Auth::refreshCurrentUser();
++        account_change_reply(200, $result, $route);
++    } catch (Throwable $error) {
++        if ($pdo->inTransaction()) $pdo->rollBack();
++        // Do not log SQL exception text from a password-bearing INSERT.
++        if ($error instanceof PDOException) {
++            $message = (string)$error->getCode() === '23000' && $action === 'admin_user_create'
++                ? 'That email address is already assigned to another user.' : 'Unable to save right now. Please try again.';
++        } elseif ($error instanceof RuntimeException) {
++            $message = $error->getMessage();
++        } else {
++            $message = 'Unable to save right now. Please try again.';
++        }
++        account_change_reply(422, ['ok'=>false, 'error'=>$message], $route);
++    }
++}
+--- pre-task/core/UserManagement.php
++++ task/core/UserManagement.php
+@@ -0,0 +1,51 @@
++<?php
++// Shared validation used by Owner management and System Admin account creation.
++function clean_user_name(mixed $value): string
++{
++    $value = trim((string)$value);
++    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
++    return mb_substr($value, 0, 120);
++}
++
++function clean_user_email(mixed $value): string
++{
++    $email = Security::normalizeEmail((string)$value);
++    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 160) return '';
++    return $email;
++}
++
++function clean_user_role(mixed $value, array $allowed): string
++{
++    $role = strtolower(trim((string)$value));
++    if (!in_array($role, $allowed, true)) throw new RuntimeException('Select a valid role.');
++    return $role;
++}
++
++function resolve_user_branch(string $role, mixed $branchValue): ?int
++{
++    if ($role === 'owner') return null;
++    $branchId = filter_var($branchValue, FILTER_VALIDATE_INT) ?: 0;
++    if ($branchId <= 0) throw new RuntimeException('Select the branch assigned to this user.');
++    $exists = Database::query('SELECT 1 FROM branches WHERE id=? AND is_active=1 LIMIT 1', [$branchId])->fetchColumn();
++    if (!$exists) throw new RuntimeException('Select an active branch.');
++    return $branchId;
++}
++
++function require_managed_user(int $id): array
++{
++    if ($id <= 0) throw new RuntimeException('User account not found.');
++    $row = Database::query('SELECT id,name,email,role,branch_id,is_active FROM users WHERE id=? LIMIT 1', [$id])->fetch();
++    if (!$row) throw new RuntimeException('User account not found.');
++    if (($row['role'] ?? '') === 'system_admin') throw new RuntimeException('System Admin accounts are managed separately.');
++    return $row;
++}
++
++function validate_new_password(string $password): void
++{
++    $length = strlen($password);
++    if ($length < 12) throw new RuntimeException('Password must be at least 12 characters.');
++    if ($length > 128) throw new RuntimeException('Password is too long.');
++    if (!preg_match('/[A-Za-z]/', $password) || !preg_match('/\d/', $password)) {
++        throw new RuntimeException('Password must contain at least one letter and one number.');
++    }
++}
+--- pre-task/pages/account.php
++++ task/pages/account.php
+@@ -1,6 +1,7 @@
+ <?php
+ // My Account — a logged-in user edits ONLY their own display name (id comes from the session in the action).
+ $me = Auth::user() ?? [];
++require_once __DIR__ . '/../core/AccountChanges.php';
+ $impersonating = Auth::isImpersonating();
+ $nameValue = flash('account_name');
+ if ($nameValue === null) $nameValue = (string)($me['name'] ?? '');
+@@ -18,8 +19,10 @@
+ <?php endif; ?>
+ 
+ <section class="card account-card">
+-    <form method="post" action="actions/account_update.php" class="account-form" autocomplete="off">
++    <h2>Edit Name</h2>
++    <form method="post" action="actions/account_update.php" class="account-form" autocomplete="off" data-account-change-form>
+         <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
++        <input type="hidden" name="client_key" value="<?= e(account_change_key()) ?>">
+         <label class="field">
+             <span>Display name <b>*</b></span>
+             <input type="text" name="name" value="<?= e($nameValue) ?>" required maxlength="60" autocomplete="name" <?= $impersonating ? 'disabled' : '' ?>>
+--- pre-task/pages/system-admin-users.php
++++ task/pages/system-admin-users.php
+@@ -1,4 +1,6 @@
+ <?php
++if (!Auth::isSystemAdmin() || Auth::isImpersonating()) { http_response_code(403); return; }
++require_once __DIR__ . '/../core/AccountChanges.php';
+ $q=trim((string)($_GET['q']??'')); $role=trim((string)($_GET['role']??'')); $branch=(int)($_GET['branch']??0); $status=(string)($_GET['status']??'active');
+ $where=["u.role<>'system_admin'"]; $params=[];
+ if($q!==''){ $where[]='(u.name LIKE :q_name OR u.email LIKE :q_email OR b.name LIKE :q_branch)'; $like='%'.$q.'%'; $params['q_name']=$like; $params['q_email']=$like; $params['q_branch']=$like; }
+@@ -11,6 +13,8 @@
+ $branches=Database::query('SELECT id,name FROM branches WHERE is_active=1 ORDER BY id')->fetchAll();
+ }catch(Throwable $e){Security::reportException($e,'system_admin_users');}
+ ?>
+-<section class="page-heading"><div><span class="eyebrow">SYSTEM SUPPORT</span><h1>User Accounts</h1><p>Enter an active Owner or Branch account without knowing its password.</p></div></section>
++<section class="page-heading"><div><span class="eyebrow">SYSTEM SUPPORT</span><h1>User Accounts</h1><p>Add business users, manage branch names, or enter an active account.</p></div><div class="admin-profile-actions"><button type="button" class="btn btn-secondary" data-open-account-dialog="manageBranchesDialog">Manage Branches</button><button type="button" class="btn btn-primary" data-open-account-dialog="addUserDialog">Add User</button></div></section>
+ <form class="card filter-card system-admin-filter" method="get" action="<?= e(app_url('system-admin-users')) ?>"><label class="search-box"><?= icon('search') ?><input name="q" value="<?= e($q) ?>" placeholder="Search name, email, branch…"></label><select name="role"><option value="">All Roles</option><?php foreach(['owner'=>'Owner','branch_manager'=>'Branch Manager','inventory'=>'Inventory Staff','cashier'=>'Cashier'] as $v=>$l):?><option value="<?= e($v) ?>" <?= $role===$v?'selected':'' ?>><?= e($l) ?></option><?php endforeach;?></select><select name="branch"><option value="0">All Branches</option><?php foreach($branches as $b):?><option value="<?= (int)$b['id'] ?>" <?= $branch===(int)$b['id']?'selected':'' ?>><?= e($b['name']) ?></option><?php endforeach;?></select><select name="status"><option value="active" <?= $status==='active'?'selected':'' ?>>Active</option><option value="inactive" <?= $status==='inactive'?'selected':'' ?>>Inactive</option><option value="all" <?= $status==='all'?'selected':'' ?>>All Status</option></select><button class="btn btn-secondary" type="submit">Apply</button></form>
+-<section class="card table-card"><div class="card-header"><div><h2>Available Accounts</h2><p><?= count($rows) ?> account<?= count($rows)===1?'':'s' ?> in this view.</p></div><span class="security-note"><?= icon('shield') ?> Passwords stay private</span></div><div class="table-wrap"><table class="data-table system-admin-users-table"><thead><tr><th>User</th><th>Role</th><th>Branch</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead><tbody><?php foreach($rows as $row):?><tr><td data-label="User"><strong><?= e($row['name']) ?></strong><span class="table-subtext"><?= e($row['email']) ?></span></td><td data-label="Role"><span class="user-role-pill role-<?= e($row['role']) ?>"><?= e(role_label($row['role'])) ?></span></td><td data-label="Branch"><?= e($row['branch_name']?:'All Branches') ?></td><td data-label="Status"><span class="status-pill <?= $row['is_active']?'available':'low' ?>"><?= $row['is_active']?'Active':'Inactive' ?></span><?php if((int)$row['must_change_password']===1):?><span class="status-pill user-password-pending">Password Change Required</span><?php endif;?></td><td data-label="Last Login"><?php if(!empty($row['last_login_at'])){ try{ $loginDt=new DateTimeImmutable((string)$row['last_login_at'],new DateTimeZone('Asia/Manila')); echo e($loginDt->format('M j, Y • g:i A')); }catch(Throwable $ignore){ echo e((string)$row['last_login_at']); } }else{ echo 'Never'; } ?></td><td data-label="Action"><?php if($row['is_active']):?><form method="post" action="actions/impersonation.php" data-confirm="Enter <?= e($row['name']) ?>'s account view?"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="action" value="start"><input type="hidden" name="target_user_id" value="<?= (int)$row['id'] ?>"><button class="btn btn-primary btn-sm" type="submit"><?= icon('eye') ?> Enter Account</button></form><?php else:?><button class="btn btn-secondary btn-sm" disabled>Inactive</button><?php endif;?></td></tr><?php endforeach;?><?php if(!$rows):?><tr><td colspan="6"><div class="empty-state small"><strong>No accounts found.</strong><span>Adjust the filters and try again.</span></div></td></tr><?php endif;?></tbody></table></div></section>
++<section class="card table-card"><div class="card-header"><div><h2>Available Accounts</h2><p><?= count($rows) ?> account<?= count($rows)===1?'':'s' ?> in this view.</p></div><span class="security-note"><?= icon('shield') ?> Passwords stay private</span></div><div class="table-wrap" tabindex="0" role="region" aria-label="User accounts; scroll for all columns"><table class="data-table system-admin-users-table"><thead><tr><th>User</th><th>Role</th><th>Branch</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead><tbody><?php foreach($rows as $row):?><tr><td data-label="User"><strong><?= e($row['name']) ?></strong><span class="table-subtext"><?= e($row['email']) ?></span></td><td data-label="Role"><span class="user-role-pill role-<?= e($row['role']) ?>"><?= e(role_label($row['role'])) ?></span></td><td data-label="Branch"><?= e($row['branch_name']?:'All Branches') ?></td><td data-label="Status"><span class="status-pill <?= $row['is_active']?'available':'low' ?>"><?= $row['is_active']?'Active':'Inactive' ?></span><?php if((int)$row['must_change_password']===1):?><span class="status-pill user-password-pending">Password Change Required</span><?php endif;?></td><td data-label="Last Login"><?php if(!empty($row['last_login_at'])){ try{ $loginDt=new DateTimeImmutable((string)$row['last_login_at'],new DateTimeZone('Asia/Manila')); echo e($loginDt->format('M j, Y • g:i A')); }catch(Throwable $ignore){ echo e((string)$row['last_login_at']); } }else{ echo 'Never'; } ?></td><td data-label="Action"><?php if($row['is_active']):?><form method="post" action="actions/impersonation.php" data-confirm="Enter <?= e($row['name']) ?>'s account view?"><input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>"><input type="hidden" name="action" value="start"><input type="hidden" name="target_user_id" value="<?= (int)$row['id'] ?>"><button class="btn btn-primary btn-sm" type="submit"><?= icon('eye') ?> Enter Account</button></form><?php else:?><button class="btn btn-secondary btn-sm" disabled>Inactive</button><?php endif;?></td></tr><?php endforeach;?><?php if(!$rows):?><tr><td colspan="6"><div class="empty-state small"><strong>No accounts found.</strong><span>Adjust the filters and try again.</span></div></td></tr><?php endif;?></tbody></table></div></section>
++
++<?php require __DIR__ . '/../partials/admin-profile-dialogs.php'; ?>
+--- pre-task/partials/admin-profile-dialogs.php
++++ task/partials/admin-profile-dialogs.php
+@@ -0,0 +1,38 @@
++<?php
++// Included only by the directly signed-in System Admin account page.
++$managedBranches = Database::query('SELECT id,code,name,is_active FROM branches ORDER BY id')->fetchAll();
++$branchNameLimit = (int)Database::query("SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='branches' AND COLUMN_NAME='name'")->fetchColumn();
++?>
++<dialog id="addUserDialog" class="admin-profile-dialog" aria-labelledby="addUserTitle">
++    <div class="admin-profile-dialog-heading"><h2 id="addUserTitle">Add User</h2><button type="button" class="btn btn-secondary" data-close-account-dialog>Close</button></div>
++    <form method="post" action="actions/system_admin_user_create.php" data-account-change-form autocomplete="off">
++        <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
++        <input type="hidden" name="client_key" value="<?= e(account_change_key()) ?>">
++        <label class="field"><span>Full Name</span><input name="name" required maxlength="120" autocomplete="off"></label>
++        <label class="field"><span>Email</span><input type="email" name="email" required maxlength="160" autocomplete="off"></label>
++        <label class="field"><span>Role</span><select name="role" data-admin-user-role required><?php foreach (['cashier','inventory','branch_manager','owner'] as $businessRole): ?><option value="<?= e($businessRole) ?>"><?= e(role_label($businessRole)) ?></option><?php endforeach; ?></select></label>
++        <label class="field"><span>Branch</span><select name="branch_id" data-admin-user-branch required><option value="">Select an active branch</option><?php foreach ($branches as $activeBranch): ?><option value="<?= (int)$activeBranch['id'] ?>"><?= e($activeBranch['name']) ?></option><?php endforeach; ?></select><span data-admin-all-branches hidden>All Branches</span></label>
++        <label class="field"><span>Temporary Password</span><input type="password" name="temporary_password" required minlength="12" maxlength="128" autocomplete="new-password"><small>At least 12 characters, including a letter and a number. The user must change it on first sign in.</small></label>
++        <button class="btn btn-primary" type="submit">Create User</button>
++    </form>
++</dialog>
++<dialog id="manageBranchesDialog" class="admin-profile-dialog" aria-labelledby="manageBranchesTitle">
++    <div class="admin-profile-dialog-heading"><h2 id="manageBranchesTitle">Manage Branches</h2><button type="button" class="btn btn-secondary" data-close-account-dialog>Close</button></div>
++    <p>Rename a branch without changing its code, assignments or records.</p>
++    <div class="admin-profile-branch-list">
++    <?php foreach ($managedBranches as $managedBranch): ?>
++        <section class="admin-profile-branch">
++            <div><strong><?= e($managedBranch['name']) ?></strong><span><?= e($managedBranch['code']) ?> &middot; <?= (int)$managedBranch['is_active'] ? 'Active' : 'Inactive' ?></span></div>
++            <details><summary class="btn btn-secondary">Rename</summary>
++                <form method="post" action="actions/system_admin_branch_rename.php" data-account-change-form>
++                    <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
++                    <input type="hidden" name="client_key" value="<?= e(account_change_key()) ?>">
++                    <input type="hidden" name="branch_id" value="<?= (int)$managedBranch['id'] ?>">
++                    <label class="field"><span>Branch name</span><input name="name" value="<?= e($managedBranch['name']) ?>" maxlength="<?= $branchNameLimit ?>" required></label>
++                    <button class="btn btn-primary" type="submit">Save branch name</button>
++                </form>
++            </details>
++        </section>
++    <?php endforeach; ?>
++    </div>
++</dialog>
+--- pre-task/partials/footer.php
++++ task/partials/footer.php
+@@ -8,6 +8,7 @@
+ <script src="assets/js/app.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/app.js') ?>" defer></script>
+ <?php if (($page ?? '') === 'branch-transfers'): ?><script src="assets/js/branch-transfers.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/branch-transfers.js') ?>" defer></script><?php endif; ?>
+ <?php if (($page ?? '') === 'users'): ?><script src="assets/js/users.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/users.js') ?>" defer></script><?php endif; ?>
++<?php if (in_array($page ?? '', ['system-admin-users','account'], true)): ?><script src="assets/js/admin-profile.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/admin-profile.js') ?>" defer></script><?php endif; ?>
+ <?php if (($page ?? '') === 'pos'): ?><script src="assets/js/pos.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/pos.js') ?>" defer></script><?php endif; ?>
+ <?php if (in_array($page ?? '', ['pos', 'inventory', 'add-item'], true)): ?>
+ <script src="assets/vendor/zxing-wasm/reader.js" defer></script>
+--- pre-task/partials/header.php
++++ task/partials/header.php
+@@ -17,6 +17,9 @@
+     <?php endif; ?>
+     <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/app.css') ?>">
+     <link rel="stylesheet" href="assets/css/branch-transfers.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/branch-transfers.css') ?>">
++    <?php if (in_array($page ?? '', ['system-admin-users','account'], true)): ?>
++    <link rel="stylesheet" href="assets/css/admin-profile.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/admin-profile.css') ?>">
++    <?php endif; ?>
+ </head>
+ <body class="app-page page-<?= e($page ?? 'dashboard') ?> role-<?= e(Auth::user()['role'] ?? 'guest') ?><?= Auth::isImpersonating() ? ' is-impersonating' : '' ?>">
+ <div class="app-shell">

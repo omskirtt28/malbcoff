@@ -550,3 +550,11 @@ All state-changing submits go through `SafeSubmit.run()` and use the same wordin
 - [ ] No calculation or number changed unless the patch is about that calculation.
 - [ ] No PHP warnings/notices (`php -l` + load the page as owner and as a branch user).
 - [ ] Vault updated: feature note, plan note, `Changelog.md` (and `File Index.md` if files were added).
+
+
+### 15.11 Inventory cleanup and zero stock (2026-10-20)
+- Keep previously stocked active catalog models visible at Ending 0. Add muted-red #a54747 “Out of stock” (14px regular); retain numeric alignment and the existing table columns.
+- Availability chips All / In stock / Out of stock: 44px, 14px semibold, blue active state, keyboard focus, URL state preserved in tabs/filters/export.
+- Deleted Inventory Units reuses Deleted Records cards/tables; 360px labelled unit cards, 768px/desktop table; body/labels 14px, interactive targets >=44px.
+- Permanent cleanup uses a native modal dialog listing selected units and count; Delete all with no sales previews the global count across branches/pages. Bulk requires typing DELETE. Reuse SafeSubmit saving/success/retry states. Only sales/void rows show “Archived (history kept)”; no-sales rows remain deletable even with transfers/movements. Database References uses compact, single-line pills in a 2x2 grid.
+- Full vault reference: `malbcoff-vault/Design System.md`. This task is done, not yet live; prior UI patches are LIVE.

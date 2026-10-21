@@ -1,0 +1,120 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - generic [ref=f1e5]: M
+      - generic [ref=f1e6]:
+        - strong [ref=f1e7]: Malbcoff Trading
+        - generic [ref=f1e8]: System Administration
+    - navigation "Main navigation" [ref=f1e9]:
+      - link "Dashboard" [ref=f1e10] [cursor=pointer]:
+        - /url: /system-admin
+      - link "User Accounts" [ref=f1e15] [cursor=pointer]:
+        - /url: /system-admin-users
+      - link "Impersonation History" [ref=f1e22] [cursor=pointer]:
+        - /url: /system-admin-history
+      - link "Deleted Records" [ref=f1e29] [cursor=pointer]:
+        - /url: /system-admin?view=deleted-records
+      - link "Security Logs" [ref=f1e35] [cursor=pointer]:
+        - /url: /security-logs
+      - link "Data Reset" [ref=f1e40] [cursor=pointer]:
+        - /url: /system-admin-data-reset
+    - generic [ref=f1e46]:
+      - generic [ref=f1e51]:
+        - strong [ref=f1e52]: System Control
+        - generic [ref=f1e53]: System Admin
+      - link "Sign Out" [ref=f1e54] [cursor=pointer]:
+        - /url: /logout
+  - main [ref=f1e59]:
+    - generic [ref=f1e61]:
+      - generic [ref=f1e62]: System Control
+      - group [ref=f1e67]:
+        - generic "Notifications" [ref=f1e68] [cursor=pointer]
+      - group [ref=f1e71]:
+        - generic "User menu" [ref=f1e72] [cursor=pointer]:
+          - generic [ref=f1e73]: O
+          - generic [ref=f1e74]:
+            - strong [ref=f1e75]: Original system_admin
+            - generic [ref=f1e76]: System Admin
+    - generic [ref=f1e79]:
+      - generic [ref=f1e80]:
+        - generic [ref=f1e81]:
+          - text: SYSTEM SUPPORT
+          - heading "User Accounts" [level=1] [ref=f1e82]
+          - paragraph [ref=f1e83]: Add business users, manage branch names, or enter an active account.
+        - generic [ref=f1e84]:
+          - button "Manage Branches" [ref=f1e85] [cursor=pointer]
+          - button "Add User" [ref=f1e86] [cursor=pointer]
+      - generic [ref=f1e87]:
+        - textbox [ref=f1e92]:
+          - /placeholder: Search name, email, branch…
+        - combobox [ref=f1e93]:
+          - option "All Roles" [selected]
+          - option "Owner"
+          - option "Branch Manager"
+          - option "Inventory Staff"
+          - option "Cashier"
+        - combobox [ref=f1e94]:
+          - option "All Branches" [selected]
+          - option "Test Central"
+          - option "Test North"
+        - combobox [ref=f1e95]:
+          - option "Active" [selected]
+          - option "Inactive"
+          - option "All Status"
+        - button "Apply" [ref=f1e96] [cursor=pointer]
+      - generic [ref=f1e97]:
+        - generic [ref=f1e98]:
+          - generic [ref=f1e99]:
+            - heading "Available Accounts" [level=2] [ref=f1e100]
+            - paragraph [ref=f1e101]: 4 accounts in this view.
+          - generic [ref=f1e102]: Passwords stay private
+        - table [ref=f1e107]:
+          - rowgroup [ref=f1e108]:
+            - row [ref=f1e109]:
+              - columnheader "User" [ref=f1e110]
+              - columnheader "Role" [ref=f1e111]
+              - columnheader "Branch" [ref=f1e112]
+              - columnheader "Status" [ref=f1e113]
+              - columnheader "Last Login" [ref=f1e114]
+              - columnheader "Action" [ref=f1e115]
+          - rowgroup [ref=f1e116]:
+            - row [ref=f1e117]:
+              - cell "Original owner owner@test.invalid" [ref=f1e118]:
+                - strong [ref=f1e119]: Original owner
+                - generic [ref=f1e120]: owner@test.invalid
+              - cell "Owner" [ref=f1e121]
+              - cell "All Branches" [ref=f1e123]
+              - cell "Active" [ref=f1e124]
+              - cell "Never" [ref=f1e126]
+              - cell [ref=f1e127]:
+                - button "Enter Account" [ref=f1e129] [cursor=pointer]
+            - row [ref=f1e133]:
+              - cell "Original branch_manager branch_manager@test.invalid" [ref=f1e134]:
+                - strong [ref=f1e135]: Original branch_manager
+                - generic [ref=f1e136]: branch_manager@test.invalid
+              - cell "Branch Manager" [ref=f1e137]
+              - cell "Test Central" [ref=f1e139]
+              - cell "Active" [ref=f1e140]
+              - cell "Never" [ref=f1e142]
+              - cell [ref=f1e143]:
+                - button "Enter Account" [ref=f1e145] [cursor=pointer]
+            - row [ref=f1e149]:
+              - cell "Original inventory inventory@test.invalid" [ref=f1e150]:
+                - strong [ref=f1e151]: Original inventory
+                - generic [ref=f1e152]: inventory@test.invalid
+              - cell "Inventory Staff" [ref=f1e153]
+              - cell "Test Central" [ref=f1e155]
+              - cell "Active" [ref=f1e156]
+              - cell "Never" [ref=f1e158]
+              - cell [ref=f1e159]:
+                - button "Enter Account" [ref=f1e161] [cursor=pointer]
+            - row [ref=f1e165]:
+              - cell "Original cashier cashier@test.invalid" [ref=f1e166]:
+                - strong [ref=f1e167]: Original cashier
+                - generic [ref=f1e168]: cashier@test.invalid
+              - cell "Cashier" [ref=f1e169]
+              - cell "Test Central" [ref=f1e171]
+              - cell "Active" [ref=f1e172]
+              - cell "Never" [ref=f1e174]
+              - cell [ref=f1e175]:
+                - button "Enter Account" [ref=f1e177] [cursor=pointer]

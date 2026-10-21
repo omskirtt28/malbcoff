@@ -1,4 +1,15 @@
 <?php
+/** Current catalog stock only. Historical sales and movement lists keep their original records. */
+function inventory_catalog_product_sql(string $alias = 'p'): string
+{
+    static $hasDeletedAt;
+    if ($hasDeletedAt === null) $hasDeletedAt = (bool)Database::query("SHOW COLUMNS FROM products LIKE 'catalog_deleted_at'")->fetch();
+    return "{$alias}.is_active=1"
+        . " AND ({$alias}.model_id IS NULL OR EXISTS (SELECT 1 FROM product_models visible_model WHERE visible_model.id={$alias}.model_id AND visible_model.is_active=1))"
+        . " AND ({$alias}.brand_id IS NULL OR EXISTS (SELECT 1 FROM brands visible_brand WHERE visible_brand.id={$alias}.brand_id AND visible_brand.is_active=1))"
+        . ($hasDeletedAt ? " AND {$alias}.catalog_deleted_at IS NULL" : '');
+}
+
 function inventory_void_schema_ready(): bool
 {
     static $ready = null;

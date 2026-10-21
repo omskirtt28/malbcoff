@@ -63,6 +63,10 @@ if (isset($_GET['check_identifier']) || isset($_GET['check_imei'])) {
 
         $matchedField=normalize_stock_identifier($unit['serial_no']??'')===$value?'serial':(normalize_stock_identifier($unit['imei']??'')===$value?'imei1':'imei2');
         $response=['exists'=>true,'status'=>$unit['status']??'','restorable'=>false,'unit_id'=>(int)$unit['id'],'branch_name'=>$unit['branch_name']??'','matched_field'=>$matchedField];
+        if (($unit['status'] ?? '') === 'deleted') {
+            echo json_encode(['exists'=>true,'status'=>'deleted','restorable'=>false,'message'=>'This unit was removed from inventory. Ask the System Admin to release its IMEI or serial in Deleted Records.']);
+            exit;
+        }
         if (!Auth::isOwner() && (int)$unit['branch_id'] !== (int)(Auth::branchId() ?: 0)) {
             echo json_encode([
                 'exists' => true,
@@ -314,6 +318,7 @@ try{
             }
 
             if($existing){
+                if (($existing['status'] ?? '') === 'deleted') throw new RuntimeException('Identifier '.$identifier.' belongs to a deleted unit. Ask the System Admin to release it in Deleted Records.');
                 if(($existing['status']??'')!=='adjusted_out') throw new RuntimeException('Identifier '.$identifier.' is already registered.');
                 if($isBarcode && normalize_stock_identifier($existing['serial_no']??'')!==$identifier){
                     throw new RuntimeException('This unit was registered by IMEI. Choose its original identifier type to restore it.');

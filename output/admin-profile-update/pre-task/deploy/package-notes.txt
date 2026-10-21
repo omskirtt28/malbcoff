@@ -1,0 +1,7 @@
+FIX 8C-2 only. All earlier work, including P3_006 and zero-stock visibility, is already LIVE per owner confirmation.
+Back up the database and replaced files. Run ONLY deploy/migrations.sql (P3_007) BEFORE uploading the 12 app files listed in the vault Deploy Package note. Preserve paths.
+The migration only adds nullable snapshot storage; it does not delete units. Use System Admin > Deleted Records > Deleted Inventory Units > Delete all with no sales after deployment. Preview covers all branches/pages; exact typed DELETE required.
+Only sale/void history keeps units archived; all other removed units can be physically deleted, including old archived rows. Transfer parents/quantities/statuses remain unchanged. Lines and movements keep snapshots labelled Unit deleted.
+No route, .htaccess, production configuration or credential changes. Normal filemtime asset versions apply.
+Verify actual reported unit IDs, audit snapshots, Branch Transfers, unchanged report numbers, original sales and IMEI receiving at Branches 2/3/4; check 360/768/desktop.
+The stored manifest is older v2 and no last-package.json exists: reconcile the confirmed-live baseline against the prior deployed artifact before a future build so old inventory fixes/P3_006 are not resent as pending.

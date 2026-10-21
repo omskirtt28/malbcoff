@@ -1,0 +1,24 @@
+{
+    "built_at":  "2026-10-21T00:49:17",
+    "folder":  "C:\\Users\\John Joshua\\Desktop\\malbcoff-FIX8C2-only-2026-10-21-004916",
+    "zip":  "C:\\Users\\John Joshua\\Desktop\\malbcoff-FIX8C2-only-2026-10-21-004916.zip",
+    "baseline_version":  "v3",
+    "files":  {
+                  "actions/receive_transfer.php":  "dedcd76d686abcec65b9dfdf799c2beb601c09cd4b070834b1b7142fab8c4652",
+                  "actions/system_admin_deleted_records.php":  "d60f76996f7278556f1c478b99bb2c3bb01862112296c9be29ab57abdaa453a5",
+                  "actions/transfer_details.php":  "e6c52de1698c54ab6fd4868dcd36bc1d60b87ce8dca7b1db3dc38380bef7cff8",
+                  "actions/void_inventory_movement.php":  "2244372e835a798223e05c3bd8fbb5cce45c9184fe15abd94f35529d152dfe2f",
+                  "assets/css/app.css":  "75c0e24a47fc03cbe954a86be776c1652c7fd4eecf88e9d3827b482d5259bf22",
+                  "assets/js/branch-transfers.js":  "76baacf5e1dd25539682f55064f8637f781d21ea1fc5ad6d00fb4d847c23ae8f",
+                  "assets/js/deleted-inventory-units.js":  "a7fd896149873c3ad140e8dab81f9d1b2661be9321314549bea80592375b9e71",
+                  "core/InventoryDeletion.php":  "f81128655e3a143d4fa6421412d82d9798f7c318f6d8219c655b78ce5249a5fe",
+                  "core/StockMonitoringReport.php":  "16f9814e0926c549eebeb6fff137846db4f973d924ea9cf36a4ecaef572b23c0",
+                  "pages/stock-movement.php":  "d82bce20ecf3de6048e7e5008f34bcdb20be1e7148571435c96294c68f81cca2",
+                  "pages/system-admin-deleted-records.php":  "e1d8d3f4015064a5ef4ab0ecd0e3e55a346eeb938ad0f6bb59dbbf3e8576bc5a",
+                  "partials/deleted-inventory-units.php":  "4239d2cb106f9a993acca59d0d08ec76853e57c4d9d7fc4ac60fd94c3fbae8e3"
+              },
+    "migrations":  [
+                       "P3_007_inventory_delete_snapshots.sql"
+                   ],
+    "scope":  "FIX 8C-2 only"
+}

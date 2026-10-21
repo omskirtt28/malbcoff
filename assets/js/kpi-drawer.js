@@ -111,6 +111,8 @@
       brand: card.getAttribute('data-brand') || '',
       q: '',
       pageQ: card.getAttribute('data-q') || '',
+      stock: card.getAttribute('data-stock') || '',
+      monitoring: card.getAttribute('data-monitoring') || '',
       basis: card.getAttribute('data-basis') || '',
       type: card.getAttribute('data-type') || '',
       tab: 'out'
@@ -153,6 +155,8 @@
     request = typeof AbortController === 'function' ? new AbortController() : null;
     var params = new URLSearchParams();
     params.set('kind', state.kind);
+    if (state.stock) params.set('stock', state.stock);
+    if (state.monitoring) params.set('monitoring', state.monitoring);
     params.set('date', state.date);
     if (state.branch) params.set('branch', state.branch);
     if (state.brand) params.set('brand', state.brand);

@@ -1,0 +1,47 @@
+ M DESIGN.md
+ M actions/adjust_inventory.php
+ M actions/delete_inventory_unit.php
+ M actions/export_stock_monitoring.php
+ M actions/receive_transfer.php
+ M actions/stock_in.php
+ M actions/system_admin_deleted_records.php
+ M actions/transfer_details.php
+ M actions/void_inventory_movement.php
+ M assets/css/app.css
+ M assets/js/branch-transfers.js
+ M assets/js/kpi-drawer.js
+ M core/StockMonitoringReport.php
+ M core/helpers.php
+ M deploy/_common.ps1
+ M deploy/migrations.sql
+ M malbcoff-vault/.obsidian/graph.json
+ M malbcoff-vault/.obsidian/workspace.json
+ M "malbcoff-vault/00 Start Here.md"
+ M "malbcoff-vault/Bugs/BUG Tablet Login Stays on Login Page.md"
+ M malbcoff-vault/Changelog.md
+ M malbcoff-vault/Conventions.md
+ M "malbcoff-vault/Features/Branch Transfers.md"
+ M malbcoff-vault/Features/Dashboard.md
+ M malbcoff-vault/Features/Inventory.md
+ M "malbcoff-vault/Features/Stock Monitoring.md"
+ M "malbcoff-vault/Features/Stock Movement.md"
+ M "malbcoff-vault/File Index.md"
+ M malbcoff-vault/Migrations.md
+ M "malbcoff-vault/Plan/Deploy Package.md"
+ M "malbcoff-vault/Plan/Deploy Rule.md"
+ M pages/dashboard.php
+ M pages/inventory.php
+ M pages/stock-monitoring.php
+ M pages/stock-movement.php
+ M pages/system-admin-deleted-records.php
+?? .playwright-cli/
+?? assets/js/deleted-inventory-units.js
+?? core/InventoryDeletion.php
+?? database/migrations/P3_006_inventory_soft_delete.sql
+?? database/migrations/P3_007_inventory_delete_snapshots.sql
+?? "malbcoff-vault/Bugs/BUG Deleted Inventory Units and Blocked Identifiers.md"
+?? "malbcoff-vault/Bugs/BUG Stock Monitoring Hides Zero Stock Models.md"
+?? "malbcoff-vault/Design System.md"
+?? output/
+?? partials/deleted-inventory-units.php
+?? tests/

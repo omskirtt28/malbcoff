@@ -89,13 +89,14 @@ try {
         $units = Database::query(
             "SELECT iu.id,iu.product_id,iu.branch_id,iu.status
              FROM inventory_transfer_units itu
-             JOIN inventory_units iu ON iu.id=itu.unit_id
+             LEFT JOIN inventory_units iu ON iu.id=itu.unit_id
              WHERE itu.transfer_id=? FOR UPDATE",
             [$transferId]
         )->fetchAll();
         if (count($units) !== $quantity) throw new RuntimeException('Transfer unit details are incomplete. Contact the system administrator.');
 
         foreach ($units as $unit) {
+            if (!$unit['id']) throw new RuntimeException('This transfer includes a permanently deleted unit. Contact the System Admin. Nothing was received.');
             if ((int)$unit['branch_id'] !== (int)$transfer['source_branch_id'] || ($unit['status'] ?? '') !== 'transferred') {
                 throw new RuntimeException('One or more units are no longer in transit. Refresh and try again.');
             }

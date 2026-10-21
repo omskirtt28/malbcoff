@@ -1,8 +1,19 @@
 ---
 tags: [index]
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 # Malbcoff POS Vault — Start Here
+
+## 2026-10-21 - Admin/profile update, separate pending delivery
+**Status: done locally, not yet live.** No live hosting access or deployment confirmation.
+
+System Admin Add User + Manage Branches/Rename and completed self-name protection are implemented on current XAMPP source. 349 isolated assertions passed (287 main HTTP/browser + 19 retry/Owner/native-form + 34 UI/responsive + 9 original-history/new-snapshot/validator checks); 11 runtime PHP syntax checks, JavaScript syntax and task-scoped whitespace checks passed. No migration. Requires the existing security/impersonation schema, must_change_password, P3_001 snapshot columns/triggers and P3_002 idempotency_keys, already in confirmed-live baseline v3. No dependency on FIX 8C-2/P3_007.
+
+ZIP: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.zip`. Separate upload/rollback guide: `C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.txt`.
+
+Exactly 13 runtime files; ZIP paths/CRC/SHA256 checked. Six changed existing files matched confirmed-live v3 before edits; seven are new. Eight auth/route/retry dependencies match v3. No overlap with the 12 pending FIX 8C-2 runtime files; that record and baseline remain unchanged. Prior FIX 8C-2 ZIP is absent at its recorded Desktop path; its record and all 12 local matching hashes are preserved. Reply **deployed** identifying this ZIP before recording deployment. See [[Users and Accounts]] / [[Deploy Package]].
+
+**Deployment status confirmed 2026-10-21:** Everything before **FIX 8C-2** is **LIVE**, including P3_006, inventory soft deletion and zero-stock visibility. FIX 8C-2 remains **done, not yet live**; the separate admin/profile update above is also pending. See [[BUG Deleted Inventory Units and Blocked Identifiers]] and [[Deploy Package]] for the exact 12 app files and P3_007 migration. Baseline v3 reconciles earlier confirmed-live work; the FIX8C2-only Desktop ZIP is built and hash-verified, awaiting upload confirmation. Earlier pending statements are historical and superseded.
 
 Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code** para tipid sa usage.
 
@@ -46,3 +57,9 @@ Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code*
 `ARCHITECTURE.md`, `SCHEMA.md`, `RULES.md`, `PRD.md`, `DESIGN.md`
 
 **Design rules (basahin bago mag-UI patch):** `DESIGN.md` §15 "App Rules" + checklist "Before finishing any patch" — English-only UI, 360/768/desktop, 44px, 14px, tabs/table pattern. See [[Conventions]] and [[Patch 7 - English UI and Stock Monitoring Tabs]].
+
+## Current — FIX 8C-2 done, not yet live (earlier fixes LIVE)
+- [[BUG Deleted Inventory Units and Blocked Identifiers]]
+- [[BUG Stock Monitoring Hides Zero Stock Models]]
+- [[Design System]] — canonical root DESIGN.md plus the new components
+- [[Deploy Package]] — exact pending files/migration; all earlier work LIVE

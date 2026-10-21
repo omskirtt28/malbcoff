@@ -1,0 +1,168 @@
+MALBCOFF ADMIN AND PROFILE UPDATE
+Status: done locally, not yet live
+Prepared: 2026-10-21T22:58:00 Asia/Manila
+ZIP: C:\Users\John Joshua\Desktop\malbcoff-admin-profile-update-20261021-225800.zip
+ZIP SHA256: 9f9a3db5a11c885dd8c6c9d30ac6ab0678b280890b10306b3376bd51a84750df
+Exactly 13 runtime files (7 new, 6 changed). No SQL migration.
+
+WHAT THIS CHANGES
+Direct System Admin > User Accounts: Add User and Manage Branches > Rename.
+Roles: Owner, Branch Manager, Inventory Staff, Cashier. No System Admin creation.
+Owner gets All Branches (NULL branch). Branch roles need an active branch.
+Existing Owner validators are reused unchanged (name normalized and capped at
+120 characters; email validated up to 160; password 12-128 bytes with a letter
+and number). Password is hashed; first login forces a change.
+Branch names: required, spaces normalized, maximum from schema (currently 100
+characters); duplicate names use database collation. Only branches.name changes.
+Inactive branches can also be renamed; their status and code stay unchanged.
+My Account was already linked in the profile menu; verified for branch users.
+Edit Name now has SafeSubmit, transactional retry protection, audit, explicit
+foreign-account rejection, name-only updates and immediate session/topbar refresh.
+Own display name is 1-60 characters; HTML/control characters are rejected.
+Owner user management and Enter Account are preserved.
+
+PREREQUISITES AND DEPENDENCIES
+1. Start from confirmed-live baseline v3 (confirmed 2026-10-21), with existing
+   security/impersonation schema, must_change_password and P3_001 name snapshot
+   columns/triggers plus P3_002 idempotency_keys. Both are already in the confirmed
+   baseline. Verify those existing prerequisites on staging; do not import old
+   migrations from unrelated packages. Without safe-saving schema, saves refuse.
+2. Existing PHP 8.2-compatible setup with PDO MySQL, mbstring and password_hash.
+3. Upload ALL 13 files together. core/UserManagement.php must be present before
+   replacing actions/user_management.php; core/AccountChanges.php before new
+   endpoints and changed account pages. Header/footer load the new scoped assets.
+4. No new routes, .htaccess edits, configuration, app-version change or migration
+   is required. Normal filemtime asset URLs are used. No passwords go to browser
+   storage, offline queues, saved retry fingerprints/results, logs or responses.
+   Password input is online-only; Retry keeps it in memory only until completion.
+5. No dependency on pending FIX 8C-2 or P3_007. Its 12 files were not changed or
+   included. All six modified existing files matched v3 before this task; the
+   eight unchanged auth/route/retry dependencies also match v3. The shared pending
+   assets/css/app.css is deliberately excluded; this task has its own stylesheet.
+6. Earlier pending record is preserved: deploy/last-package.json still refers to
+   C:\Users\John Joshua\Desktop\malbcoff-FIX8C2-only-2026-10-21-004916.zip.
+   That old ZIP was not found at the recorded Desktop path during this task.
+   Its manifest and all 12 local source hashes remain intact. This new ZIP does
+   not replace it. Keep the inventory deployment separate.
+
+BACK UP FIRST
+APPLICATION_ROOT means the live Malbcoff folder containing index.php and
+bootstrap.php. Confirm that folder in your hosting file manager before copying.
+No absolute hosting folder was assumed or accessed during this task.
+1. Take a full database backup using your normal hosting backup method.
+2. Download private backups of these SIX existing runtime files, preserving paths:
+   actions/account_update.php
+   actions/user_management.php
+   pages/account.php
+   pages/system-admin-users.php
+   partials/footer.php
+   partials/header.php
+3. Record that the other SEVEN files are new; if any already exist on hosting,
+   back them up too and reconcile that version before replacing it.
+4. Keep backups outside the public application folder. Pause account/profile
+   changes briefly while uploading the complete set; avoid mixed versions.
+5. Extract this ZIP into a NEW local folder. Open it: actions/, assets/, core/,
+   pages/ and partials/ must be directly inside (no extra wrapper directory).
+
+UPLOAD ONE FILE AT A TIME, PRESERVING DESTINATIONS
+Use Copy/Paste or your host's upload-and-replace command. Open the matching
+destination directory first; never drop a folder's contents into the app root.
+Do not upload this TXT, vault, deploy state, test files or local configuration.
+Migration order: NONE for this package. No SQL to import.
+1. ZIP core/UserManagement.php -> APPLICATION_ROOT/core/UserManagement.php
+2. ZIP core/AccountChanges.php -> APPLICATION_ROOT/core/AccountChanges.php
+3. ZIP assets/css/admin-profile.css -> APPLICATION_ROOT/assets/css/admin-profile.css
+4. ZIP assets/js/admin-profile.js -> APPLICATION_ROOT/assets/js/admin-profile.js
+5. ZIP partials/admin-profile-dialogs.php -> APPLICATION_ROOT/partials/admin-profile-dialogs.php
+6. ZIP actions/system_admin_user_create.php -> APPLICATION_ROOT/actions/system_admin_user_create.php
+7. ZIP actions/system_admin_branch_rename.php -> APPLICATION_ROOT/actions/system_admin_branch_rename.php
+8. ZIP actions/user_management.php -> APPLICATION_ROOT/actions/user_management.php
+9. ZIP actions/account_update.php -> APPLICATION_ROOT/actions/account_update.php
+10. ZIP partials/header.php -> APPLICATION_ROOT/partials/header.php
+11. ZIP partials/footer.php -> APPLICATION_ROOT/partials/footer.php
+12. ZIP pages/account.php -> APPLICATION_ROOT/pages/account.php
+13. ZIP pages/system-admin-users.php -> APPLICATION_ROOT/pages/system-admin-users.php
+
+VERIFICATION AFTER UPLOAD
+1. Reload User Accounts after a direct System Admin sign-in. Add User and Manage
+   Branches must appear, and Enter Account must still work for Owner/branch users.
+2. In an isolated staging copy with synthetic accounts/branches, create each
+   supported role; check Owner = All Branches and branch roles = active branch.
+   Try empty/invalid fields and a duplicate email (including case variants).
+3. Sign in with a new temporary password: business pages/actions must stay locked
+   until the password is changed. Never display the password/hash or log payloads.
+4. On staging, rename an active and inactive branch. Reject blank, duplicate and
+   over-100-character names. Compare branch IDs/codes/assignments, inventory,
+   sales, transfers and snapshots before/after; only branch name changes.
+   Current filters and account listings must show the new branch name.
+5. As branch staff, open profile menu > My Account > Edit Name. Verify the topbar
+   updates immediately and the value survives reload. Reject blank/61-character
+   names, another user's id/user_id/target_user_id and protected-field changes.
+6. On staging verify Owner/branch/anonymous/impersonated sessions cannot invoke
+   the new admin endpoints; impersonation cannot change profiles. Reject bad
+   CSRF/GET, retry the same key and simulate a lost response: no duplicate write.
+7. Verify Owner Create/Edit/Activate/Deactivate/Reset Password and Enter Account /
+   Return to System Admin. Check 360px, 768px and desktop; tables can scroll only
+   within their labelled wrapper. Confirm no page-wide horizontal scroll.
+8. Historical cashier/stock/transfer snapshots keep old names; new records take
+   the new display name. Use synthetic staging records for mutation tests, not
+   real accounts or branch names just to test deployment. Live review can verify
+   controls/listings with no test mutation.
+
+LOCAL VERIFICATION EVIDENCE
+349 isolated assertions passed: main HTTP/browser 287, additional
+retry/Owner/native-form 19, responsive/UI 34, original
+history/new snapshot/validator preservation 9.
+Actual SafeSubmit creation, branch rename and self rename succeeded. Lost
+response after commit retried the same key and created only one user. Stale CSRF
+recovered once. Password absent from response/audit/retry data and browser storage
+including IndexedDB in the simulated failure. Owner validators moved unchanged.
+11 runtime PHP syntax checks, JavaScript syntax and task-scoped whitespace checks
+passed. ZIP has exact paths, 13/13 matching source hashes and no excluded content.
+DB: malbcoff_admin_profile_20261021 (local schema clone, synthetic records only).
+No real account or branch name was changed for testing. No live hosting accessed.
+Not performed: live hosting/staging UAT, real devices/Safari/Firefox, parallel
+multi-worker load/stress or real network outage testing (lost response simulated).
+
+ROLLBACK
+1. Pause account/profile changes again. Restore the SIX backed-up runtime files
+   to exactly their original paths. Then remove the SEVEN new files only if this
+   package introduced them and no later patch uses them. No schema rollback.
+2. Restoring PHP/JS/CSS does not undo successfully saved users/names. Keep created
+   IDs and transaction history. If an intended business change must be undone,
+   restore only the affected display/branch name or deactivate a new account
+   through an authorized workflow. Do not delete history. A full DB restore is
+   appropriate only if you can safely discard ALL later writes; otherwise use a
+   reviewed targeted correction from the backup.
+3. Reload and verify Owner management, Enter Account and the old My Account flow.
+4. Keep FIX 8C-2 deployment records and confirmed-live baseline unchanged.
+
+DEPLOYMENT TRACKING
+Scoped record: deploy/admin-profile-update-20261021-225800.json (local only).
+This delivery is NOT marked live. Do not run confirm-deployed.ps1 against the
+unrelated last-package.json. Reply "deployed" and identify this ZIP after upload;
+only then reconcile this scoped manifest into the baseline. FIX 8C-2 stays pending
+unless explicitly confirmed separately.
+
+UPLOAD FILE SHA256
+c6edb7959f0cf62c32b24ef84fb5acecddfae66e91bca7ae81962130509b726c  actions/account_update.php
+2032d8cb09588f9c49fa50afa38a7fd0d551588a568d5392df9d1a8766321e55  actions/system_admin_branch_rename.php
+82b9169baf485be8ce8828748115aecb3902fabb0080c008968a377a847e1b6f  actions/system_admin_user_create.php
+30ef96eb9b6dcb080ef8526f174f64fdffc78e6ce0cf1678ec1776a1a5877d95  actions/user_management.php
+5772f5d395c8aea0a4fab7c4c47cbf4b8a7ca98aab0d6377470f4f84e5fad252  assets/css/admin-profile.css
+1c23b05c93e23641f6c56091395fb1aad323894f099a58ef962f77d07fdd79dd  assets/js/admin-profile.js
+57588ef6de6f2e871c4b99ad9c8d16d8536517e5e37775abb4315a5818f62628  core/AccountChanges.php
+9a1d462f9ab2dd2c110b70076c1b39967bf6d24e1355c254974aa678ef59a29f  core/UserManagement.php
+bed17c8842fe0b4deabf1faacd5a0ed3517d2f986fc6cb0fd332e03a12af129f  pages/account.php
+f0beb77c54daee27f86c403cecbcf0b9cc8cf94111f8d529baf00d6d9d63428b  pages/system-admin-users.php
+886b716c1d29111dbb8aca6b25ee4b72ee1ee33d58ee00d1da3a97ad1a0fa78b  partials/admin-profile-dialogs.php
+d949d5e350bfb7ca8021663ad3b064903522c3f3ac199cc2cf9a29afbebe08cc  partials/footer.php
+b8b74220f55acfa5e8fb3e256c4d307ad580cbee74345e923a75557f08d33d4a  partials/header.php
+
+PRE-TASK / CONFIRMED-LIVE HASHES FOR THE SIX REPLACED FILES
+dc6f6f0eb989edc2d8a1d6477f800d88ab615ec9ae33003de0c79683d7eae5c4  actions/account_update.php
+5c7d5c713800a72c95d946f4909c847a64e6563cab484c990ece3e1fe697058d  actions/user_management.php
+cd1309e4fc691919dd1fce4946d90c17062319fa907007a91f2b0b881e3755ee  pages/account.php
+e7443bd05f0fe6197eccbdb87590eb5a20312eb606b842d1c9d3e33f7374fdda  pages/system-admin-users.php
+82816efed9cf0ab6f335a1889f2ffb04eb2107ffe66b5d736a2db6f4fa3d549b  partials/footer.php
+9fe5a0f2151521e25ec4844753cd8bbc03194e53aca569dc1c6466fd34afe3ea  partials/header.php

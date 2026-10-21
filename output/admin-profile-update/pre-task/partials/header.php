@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title><?= e($pageTitle) ?> | <?= e($app['name']) ?></title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="shortcut icon" href="assets/favicon.svg">
+    <?php require __DIR__ . '/pwa-head.php'; ?>
+    <?php // Patch 6c-1: who this device's outbox belongs to. Branch staff only; owner, System Admin and impersonation get no outbox.
+    $outboxUser = Auth::user() ?? [];
+    if (Auth::check() && !Auth::isOwner() && !Auth::isSystemAdmin() && !Auth::isImpersonating() && (Auth::branchId() ?: 0) > 0): ?>
+    <meta name="outbox-scope" content="<?= e(json_encode(['user' => (int)($outboxUser['id'] ?? 0), 'branch' => (int)Auth::branchId(), 'role' => (string)($outboxUser['role'] ?? '')], JSON_UNESCAPED_SLASHES)) ?>">
+    <?php endif; ?>
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/app.css') ?>">
+    <link rel="stylesheet" href="assets/css/branch-transfers.css?v=<?= (int)@filemtime(__DIR__ . '/../assets/css/branch-transfers.css') ?>">
+</head>
+<body class="app-page page-<?= e($page ?? 'dashboard') ?> role-<?= e(Auth::user()['role'] ?? 'guest') ?><?= Auth::isImpersonating() ? ' is-impersonating' : '' ?>">
+<div class="app-shell">

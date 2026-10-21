@@ -1,6 +1,7 @@
 <?php
 // My Account — a logged-in user edits ONLY their own display name (id comes from the session in the action).
 $me = Auth::user() ?? [];
+require_once __DIR__ . '/../core/AccountChanges.php';
 $impersonating = Auth::isImpersonating();
 $nameValue = flash('account_name');
 if ($nameValue === null) $nameValue = (string)($me['name'] ?? '');
@@ -18,8 +19,10 @@ if ($nameValue === null) $nameValue = (string)($me['name'] ?? '');
 <?php endif; ?>
 
 <section class="card account-card">
-    <form method="post" action="actions/account_update.php" class="account-form" autocomplete="off">
+    <h2>Edit Name</h2>
+    <form method="post" action="actions/account_update.php" class="account-form" autocomplete="off" data-account-change-form>
         <input type="hidden" name="_csrf" value="<?= e(Csrf::token()) ?>">
+        <input type="hidden" name="client_key" value="<?= e(account_change_key()) ?>">
         <label class="field">
             <span>Display name <b>*</b></span>
             <input type="text" name="name" value="<?= e($nameValue) ?>" required maxlength="60" autocomplete="name" <?= $impersonating ? 'disabled' : '' ?>>

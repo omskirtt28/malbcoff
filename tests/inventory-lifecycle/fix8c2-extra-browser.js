@@ -1,0 +1,27 @@
+async page => {
+ page.setDefaultTimeout(10000);
+ const base='http://127.0.0.1:8879',c=page.context(),out=[];let csrf='';
+ const ok=(v,m)=>{if(!v)throw new Error(m);out.push(m);};
+ const f=await(await c.request.get(base+'/__fixture-data')).json();
+ const role=async(r,b)=>{await page.goto(base+'/__fixture?role='+r+(b?'&branch='+b:''));csrf=JSON.parse(await page.locator('body').innerText()).csrf;};
+ const post=async(body)=>{const r=await c.request.post(base+'/actions/system_admin_deleted_records.php',{headers:{Accept:'application/json'},data:{_csrf:csrf,...body}});return {status:r.status(),...await r.json()};};
+ await role('system_admin');
+ let preview=await post({action:'preview_no_sales'});ok(preview.count===55,'global preview includes 55 units across pages');
+ let r=await post({action:'purge_all_no_sales',confirmed:true,preview_token:preview.preview_token,preview_count:55,confirmation:'delete'});ok(r.status===422,'delete all enforces exact DELETE on server');
+ await page.goto(base+'/system-admin-deleted-records?unit_q=UNMATCHED-FILTER');
+ await page.locator('[data-purge-all-no-sales]').click();await page.locator('[data-unit-purge-dialog][open]').waitFor();ok((await page.locator('[data-purge-count]').innerText()).startsWith('55 unit'),'global preview ignores current unmatched filters explicitly');
+ await page.locator('[data-purge-type]').fill('DELETE');await page.locator('[data-purge-confirm]').click();await page.locator('[data-purge-status]').getByText('Saved ✓',{exact:true}).waitFor();
+ ok((await post({action:'preview_no_sales'})).count===0,'all 55 units physically removed in one request');
+ r=await post({action:'purge_units',unit_ids:[f.units.sale],confirmed:true});ok(r.archived===1,'unit with sale is archived by real endpoint');
+ await role('branch_manager',f.branches[2]);
+ for(const id of [f.identifiers.sale,'865123456789013','FIX8C2-'+f.identifiers.sale]){const r=await c.request.get(base+'/actions/stock_in.php?check_identifier='+encodeURIComponent(id));ok(!(await r.json()).exists,'sales archive releases identifier '+id);}
+ const receive=await c.request.post(base+'/actions/receive_transfer.php',{headers:{Accept:'application/json'},data:{_csrf:csrf,transfer_id:f.transfers.all2,receiver_name:'Fixture receiver'}});ok(receive.status()===422,'pending detached transfer cannot fabricate stock');
+ await role('owner');
+ for(const width of [360,768,1280]){
+  await page.setViewportSize({width,height:900});await page.goto(base+'/branch-transfers?open='+f.transfers.single);await page.getByText('Unit deleted',{exact:true}).waitFor();
+  const font=await page.locator('.transfer-proof-unit.is-deleted .status-pill').evaluate(el=>parseFloat(getComputedStyle(el).fontSize));ok(font>=14,'Unit deleted label >=14px '+width);
+  await page.screenshot({path:`output/playwright/fix8c2-transfer-${width}.png`});
+ }
+ for(const path of ['/dashboard','/stock-monitoring','/stock-movement','/sales-records?sale='+f.sale]){await page.goto(base+path);const body=await page.locator('body').innerText();ok(!/Warning:|Fatal error:|could not be loaded/i.test(body),'page renders without PHP errors '+path);}
+ return {checks:out.length,evidence:out};
+}

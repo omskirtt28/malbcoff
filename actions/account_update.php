@@ -1,35 +1,20 @@
 <?php
-// Self-service: a logged-in user changes ONLY their own display name.
-// The record id comes from the session — nothing in the request can select another user.
 require __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../core/AccountChanges.php';
 
-if (!Auth::check()) redirect(app_url('login'));
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect(app_url('account'));
-if (!Csrf::verify($_POST['_csrf'] ?? null)) {
-    flash('error', 'Your session expired. Please try again.');
-    redirect(app_url('account'));
-}
-if (Auth::isImpersonating() || Auth::isSystemAdmin()) {
-    flash('error', 'Return to your own account before changing a display name.');
-    redirect(app_home_url());
-}
-
-$userId = (int)(Auth::user()['id'] ?? 0);
-$submitted = (string)($_POST['name'] ?? '');
-
-try {
-    $name = validate_display_name($submitted);
-    $updated = Database::query('UPDATE users SET name=? WHERE id=? AND is_active=1', [$name, $userId]);
-    if ($updated->rowCount() === 0) {
-        // Unchanged name also reports 0 rows on some drivers: make sure the account is still active.
-        $exists = Database::query('SELECT 1 FROM users WHERE id=? AND is_active=1 LIMIT 1', [$userId])->fetchColumn();
-        if (!$exists) throw new RuntimeException('Your account is no longer active.');
+$intent = array_intersect_key($_POST, array_flip(['name','id','user_id','target_user_id']));
+$intent['extra_fields'] = array_values(array_diff(array_keys($_POST), ['name','id','user_id','target_user_id','_csrf','client_key']));
+run_account_change('account_name_update', $intent, static function (array $me): array {
+    foreach (['id','user_id','target_user_id'] as $field) {
+        if (isset($_POST[$field]) && filter_var($_POST[$field], FILTER_VALIDATE_INT) !== (int)$me['id']) {
+            throw new RuntimeException('You can change only your own display name.');
+        }
     }
-    Auth::refreshCurrentUser();
-    flash('success', 'Your display name is now "' . $name . '".');
-} catch (Throwable $e) {
-    flash('error', safe_exception_message($e, 'Unable to save your name right now. Please try again.'));
-    flash('account_name', mb_substr($submitted, 0, 120));
-}
-
-redirect(app_url('account'));
+    foreach (['email','role','branch_id','is_active','status','password','temporary_password','password_hash'] as $field) {
+        if (array_key_exists($field, $_POST)) throw new RuntimeException('Only your display name can be changed here.');
+    }
+    $name = validate_display_name($_POST['name'] ?? '');
+    Database::query('UPDATE users SET name=? WHERE id=? AND is_active=1', [$name,(int)$me['id']]);
+    Security::audit('user.name_updated', 'user', (int)$me['id']);
+    return ['ok'=>true, 'message'=>'Your display name has been saved.', 'name'=>$name];
+}, false);

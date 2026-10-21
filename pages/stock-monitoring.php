@@ -32,11 +32,12 @@ $branchEnding = (array)($report['branch_ending'] ?? []);
 $branchTotals = (array)($report['branch_totals'] ?? []);
 // KPI cards always show the combined (all types) figures; the table and its totals follow the active tab.
 $kpiTotals = (array)($report['overall_totals'] ?? $totals);
+$stock = (string)($report['stock'] ?? 'all');
 $tab = (string)($report['tab'] ?? 'phones');
 $isAccessoriesTab = $tab === 'accessories';
 $tabRows = (array)($report['tab_rows'] ?? []);
 
-$filterParams = ['date' => $selectedDate];
+$filterParams = ['date' => $selectedDate, 'stock' => $stock];
 if ($isOwner && $branchId) $filterParams['branch'] = (int)$branchId;
 if ($brandId) $filterParams['brand'] = (int)$brandId;
 if ($search !== '') $filterParams['q'] = $search;
@@ -44,7 +45,7 @@ if ($search !== '') $filterParams['q'] = $search;
 $tabParam = $isAccessoriesTab ? ['tab' => 'accessories'] : [];
 $tabUrl = static fn(string $key): string => app_url('stock-monitoring', $filterParams + ($key === 'accessories' ? ['tab' => 'accessories'] : []));
 // Owner KPI cards open the shared drawer for the same date / branch / brand / search as the page.
-$drawerAttrs = static fn(string $kind): string => ' data-kpi-drawer="' . $kind . '" data-date="' . e($selectedDate) . '" data-branch="' . ($branchId ? (int)$branchId : '') . '" data-brand="' . ($brandId ? (int)$brandId : '') . '" data-q="' . e($search) . '"';
+$drawerAttrs = static fn(string $kind): string => ' data-monitoring="1" data-stock="'.e($stock).'" data-kpi-drawer="' . $kind . '" data-date="' . e($selectedDate) . '" data-branch="' . ($branchId ? (int)$branchId : '') . '" data-brand="' . ($brandId ? (int)$brandId : '') . '" data-q="' . e($search) . '"';
 $exportUrl = app_url('stock-monitoring-export', $filterParams + $tabParam);
 $resetUrl = app_url('stock-monitoring', $tabParam);
 $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
@@ -103,6 +104,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
 <?php endif; ?>
 
 <form class="filter-card stock-monitoring-filter <?= $isOwner ? 'is-owner' : 'is-branch' ?>" method="get" action="<?= e(app_url('stock-monitoring')) ?>">
+    <input type="hidden" name="stock" value="<?= e($stock) ?>">
     <?php if ($isAccessoriesTab): ?><input type="hidden" name="tab" value="accessories"><?php endif; ?>
     <label>
         <span>Date</span>
@@ -142,6 +144,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
     <div class="stock-monitoring-actions">
         <button class="btn btn-primary stock-monitoring-apply" type="submit">Apply</button>
         <a class="filter-reset stock-monitoring-reset" href="<?= e($resetUrl) ?>">Reset</a>
+        <a class="btn btn-outline" href="<?= e($exportUrl.'&format=csv') ?>">Export CSV</a>
         <a class="btn btn-outline stock-monitoring-export" href="<?= e($exportUrl) ?>">
             <?= icon('stock') ?><span>Export <?= e($tabLabel) ?> to Excel</span>
         </a>
@@ -153,6 +156,11 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
     <a class="stock-monitoring-tab<?= $isAccessoriesTab ? ' is-active' : '' ?>" href="<?= e($tabUrl('accessories')) ?>"<?= $isAccessoriesTab ? ' aria-current="page"' : '' ?>>Accessories</a>
 </nav>
 
+<nav class="stock-state-chips" aria-label="Stock availability">
+<?php foreach (['all'=>'All','in'=>'In stock','out'=>'Out of stock'] as $key=>$label): ?>
+<a class="stock-state-chip<?= $stock===$key?' is-active':'' ?>" href="<?= e(app_url('stock-monitoring', array_merge($filterParams,$tabParam,['stock'=>$key]))) ?>"<?= $stock===$key?' aria-current="page"':'' ?>><?= e($label) ?></a>
+<?php endforeach; ?>
+</nav>
 <section class="table-card stock-monitoring-card">
 <?php if (!$rows):
     $otherTab = $isAccessoriesTab ? 'Phones & Tablets' : 'Accessories';
@@ -203,9 +211,9 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
                         $groupBranchTotals[$bid] += $qty;
                         $rowOverall += $qty;
                     ?>
-                        <td class="num<?= $qty === 0 ? ' is-zero' : ' is-nz' ?>" data-label="<?= e((string)$branch['name']) ?>"><?= number_format($qty) ?></td>
+                        <td class="num<?= $qty === 0 ? ' is-zero' : ' is-nz' ?>" data-label="<?= e((string)$branch['name']) ?>"><?= array_key_exists($bid, $branchEnding[$pid] ?? []) ? number_format($qty) : '—' ?><?php if ($qty===0 && array_key_exists($bid, $branchEnding[$pid] ?? [])): ?><span class="stock-out-label">Out of stock</span><?php endif; ?></td>
                     <?php endforeach; ?>
-                    <td class="num stock-monitoring-overall-cell<?= $rowOverall === 0 ? ' is-zero' : '' ?>" data-label="Overall Total"><?= number_format($rowOverall) ?></td>
+                    <td class="num stock-monitoring-overall-cell<?= $rowOverall === 0 ? ' is-zero' : '' ?>" data-label="Overall Total"><?= number_format($rowOverall) ?><?php if ($rowOverall===0): ?><span class="stock-out-label">Out of stock</span><?php endif; ?></td>
                 </tr>
                 <?php $groupOverall += $rowOverall; endforeach; ?>
                 <tr class="stock-monitoring-total-row">
@@ -245,7 +253,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
         if ($out > 0) $bits[] = '<span class="tone-out">' . "\u{2212}" . number_format($out) . '</span>';
         return '<td class="num is-nz" data-label="Transfer" title="Received: ' . $in . ' · Sent out: ' . $out . '">' . implode('<i> / </i>', $bits) . '</td>';
     };
-    $endingTd = static fn(int $n): string => '<td class="num stock-monitoring-ending-cell' . ($n === 0 ? ' is-zero' : '') . '" data-label="Ending">' . number_format($n) . '</td>';
+    $endingTd = static fn(int $n, bool $item = false): string => '<td class="num stock-monitoring-ending-cell' . ($n === 0 ? ' is-zero' : '') . '" data-label="Ending">' . number_format($n) . ($item && $n===0 ? '<span class="stock-out-label">Out of stock</span>' : '') . '</td>';
     $th = static function (string $label, string $tip, bool $first = false): string {
         return '<th scope="col" class="' . ($first ? 'stock-monitoring-model-head' : 'num') . '"><button type="button" class="stock-monitoring-th" data-tip="' . e($tip) . '" aria-label="' . e($label . ' — ' . $tip) . '">' . e($label) . '</button></th>';
     };
@@ -266,7 +274,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
                     <?= $th('Stock In', 'New stock received from suppliers') ?>
                     <?= $th('Transfer', 'Stock moved to or from other branches. Green = received, red = sent out') ?>
                     <?= $th('Sold', 'Sold to customers') ?>
-                    <?php if ($showOther): ?><?= $th('Other', 'Adjustments and other changes') ?><?php endif; ?>
+                    <?php if ($showOther): ?><?= $th('Other', 'Adjustments and removed inventory (negative)') ?><?php endif; ?>
                     <?= $th('Ending', 'Stock at the end of the day') ?>
                 </tr>
             </thead>
@@ -301,8 +309,8 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
                     <?= $numTd((int)$row['stock_in_qty'], 'Stock In', 'in') ?>
                     <?= $transferTd((int)$row['transfer_in_qty'], (int)$row['transfer_out_qty']) ?>
                     <?= $numTd($rowSold, 'Sold', 'sold') ?>
-                    <?php if ($showOther): ?><?= $numTd($rowOther, 'Other', $rowOther > 0 ? 'in' : 'out', true, 'Adjustments and other changes') ?><?php endif; ?>
-                    <?= $endingTd((int)$row['ending_stock']) ?>
+                    <?php if ($showOther): ?><?= $numTd($rowOther, 'Other', $rowOther > 0 ? 'in' : 'out', true, 'Adjustments and removed inventory (negative)') ?><?php endif; ?>
+                    <?= $endingTd((int)$row['ending_stock'], true) ?>
                 </tr>
                 <?php endforeach; ?>
                 <tr class="stock-monitoring-total-row">
@@ -311,7 +319,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
                     <?= $numTd($groupTotal['stock_in'], 'Stock In', 'in') ?>
                     <?= $transferTd($groupTotal['transfer_in'], $groupTotal['transfer_out']) ?>
                     <?= $numTd($groupTotal['sold'], 'Sold', 'sold') ?>
-                    <?php if ($showOther): ?><?= $numTd($groupTotal['other'], 'Other', $groupTotal['other'] > 0 ? 'in' : 'out', true, 'Adjustments and other changes') ?><?php endif; ?>
+                    <?php if ($showOther): ?><?= $numTd($groupTotal['other'], 'Other', $groupTotal['other'] > 0 ? 'in' : 'out', true, 'Adjustments and removed inventory (negative)') ?><?php endif; ?>
                     <?= $endingTd($groupTotal['ending']) ?>
                 </tr>
             </tbody>
@@ -323,7 +331,7 @@ $tabLabel = $isAccessoriesTab ? 'Accessories' : 'Phones & Tablets';
                     <?= $numTd((int)($totals['stock_in'] ?? 0), 'Stock In', 'in') ?>
                     <?= $transferTd((int)($totals['transfer_in'] ?? 0), (int)($totals['transfer_out'] ?? 0)) ?>
                     <?= $numTd((int)($totals['sold'] ?? 0), 'Sold', 'sold') ?>
-                    <?php if ($showOther): ?><?= $numTd((int)($totals['other'] ?? 0), 'Other', (int)($totals['other'] ?? 0) > 0 ? 'in' : 'out', true, 'Adjustments and other changes') ?><?php endif; ?>
+                    <?php if ($showOther): ?><?= $numTd((int)($totals['other'] ?? 0), 'Other', (int)($totals['other'] ?? 0) > 0 ? 'in' : 'out', true, 'Adjustments and removed inventory (negative)') ?><?php endif; ?>
                     <?= $endingTd((int)($totals['ending'] ?? 0)) ?>
                 </tr>
             </tfoot>

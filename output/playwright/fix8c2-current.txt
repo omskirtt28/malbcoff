@@ -1,0 +1,1041 @@
+﻿### Page
+- Page URL: http://127.0.0.1:8879/system-admin-deleted-records?unit_q=Fix8C2
+- Page Title: Deleted Records | Malbcoff Trading
+### Snapshot
+```yaml
+- generic [ref=f15e2]:
+  - complementary [ref=f15e3]:
+    - generic [ref=f15e4]:
+      - generic [ref=f15e5]: M
+      - generic [ref=f15e6]:
+        - strong [ref=f15e7]: Malbcoff Trading
+        - generic [ref=f15e8]: System Administration
+    - navigation "Main navigation" [ref=f15e9]:
+      - link "Dashboard" [ref=f15e10] [cursor=pointer]:
+        - /url: /system-admin
+      - link "User Accounts" [ref=f15e15] [cursor=pointer]:
+        - /url: /system-admin-users
+      - link "Impersonation History" [ref=f15e22] [cursor=pointer]:
+        - /url: /system-admin-history
+      - link "Deleted Records" [ref=f15e29] [cursor=pointer]:
+        - /url: /system-admin?view=deleted-records
+      - link "Security Logs" [ref=f15e35] [cursor=pointer]:
+        - /url: /security-logs
+      - link "Data Reset" [ref=f15e40] [cursor=pointer]:
+        - /url: /system-admin-data-reset
+    - generic [ref=f15e46]:
+      - generic [ref=f15e51]:
+        - strong [ref=f15e52]: System Control
+        - generic [ref=f15e53]: System Admin
+      - link "Sign Out" [ref=f15e54] [cursor=pointer]:
+        - /url: /logout
+  - main [ref=f15e59]:
+    - generic [ref=f15e61]:
+      - generic [ref=f15e62]: System Control
+      - group [ref=f15e67]:
+        - generic "Notifications" [ref=f15e68] [cursor=pointer]
+      - group [ref=f15e71]:
+        - generic "User menu" [ref=f15e72] [cursor=pointer]:
+          - generic [ref=f15e73]: L
+          - generic [ref=f15e74]:
+            - strong [ref=f15e75]: Lifecycle system_admin
+            - generic [ref=f15e76]: System Admin
+    - generic [ref=f15e79]:
+      - generic [ref=f15e80]:
+        - generic [ref=f15e81]:
+          - text: SYSTEM CLEANUP
+          - heading "Deleted Records" [level=1] [ref=f15e82]
+          - paragraph [ref=f15e83]: Review deleted inventory units and catalog records. Release unit identifiers while keeping sales, transfers and stock history intact.
+        - link "System Admin" [ref=f15e84] [cursor=pointer]:
+          - /url: /system-admin
+      - generic [ref=f15e88]:
+        - generic [ref=f15e89]:
+          - generic [ref=f15e90]:
+            - generic [ref=f15e91]: INVENTORY CLEANUP
+            - heading "Deleted Inventory Units" [level=2] [ref=f15e92]
+            - paragraph [ref=f15e93]: Units with no sales or voids can be deleted permanently, including units with transfers or movements. Transfer and stock history stay available. Units with sales history are kept for records, with their IMEI and serial released for receiving again.
+          - generic [ref=f15e94]: "9"
+        - generic [ref=f15e95]:
+          - generic [ref=f15e96]:
+            - generic [ref=f15e97]: Search inventory units
+            - searchbox "Search inventory units" [ref=f15e98]: Fix8C2
+          - generic [ref=f15e99]:
+            - generic [ref=f15e100]: Branch
+            - combobox "Branch" [ref=f15e101]:
+              - option "All branches" [selected]
+              - option "Branch 1"
+              - option "Branch 2"
+              - option "Branch 3"
+              - option "Branch 4"
+          - generic [ref=f15e102]:
+            - generic [ref=f15e103]: Deleted from
+            - textbox "Deleted from" [ref=f15e104]
+          - generic [ref=f15e105]:
+            - generic [ref=f15e106]: Deleted to
+            - textbox "Deleted to" [ref=f15e107]
+          - button "Apply" [ref=f15e108] [cursor=pointer]
+          - link "Reset" [ref=f15e109] [cursor=pointer]:
+            - /url: /system-admin?view=deleted-records#deleted-inventory-units
+        - generic [ref=f15e110]:
+          - generic [ref=f15e111] [cursor=pointer]:
+            - checkbox "Select all on this page" [ref=f15e112]
+            - text: Select all on this page
+          - button "Delete selected permanently" [disabled] [ref=f15e113]
+          - status [ref=f15e114]: 0 selected
+          - button "Delete all with no sales" [ref=f15e115] [cursor=pointer]
+          - status
+        - table [ref=f15e117]:
+          - rowgroup [ref=f15e118]:
+            - row [ref=f15e119]:
+              - columnheader "Select" [ref=f15e120]
+              - columnheader "Unit" [ref=f15e121]
+              - columnheader "Branch" [ref=f15e122]
+              - columnheader "Deleted by / at" [ref=f15e123]
+              - columnheader "Database References" [ref=f15e124]
+              - columnheader "Action" [ref=f15e125]
+          - rowgroup [ref=f15e126]:
+            - row [ref=f15e127]:
+              - cell "—" [ref=f15e128]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962088 Unit #85" [ref=f15e129]':
+                - strong [ref=f15e130]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e131]: FIX8C2-865123513962088
+                - generic [ref=f15e132]: "Unit #85"
+              - cell "Branch 2" [ref=f15e133]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e134]:
+                - strong [ref=f15e135]: Original fixture remover
+                - generic [ref=f15e136]: 2026-10-20 18:32:42
+              - cell "Sales 1 Transfers 1 Movements 4 Voids 0" [ref=f15e137]:
+                - generic [ref=f15e138]:
+                  - generic [ref=f15e139]:
+                    - text: Sales
+                    - generic [ref=f15e140]: "1"
+                  - generic [ref=f15e141]:
+                    - text: Transfers
+                    - generic [ref=f15e142]: "1"
+                  - generic [ref=f15e143]:
+                    - text: Movements
+                    - generic [ref=f15e144]: "4"
+                  - generic [ref=f15e145]:
+                    - text: Voids
+                    - generic [ref=f15e146]: "0"
+              - cell "Archived (history kept) This unit has sales history, so it is kept for records. Its IMEI can be used again." [ref=f15e147]:
+                - generic [ref=f15e148]: Archived (history kept)
+                - generic [ref=f15e149]: This unit has sales history, so it is kept for records. Its IMEI can be used again.
+            - row [ref=f15e150]:
+              - cell "—" [ref=f15e151]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962070 Unit #84" [ref=f15e152]':
+                - strong [ref=f15e153]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e154]: FIX8C2-865123513962070
+                - generic [ref=f15e155]: "Unit #84"
+              - cell "Branch 2" [ref=f15e156]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e157]:
+                - strong [ref=f15e158]: Original fixture remover
+                - generic [ref=f15e159]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 1" [ref=f15e160]:
+                - generic [ref=f15e161]:
+                  - generic [ref=f15e162]:
+                    - text: Sales
+                    - generic [ref=f15e163]: "0"
+                  - generic [ref=f15e164]:
+                    - text: Transfers
+                    - generic [ref=f15e165]: "1"
+                  - generic [ref=f15e166]:
+                    - text: Movements
+                    - generic [ref=f15e167]: "4"
+                  - generic [ref=f15e168]:
+                    - text: Voids
+                    - generic [ref=f15e169]: "1"
+              - cell [ref=f15e170]:
+                - button "Release IMEI and keep records" [ref=f15e171] [cursor=pointer]
+            - row [ref=f15e172]:
+              - cell [ref=f15e173]:
+                - checkbox "Select FIX8C2-865123513962062" [ref=f15e175]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962062 Unit #83" [ref=f15e176]':
+                - strong [ref=f15e177]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e178]: FIX8C2-865123513962062
+                - generic [ref=f15e179]: "Unit #83"
+              - cell "Branch 1" [ref=f15e180]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e181]:
+                - strong [ref=f15e182]: Original fixture remover
+                - generic [ref=f15e183]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 0 Movements 2 Voids 0" [ref=f15e184]:
+                - generic [ref=f15e185]:
+                  - generic [ref=f15e186]:
+                    - text: Sales
+                    - generic [ref=f15e187]: "0"
+                  - generic [ref=f15e188]:
+                    - text: Transfers
+                    - generic [ref=f15e189]: "0"
+                  - generic [ref=f15e190]:
+                    - text: Movements
+                    - generic [ref=f15e191]: "2"
+                  - generic [ref=f15e192]:
+                    - text: Voids
+                    - generic [ref=f15e193]: "0"
+              - cell [ref=f15e194]:
+                - button "Delete permanently" [ref=f15e195] [cursor=pointer]
+            - row [ref=f15e196]:
+              - cell [ref=f15e197]:
+                - checkbox "Select FIX8C2-865123513962054" [ref=f15e199]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962054 Unit #82" [ref=f15e200]':
+                - strong [ref=f15e201]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e202]: FIX8C2-865123513962054
+                - generic [ref=f15e203]: "Unit #82"
+              - cell "Branch 2" [ref=f15e204]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e205]:
+                - strong [ref=f15e206]: Original fixture remover
+                - generic [ref=f15e207]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 0" [ref=f15e208]:
+                - generic [ref=f15e209]:
+                  - generic [ref=f15e210]:
+                    - text: Sales
+                    - generic [ref=f15e211]: "0"
+                  - generic [ref=f15e212]:
+                    - text: Transfers
+                    - generic [ref=f15e213]: "1"
+                  - generic [ref=f15e214]:
+                    - text: Movements
+                    - generic [ref=f15e215]: "4"
+                  - generic [ref=f15e216]:
+                    - text: Voids
+                    - generic [ref=f15e217]: "0"
+              - cell [ref=f15e218]:
+                - button "Delete permanently" [ref=f15e219] [cursor=pointer]
+            - row [ref=f15e220]:
+              - cell [ref=f15e221]:
+                - checkbox "Select FIX8C2-865123513962047" [ref=f15e223]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962047 Unit #81" [ref=f15e224]':
+                - strong [ref=f15e225]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e226]: FIX8C2-865123513962047
+                - generic [ref=f15e227]: "Unit #81"
+              - cell "Branch 2" [ref=f15e228]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e229]:
+                - strong [ref=f15e230]: Original fixture remover
+                - generic [ref=f15e231]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 3 Voids 0" [ref=f15e232]:
+                - generic [ref=f15e233]:
+                  - generic [ref=f15e234]:
+                    - text: Sales
+                    - generic [ref=f15e235]: "0"
+                  - generic [ref=f15e236]:
+                    - text: Transfers
+                    - generic [ref=f15e237]: "1"
+                  - generic [ref=f15e238]:
+                    - text: Movements
+                    - generic [ref=f15e239]: "3"
+                  - generic [ref=f15e240]:
+                    - text: Voids
+                    - generic [ref=f15e241]: "0"
+              - cell [ref=f15e242]:
+                - button "Delete permanently" [ref=f15e243] [cursor=pointer]
+            - row [ref=f15e244]:
+              - cell [ref=f15e245]:
+                - checkbox "Select FIX8C2-865123513962039" [ref=f15e247]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962039 Unit #80" [ref=f15e248]':
+                - strong [ref=f15e249]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e250]: FIX8C2-865123513962039
+                - generic [ref=f15e251]: "Unit #80"
+              - cell "Branch 2" [ref=f15e252]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e253]:
+                - strong [ref=f15e254]: Original fixture remover
+                - generic [ref=f15e255]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 0" [ref=f15e256]:
+                - generic [ref=f15e257]:
+                  - generic [ref=f15e258]:
+                    - text: Sales
+                    - generic [ref=f15e259]: "0"
+                  - generic [ref=f15e260]:
+                    - text: Transfers
+                    - generic [ref=f15e261]: "1"
+                  - generic [ref=f15e262]:
+                    - text: Movements
+                    - generic [ref=f15e263]: "4"
+                  - generic [ref=f15e264]:
+                    - text: Voids
+                    - generic [ref=f15e265]: "0"
+              - cell [ref=f15e266]:
+                - button "Delete permanently" [ref=f15e267] [cursor=pointer]
+            - row [ref=f15e268]:
+              - cell [ref=f15e269]:
+                - checkbox "Select FIX8C2-865123513962021" [ref=f15e271]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962021 Unit #79" [ref=f15e272]':
+                - strong [ref=f15e273]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e274]: FIX8C2-865123513962021
+                - generic [ref=f15e275]: "Unit #79"
+              - cell "Branch 2" [ref=f15e276]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e277]:
+                - strong [ref=f15e278]: Original fixture remover
+                - generic [ref=f15e279]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 0" [ref=f15e280]:
+                - generic [ref=f15e281]:
+                  - generic [ref=f15e282]:
+                    - text: Sales
+                    - generic [ref=f15e283]: "0"
+                  - generic [ref=f15e284]:
+                    - text: Transfers
+                    - generic [ref=f15e285]: "1"
+                  - generic [ref=f15e286]:
+                    - text: Movements
+                    - generic [ref=f15e287]: "4"
+                  - generic [ref=f15e288]:
+                    - text: Voids
+                    - generic [ref=f15e289]: "0"
+              - cell [ref=f15e290]:
+                - button "Delete permanently" [ref=f15e291] [cursor=pointer]
+            - row [ref=f15e292]:
+              - cell [ref=f15e293]:
+                - checkbox "Select FIX8C2-865123513962013" [ref=f15e295]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962013 Unit #78" [ref=f15e296]':
+                - strong [ref=f15e297]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e298]: FIX8C2-865123513962013
+                - generic [ref=f15e299]: "Unit #78"
+              - cell "Branch 2" [ref=f15e300]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e301]:
+                - strong [ref=f15e302]: Original fixture remover
+                - generic [ref=f15e303]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 0" [ref=f15e304]:
+                - generic [ref=f15e305]:
+                  - generic [ref=f15e306]:
+                    - text: Sales
+                    - generic [ref=f15e307]: "0"
+                  - generic [ref=f15e308]:
+                    - text: Transfers
+                    - generic [ref=f15e309]: "1"
+                  - generic [ref=f15e310]:
+                    - text: Movements
+                    - generic [ref=f15e311]: "4"
+                  - generic [ref=f15e312]:
+                    - text: Voids
+                    - generic [ref=f15e313]: "0"
+              - cell [ref=f15e314]:
+                - button "Delete permanently" [ref=f15e315] [cursor=pointer]
+            - row [ref=f15e316]:
+              - cell [ref=f15e317]:
+                - checkbox "Select FIX8C2-865123513962005" [ref=f15e319]
+              - 'cell "Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER FIX8C2-865123513962005 Unit #77" [ref=f15e320]':
+                - strong [ref=f15e321]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER
+                - generic [ref=f15e322]: FIX8C2-865123513962005
+                - generic [ref=f15e323]: "Unit #77"
+              - cell "Branch 2" [ref=f15e324]
+              - cell "Original fixture remover 2026-10-20 18:32:42" [ref=f15e325]:
+                - strong [ref=f15e326]: Original fixture remover
+                - generic [ref=f15e327]: 2026-10-20 18:32:42
+              - cell "Sales 0 Transfers 1 Movements 4 Voids 0" [ref=f15e328]:
+                - generic [ref=f15e329]:
+                  - generic [ref=f15e330]:
+                    - text: Sales
+                    - generic [ref=f15e331]: "0"
+                  - generic [ref=f15e332]:
+                    - text: Transfers
+                    - generic [ref=f15e333]: "1"
+                  - generic [ref=f15e334]:
+                    - text: Movements
+                    - generic [ref=f15e335]: "4"
+                  - generic [ref=f15e336]:
+                    - text: Voids
+                    - generic [ref=f15e337]: "0"
+              - cell [ref=f15e338]:
+                - button "Delete permanently" [ref=f15e339] [cursor=pointer]
+        - navigation "Deleted inventory pages" [ref=f15e340]:
+          - generic [ref=f15e341]: Page 1 of 1
+        - dialog [ref=f15e342]:
+          - generic [ref=f15e343]:
+            - heading "Confirm inventory cleanup" [level=2] [ref=f15e344]
+            - paragraph [ref=f15e345]: You are about to clean 1 unit(s).
+            - paragraph [ref=f15e346]: Units with no sales or voids will be deleted permanently. Transfer and stock history will be kept with a “Unit deleted” label. Units with sales history stay archived. IMEI and serial can be used again. This cannot be undone.
+            - list [ref=f15e347]:
+              - listitem [ref=f15e348]: Fix8C2 183242 GALAXY TAB A11+ Fix8C2 • 128GB • 5G • SILVER · FIX8C2-865123513962005 · Branch 2
+            - status [ref=f15e350]:
+              - generic [aria-hidden] [ref=f15e351]: ✓
+              - generic [ref=f15e352]:
+                - strong [ref=f15e353]: Saved ✓
+                - paragraph [ref=f15e354]: 1 removed, 0 archived (history kept), 0 already processed. Identifiers are available for receiving.
+              - button "OK" [active] [ref=f15e356] [cursor=pointer]
+            - generic [ref=f15e357]:
+              - button "Cancel" [ref=f15e358] [cursor=pointer]
+              - button "Saved ✓" [disabled] [ref=f15e359]
+      - generic [ref=f15e360]:
+        - article [ref=f15e361]:
+          - generic [ref=f15e362]: Deleted / Archived
+          - strong [ref=f15e363]: "7"
+          - generic [ref=f15e364]: Product and variant records
+        - article [ref=f15e365]:
+          - generic [ref=f15e366]: Ready to Purge
+          - strong [ref=f15e367]: "0"
+          - generic [ref=f15e368]: No protected stock or history
+        - article [ref=f15e369]:
+          - generic [ref=f15e370]: Protected
+          - strong [ref=f15e371]: "7"
+          - generic [ref=f15e372]: Requires cleanup before purge
+        - article [ref=f15e373]:
+          - generic [ref=f15e374]: Archived Models
+          - strong [ref=f15e375]: "2"
+          - generic [ref=f15e376]: Model master leftovers
+      - generic [ref=f15e377]:
+        - textbox [ref=f15e382]:
+          - /placeholder: Search deleted product, model, brand, color…
+        - combobox [ref=f15e383]:
+          - option "All Records" [selected]
+          - option "Devices"
+          - option "Accessories"
+        - button "Apply" [ref=f15e384] [cursor=pointer]
+        - link "Reset" [ref=f15e385] [cursor=pointer]:
+          - /url: /system-admin?view=deleted-records
+      - generic [ref=f15e386]:
+        - generic [ref=f15e387]:
+          - generic [ref=f15e388]:
+            - generic [ref=f15e389]: DATABASE CLEANUP
+            - heading "Deleted Product & Variant Records" [level=2] [ref=f15e390]
+            - paragraph [ref=f15e391]: Permanent delete removes the wrong catalog row and any non-protected stock-movement remnants. Sales and transfer history are never auto-purged.
+          - generic [ref=f15e392]: System Admin only
+        - table [ref=f15e397]:
+          - rowgroup [ref=f15e398]:
+            - row [ref=f15e399]:
+              - columnheader "Record" [ref=f15e400]
+              - columnheader "Deleted / Archived" [ref=f15e401]
+              - columnheader "Database References" [ref=f15e402]
+              - columnheader "Cleanup State" [ref=f15e403]
+              - columnheader "Action" [ref=f15e404]
+          - rowgroup [ref=f15e405]:
+            - row [ref=f15e406]:
+              - cell "APPLE IPHONE 17 • ASDA • SDSA Phone • Product ID 3" [ref=f15e407]:
+                - strong [ref=f15e408]: APPLE IPHONE 17 • ASDA • SDSA
+                - generic [ref=f15e409]: Phone • Product ID 3
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e410]:
+                - strong [ref=f15e411]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e412]: By Malbcoff Owner
+              - cell "Units 1 Balance 0 Movements 2 Sales 0 Transfers 0" [ref=f15e413]:
+                - generic [ref=f15e414]:
+                  - generic [ref=f15e415]:
+                    - text: Units
+                    - generic [ref=f15e416]: "1"
+                  - generic [ref=f15e417]:
+                    - text: Balance
+                    - generic [ref=f15e418]: "0"
+                  - generic [ref=f15e419]:
+                    - text: Movements
+                    - generic [ref=f15e420]: "2"
+                  - generic [ref=f15e421]:
+                    - text: Sales
+                    - generic [ref=f15e422]: "0"
+                  - generic [ref=f15e423]:
+                    - text: Transfers
+                    - generic [ref=f15e424]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e425]:
+                - generic [ref=f15e426]: Protected references
+                - generic [ref=f15e427]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e428]:
+                - button "Protected" [disabled] [ref=f15e429] [cursor=pointer]
+            - row [ref=f15e430]:
+              - cell "APPLE IPHONE 17 • 256 • BLACK Phone • Product ID 1" [ref=f15e431]:
+                - strong [ref=f15e432]: APPLE IPHONE 17 • 256 • BLACK
+                - generic [ref=f15e433]: Phone • Product ID 1
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e434]:
+                - strong [ref=f15e435]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e436]: By Malbcoff Owner
+              - cell "Units 7 Balance 0 Movements 9 Sales 1 Transfers 0" [ref=f15e437]:
+                - generic [ref=f15e438]:
+                  - generic [ref=f15e439]:
+                    - text: Units
+                    - generic [ref=f15e440]: "7"
+                  - generic [ref=f15e441]:
+                    - text: Balance
+                    - generic [ref=f15e442]: "0"
+                  - generic [ref=f15e443]:
+                    - text: Movements
+                    - generic [ref=f15e444]: "9"
+                  - generic [ref=f15e445]:
+                    - text: Sales
+                    - generic [ref=f15e446]: "1"
+                  - generic [ref=f15e447]:
+                    - text: Transfers
+                    - generic [ref=f15e448]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e449]:
+                - generic [ref=f15e450]: Protected references
+                - generic [ref=f15e451]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e452]:
+                - button "Protected" [disabled] [ref=f15e453] [cursor=pointer]
+            - row [ref=f15e454]:
+              - cell "APPLE IPHONE 17 • 1B • BLACK Phone • Product ID 4" [ref=f15e455]:
+                - strong [ref=f15e456]: APPLE IPHONE 17 • 1B • BLACK
+                - generic [ref=f15e457]: Phone • Product ID 4
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e458]:
+                - strong [ref=f15e459]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e460]: By Malbcoff Owner
+              - cell "Units 6 Balance 0 Movements 8 Sales 1 Transfers 0" [ref=f15e461]:
+                - generic [ref=f15e462]:
+                  - generic [ref=f15e463]:
+                    - text: Units
+                    - generic [ref=f15e464]: "6"
+                  - generic [ref=f15e465]:
+                    - text: Balance
+                    - generic [ref=f15e466]: "0"
+                  - generic [ref=f15e467]:
+                    - text: Movements
+                    - generic [ref=f15e468]: "8"
+                  - generic [ref=f15e469]:
+                    - text: Sales
+                    - generic [ref=f15e470]: "1"
+                  - generic [ref=f15e471]:
+                    - text: Transfers
+                    - generic [ref=f15e472]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e473]:
+                - generic [ref=f15e474]: Protected references
+                - generic [ref=f15e475]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e476]:
+                - button "Protected" [disabled] [ref=f15e477] [cursor=pointer]
+            - row [ref=f15e478]:
+              - cell "APPLE IPHONE 16 PRO • 256GB • BLACK Phone • Product ID 6" [ref=f15e479]:
+                - strong [ref=f15e480]: APPLE IPHONE 16 PRO • 256GB • BLACK
+                - generic [ref=f15e481]: Phone • Product ID 6
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e482]:
+                - strong [ref=f15e483]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e484]: By Malbcoff Owner
+              - cell "Units 1 Balance 0 Movements 2 Sales 0 Transfers 0" [ref=f15e485]:
+                - generic [ref=f15e486]:
+                  - generic [ref=f15e487]:
+                    - text: Units
+                    - generic [ref=f15e488]: "1"
+                  - generic [ref=f15e489]:
+                    - text: Balance
+                    - generic [ref=f15e490]: "0"
+                  - generic [ref=f15e491]:
+                    - text: Movements
+                    - generic [ref=f15e492]: "2"
+                  - generic [ref=f15e493]:
+                    - text: Sales
+                    - generic [ref=f15e494]: "0"
+                  - generic [ref=f15e495]:
+                    - text: Transfers
+                    - generic [ref=f15e496]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e497]:
+                - generic [ref=f15e498]: Protected references
+                - generic [ref=f15e499]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e500]:
+                - button "Protected" [disabled] [ref=f15e501] [cursor=pointer]
+            - row [ref=f15e502]:
+              - cell "APPLE IPHONE 16 PRO • 1TB • PINK Phone • Product ID 7" [ref=f15e503]:
+                - strong [ref=f15e504]: APPLE IPHONE 16 PRO • 1TB • PINK
+                - generic [ref=f15e505]: Phone • Product ID 7
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e506]:
+                - strong [ref=f15e507]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e508]: By Malbcoff Owner
+              - cell "Units 2 Balance 0 Movements 3 Sales 0 Transfers 0" [ref=f15e509]:
+                - generic [ref=f15e510]:
+                  - generic [ref=f15e511]:
+                    - text: Units
+                    - generic [ref=f15e512]: "2"
+                  - generic [ref=f15e513]:
+                    - text: Balance
+                    - generic [ref=f15e514]: "0"
+                  - generic [ref=f15e515]:
+                    - text: Movements
+                    - generic [ref=f15e516]: "3"
+                  - generic [ref=f15e517]:
+                    - text: Sales
+                    - generic [ref=f15e518]: "0"
+                  - generic [ref=f15e519]:
+                    - text: Transfers
+                    - generic [ref=f15e520]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e521]:
+                - generic [ref=f15e522]: Protected references
+                - generic [ref=f15e523]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e524]:
+                - button "Protected" [disabled] [ref=f15e525] [cursor=pointer]
+            - row [ref=f15e526]:
+              - cell "APPLE IPHONE 16 PRO • 128GB • WHITE Phone • Product ID 5" [ref=f15e527]:
+                - strong [ref=f15e528]: APPLE IPHONE 16 PRO • 128GB • WHITE
+                - generic [ref=f15e529]: Phone • Product ID 5
+              - cell "Sep 19, 2026 • 11:26 PM By Malbcoff Owner" [ref=f15e530]:
+                - strong [ref=f15e531]: Sep 19, 2026 • 11:26 PM
+                - generic [ref=f15e532]: By Malbcoff Owner
+              - cell "Units 2 Balance 0 Movements 3 Sales 1 Transfers 0" [ref=f15e533]:
+                - generic [ref=f15e534]:
+                  - generic [ref=f15e535]:
+                    - text: Units
+                    - generic [ref=f15e536]: "2"
+                  - generic [ref=f15e537]:
+                    - text: Balance
+                    - generic [ref=f15e538]: "0"
+                  - generic [ref=f15e539]:
+                    - text: Movements
+                    - generic [ref=f15e540]: "3"
+                  - generic [ref=f15e541]:
+                    - text: Sales
+                    - generic [ref=f15e542]: "1"
+                  - generic [ref=f15e543]:
+                    - text: Transfers
+                    - generic [ref=f15e544]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e545]:
+                - generic [ref=f15e546]: Protected references
+                - generic [ref=f15e547]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e548]:
+                - button "Protected" [disabled] [ref=f15e549] [cursor=pointer]
+            - row [ref=f15e550]:
+              - cell "Lifecycle Test Brand Lifecycle CatalogRemoved • 256GB • DEEP BLUE Phone • Product ID 31" [ref=f15e551]:
+                - strong [ref=f15e552]: Lifecycle Test Brand Lifecycle CatalogRemoved • 256GB • DEEP BLUE
+                - generic [ref=f15e553]: Phone • Product ID 31
+              - cell "Sep 19, 2026 • 10:35 PM Archived / system-generated cleanup candidate" [ref=f15e554]:
+                - strong [ref=f15e555]: Sep 19, 2026 • 10:35 PM
+                - generic [ref=f15e556]: Archived / system-generated cleanup candidate
+              - cell "Units 1 Balance 0 Movements 1 Sales 0 Transfers 0" [ref=f15e557]:
+                - generic [ref=f15e558]:
+                  - generic [ref=f15e559]:
+                    - text: Units
+                    - generic [ref=f15e560]: "1"
+                  - generic [ref=f15e561]:
+                    - text: Balance
+                    - generic [ref=f15e562]: "0"
+                  - generic [ref=f15e563]:
+                    - text: Movements
+                    - generic [ref=f15e564]: "1"
+                  - generic [ref=f15e565]:
+                    - text: Sales
+                    - generic [ref=f15e566]: "0"
+                  - generic [ref=f15e567]:
+                    - text: Transfers
+                    - generic [ref=f15e568]: "0"
+              - cell "Protected references Remove remaining stock first. Sales/transfer history cannot be permanently purged here." [ref=f15e569]:
+                - generic [ref=f15e570]: Protected references
+                - generic [ref=f15e571]: Remove remaining stock first. Sales/transfer history cannot be permanently purged here.
+              - cell [ref=f15e572]:
+                - button "Protected" [disabled] [ref=f15e573] [cursor=pointer]
+      - generic [ref=f15e574]:
+        - generic [ref=f15e575]:
+          - generic [ref=f15e576]:
+            - generic [ref=f15e577]: MODEL MASTER
+            - heading "Archived Models" [level=2] [ref=f15e578]
+            - paragraph [ref=f15e579]: Unused archived models can be removed after every child product/variant has been cleaned.
+          - generic [ref=f15e580]: "2"
+        - generic [ref=f15e581]:
+          - article [ref=f15e582]:
+            - generic [ref=f15e583]:
+              - strong [ref=f15e584]: APPLE IPHONE 16 PRO
+              - generic [ref=f15e585]: Phone • 3 linked products
+            - generic [ref=f15e586]: Clean variants first
+          - article [ref=f15e587]:
+            - generic [ref=f15e588]:
+              - strong [ref=f15e589]: APPLE IPHONE 17
+              - generic [ref=f15e590]: Phone • 3 linked products
+            - generic [ref=f15e591]: Clean variants first
+      - generic [ref=f15e592]:
+        - generic [ref=f15e594]:
+          - generic [ref=f15e595]: RECENT ACTIVITY
+          - heading "Permanent Inventory Deletes" [level=2] [ref=f15e596]
+          - paragraph [ref=f15e597]: Audit-only snapshots of permanently removed units. Transfer and movement history is kept separately.
+        - table [ref=f15e599]:
+          - rowgroup [ref=f15e600]:
+            - row [ref=f15e601]:
+              - columnheader "Date" [ref=f15e602]
+              - columnheader "Deleted by" [ref=f15e603]
+              - columnheader "Branch" [ref=f15e604]
+              - columnheader "Unit / Product" [ref=f15e605]
+              - columnheader "Snapshot / References" [ref=f15e606]
+          - rowgroup [ref=f15e607]:
+            - row [ref=f15e608]:
+              - cell "2026-10-20 23:49:39" [ref=f15e609]
+              - cell "Lifecycle system_admin" [ref=f15e610]
+              - cell "Branch 1" [ref=f15e611]
+              - 'cell "Product #27 Unit #71" [ref=f15e612]':
+                - strong [ref=f15e613]: "Product #27"
+                - generic [ref=f15e614]: "Unit #71"
+              - 'cell "IMEI: FIX-bulk-27 IMEI 2: FIX-bulk-272 Serial: SN-FIX-bulk-27 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e615]':
+                - generic [ref=f15e616]: "IMEI: FIX-bulk-27"
+                - generic [ref=f15e617]: "IMEI 2: FIX-bulk-272"
+                - generic [ref=f15e618]: "Serial: SN-FIX-bulk-27"
+                - generic [ref=f15e619]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e620]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e621]:
+              - cell "2026-10-20 23:49:39" [ref=f15e622]
+              - cell "Lifecycle system_admin" [ref=f15e623]
+              - cell "Branch 1" [ref=f15e624]
+              - 'cell "Product #27 Unit #70" [ref=f15e625]':
+                - strong [ref=f15e626]: "Product #27"
+                - generic [ref=f15e627]: "Unit #70"
+              - 'cell "IMEI: FIX-bulk-26 IMEI 2: FIX-bulk-262 Serial: SN-FIX-bulk-26 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e628]':
+                - generic [ref=f15e629]: "IMEI: FIX-bulk-26"
+                - generic [ref=f15e630]: "IMEI 2: FIX-bulk-262"
+                - generic [ref=f15e631]: "Serial: SN-FIX-bulk-26"
+                - generic [ref=f15e632]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e633]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e634]:
+              - cell "2026-10-20 23:49:39" [ref=f15e635]
+              - cell "Lifecycle system_admin" [ref=f15e636]
+              - cell "Branch 1" [ref=f15e637]
+              - 'cell "Product #27 Unit #69" [ref=f15e638]':
+                - strong [ref=f15e639]: "Product #27"
+                - generic [ref=f15e640]: "Unit #69"
+              - 'cell "IMEI: FIX-bulk-25 IMEI 2: FIX-bulk-252 Serial: SN-FIX-bulk-25 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e641]':
+                - generic [ref=f15e642]: "IMEI: FIX-bulk-25"
+                - generic [ref=f15e643]: "IMEI 2: FIX-bulk-252"
+                - generic [ref=f15e644]: "Serial: SN-FIX-bulk-25"
+                - generic [ref=f15e645]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e646]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e647]:
+              - cell "2026-10-20 23:49:39" [ref=f15e648]
+              - cell "Lifecycle system_admin" [ref=f15e649]
+              - cell "Branch 1" [ref=f15e650]
+              - 'cell "Product #27 Unit #68" [ref=f15e651]':
+                - strong [ref=f15e652]: "Product #27"
+                - generic [ref=f15e653]: "Unit #68"
+              - 'cell "IMEI: FIX-bulk-24 IMEI 2: FIX-bulk-242 Serial: SN-FIX-bulk-24 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e654]':
+                - generic [ref=f15e655]: "IMEI: FIX-bulk-24"
+                - generic [ref=f15e656]: "IMEI 2: FIX-bulk-242"
+                - generic [ref=f15e657]: "Serial: SN-FIX-bulk-24"
+                - generic [ref=f15e658]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e659]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e660]:
+              - cell "2026-10-20 23:49:39" [ref=f15e661]
+              - cell "Lifecycle system_admin" [ref=f15e662]
+              - cell "Branch 1" [ref=f15e663]
+              - 'cell "Product #27 Unit #67" [ref=f15e664]':
+                - strong [ref=f15e665]: "Product #27"
+                - generic [ref=f15e666]: "Unit #67"
+              - 'cell "IMEI: FIX-bulk-23 IMEI 2: FIX-bulk-232 Serial: SN-FIX-bulk-23 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e667]':
+                - generic [ref=f15e668]: "IMEI: FIX-bulk-23"
+                - generic [ref=f15e669]: "IMEI 2: FIX-bulk-232"
+                - generic [ref=f15e670]: "Serial: SN-FIX-bulk-23"
+                - generic [ref=f15e671]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e672]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e673]:
+              - cell "2026-10-20 23:49:39" [ref=f15e674]
+              - cell "Lifecycle system_admin" [ref=f15e675]
+              - cell "Branch 1" [ref=f15e676]
+              - 'cell "Product #27 Unit #66" [ref=f15e677]':
+                - strong [ref=f15e678]: "Product #27"
+                - generic [ref=f15e679]: "Unit #66"
+              - 'cell "IMEI: FIX-bulk-22 IMEI 2: FIX-bulk-222 Serial: SN-FIX-bulk-22 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e680]':
+                - generic [ref=f15e681]: "IMEI: FIX-bulk-22"
+                - generic [ref=f15e682]: "IMEI 2: FIX-bulk-222"
+                - generic [ref=f15e683]: "Serial: SN-FIX-bulk-22"
+                - generic [ref=f15e684]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e685]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e686]:
+              - cell "2026-10-20 23:49:39" [ref=f15e687]
+              - cell "Lifecycle system_admin" [ref=f15e688]
+              - cell "Branch 1" [ref=f15e689]
+              - 'cell "Product #27 Unit #65" [ref=f15e690]':
+                - strong [ref=f15e691]: "Product #27"
+                - generic [ref=f15e692]: "Unit #65"
+              - 'cell "IMEI: FIX-bulk-21 IMEI 2: FIX-bulk-212 Serial: SN-FIX-bulk-21 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e693]':
+                - generic [ref=f15e694]: "IMEI: FIX-bulk-21"
+                - generic [ref=f15e695]: "IMEI 2: FIX-bulk-212"
+                - generic [ref=f15e696]: "Serial: SN-FIX-bulk-21"
+                - generic [ref=f15e697]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e698]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e699]:
+              - cell "2026-10-20 23:49:39" [ref=f15e700]
+              - cell "Lifecycle system_admin" [ref=f15e701]
+              - cell "Branch 1" [ref=f15e702]
+              - 'cell "Product #27 Unit #64" [ref=f15e703]':
+                - strong [ref=f15e704]: "Product #27"
+                - generic [ref=f15e705]: "Unit #64"
+              - 'cell "IMEI: FIX-bulk-20 IMEI 2: FIX-bulk-202 Serial: SN-FIX-bulk-20 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e706]':
+                - generic [ref=f15e707]: "IMEI: FIX-bulk-20"
+                - generic [ref=f15e708]: "IMEI 2: FIX-bulk-202"
+                - generic [ref=f15e709]: "Serial: SN-FIX-bulk-20"
+                - generic [ref=f15e710]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e711]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e712]:
+              - cell "2026-10-20 23:49:39" [ref=f15e713]
+              - cell "Lifecycle system_admin" [ref=f15e714]
+              - cell "Branch 1" [ref=f15e715]
+              - 'cell "Product #27 Unit #63" [ref=f15e716]':
+                - strong [ref=f15e717]: "Product #27"
+                - generic [ref=f15e718]: "Unit #63"
+              - 'cell "IMEI: FIX-bulk-19 IMEI 2: FIX-bulk-192 Serial: SN-FIX-bulk-19 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e719]':
+                - generic [ref=f15e720]: "IMEI: FIX-bulk-19"
+                - generic [ref=f15e721]: "IMEI 2: FIX-bulk-192"
+                - generic [ref=f15e722]: "Serial: SN-FIX-bulk-19"
+                - generic [ref=f15e723]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e724]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e725]:
+              - cell "2026-10-20 23:49:39" [ref=f15e726]
+              - cell "Lifecycle system_admin" [ref=f15e727]
+              - cell "Branch 1" [ref=f15e728]
+              - 'cell "Product #27 Unit #62" [ref=f15e729]':
+                - strong [ref=f15e730]: "Product #27"
+                - generic [ref=f15e731]: "Unit #62"
+              - 'cell "IMEI: FIX-bulk-18 IMEI 2: FIX-bulk-182 Serial: SN-FIX-bulk-18 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e732]':
+                - generic [ref=f15e733]: "IMEI: FIX-bulk-18"
+                - generic [ref=f15e734]: "IMEI 2: FIX-bulk-182"
+                - generic [ref=f15e735]: "Serial: SN-FIX-bulk-18"
+                - generic [ref=f15e736]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e737]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e738]:
+              - cell "2026-10-20 23:49:39" [ref=f15e739]
+              - cell "Lifecycle system_admin" [ref=f15e740]
+              - cell "Branch 1" [ref=f15e741]
+              - 'cell "Product #27 Unit #61" [ref=f15e742]':
+                - strong [ref=f15e743]: "Product #27"
+                - generic [ref=f15e744]: "Unit #61"
+              - 'cell "IMEI: FIX-bulk-17 IMEI 2: FIX-bulk-172 Serial: SN-FIX-bulk-17 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e745]':
+                - generic [ref=f15e746]: "IMEI: FIX-bulk-17"
+                - generic [ref=f15e747]: "IMEI 2: FIX-bulk-172"
+                - generic [ref=f15e748]: "Serial: SN-FIX-bulk-17"
+                - generic [ref=f15e749]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e750]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e751]:
+              - cell "2026-10-20 23:49:39" [ref=f15e752]
+              - cell "Lifecycle system_admin" [ref=f15e753]
+              - cell "Branch 1" [ref=f15e754]
+              - 'cell "Product #27 Unit #60" [ref=f15e755]':
+                - strong [ref=f15e756]: "Product #27"
+                - generic [ref=f15e757]: "Unit #60"
+              - 'cell "IMEI: FIX-bulk-16 IMEI 2: FIX-bulk-162 Serial: SN-FIX-bulk-16 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e758]':
+                - generic [ref=f15e759]: "IMEI: FIX-bulk-16"
+                - generic [ref=f15e760]: "IMEI 2: FIX-bulk-162"
+                - generic [ref=f15e761]: "Serial: SN-FIX-bulk-16"
+                - generic [ref=f15e762]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e763]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e764]:
+              - cell "2026-10-20 23:49:39" [ref=f15e765]
+              - cell "Lifecycle system_admin" [ref=f15e766]
+              - cell "Branch 1" [ref=f15e767]
+              - 'cell "Product #27 Unit #59" [ref=f15e768]':
+                - strong [ref=f15e769]: "Product #27"
+                - generic [ref=f15e770]: "Unit #59"
+              - 'cell "IMEI: FIX-bulk-15 IMEI 2: FIX-bulk-152 Serial: SN-FIX-bulk-15 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e771]':
+                - generic [ref=f15e772]: "IMEI: FIX-bulk-15"
+                - generic [ref=f15e773]: "IMEI 2: FIX-bulk-152"
+                - generic [ref=f15e774]: "Serial: SN-FIX-bulk-15"
+                - generic [ref=f15e775]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e776]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e777]:
+              - cell "2026-10-20 23:49:39" [ref=f15e778]
+              - cell "Lifecycle system_admin" [ref=f15e779]
+              - cell "Branch 1" [ref=f15e780]
+              - 'cell "Product #27 Unit #58" [ref=f15e781]':
+                - strong [ref=f15e782]: "Product #27"
+                - generic [ref=f15e783]: "Unit #58"
+              - 'cell "IMEI: FIX-bulk-14 IMEI 2: FIX-bulk-142 Serial: SN-FIX-bulk-14 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e784]':
+                - generic [ref=f15e785]: "IMEI: FIX-bulk-14"
+                - generic [ref=f15e786]: "IMEI 2: FIX-bulk-142"
+                - generic [ref=f15e787]: "Serial: SN-FIX-bulk-14"
+                - generic [ref=f15e788]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e789]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e790]:
+              - cell "2026-10-20 23:49:39" [ref=f15e791]
+              - cell "Lifecycle system_admin" [ref=f15e792]
+              - cell "Branch 1" [ref=f15e793]
+              - 'cell "Product #27 Unit #57" [ref=f15e794]':
+                - strong [ref=f15e795]: "Product #27"
+                - generic [ref=f15e796]: "Unit #57"
+              - 'cell "IMEI: FIX-bulk-13 IMEI 2: FIX-bulk-132 Serial: SN-FIX-bulk-13 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e797]':
+                - generic [ref=f15e798]: "IMEI: FIX-bulk-13"
+                - generic [ref=f15e799]: "IMEI 2: FIX-bulk-132"
+                - generic [ref=f15e800]: "Serial: SN-FIX-bulk-13"
+                - generic [ref=f15e801]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e802]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e803]:
+              - cell "2026-10-20 23:49:39" [ref=f15e804]
+              - cell "Lifecycle system_admin" [ref=f15e805]
+              - cell "Branch 1" [ref=f15e806]
+              - 'cell "Product #27 Unit #56" [ref=f15e807]':
+                - strong [ref=f15e808]: "Product #27"
+                - generic [ref=f15e809]: "Unit #56"
+              - 'cell "IMEI: FIX-bulk-12 IMEI 2: FIX-bulk-122 Serial: SN-FIX-bulk-12 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e810]':
+                - generic [ref=f15e811]: "IMEI: FIX-bulk-12"
+                - generic [ref=f15e812]: "IMEI 2: FIX-bulk-122"
+                - generic [ref=f15e813]: "Serial: SN-FIX-bulk-12"
+                - generic [ref=f15e814]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e815]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e816]:
+              - cell "2026-10-20 23:49:39" [ref=f15e817]
+              - cell "Lifecycle system_admin" [ref=f15e818]
+              - cell "Branch 1" [ref=f15e819]
+              - 'cell "Product #27 Unit #55" [ref=f15e820]':
+                - strong [ref=f15e821]: "Product #27"
+                - generic [ref=f15e822]: "Unit #55"
+              - 'cell "IMEI: FIX-bulk-11 IMEI 2: FIX-bulk-112 Serial: SN-FIX-bulk-11 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e823]':
+                - generic [ref=f15e824]: "IMEI: FIX-bulk-11"
+                - generic [ref=f15e825]: "IMEI 2: FIX-bulk-112"
+                - generic [ref=f15e826]: "Serial: SN-FIX-bulk-11"
+                - generic [ref=f15e827]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e828]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e829]:
+              - cell "2026-10-20 23:49:39" [ref=f15e830]
+              - cell "Lifecycle system_admin" [ref=f15e831]
+              - cell "Branch 1" [ref=f15e832]
+              - 'cell "Product #27 Unit #54" [ref=f15e833]':
+                - strong [ref=f15e834]: "Product #27"
+                - generic [ref=f15e835]: "Unit #54"
+              - 'cell "IMEI: FIX-bulk-10 IMEI 2: FIX-bulk-102 Serial: SN-FIX-bulk-10 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e836]':
+                - generic [ref=f15e837]: "IMEI: FIX-bulk-10"
+                - generic [ref=f15e838]: "IMEI 2: FIX-bulk-102"
+                - generic [ref=f15e839]: "Serial: SN-FIX-bulk-10"
+                - generic [ref=f15e840]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e841]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e842]:
+              - cell "2026-10-20 23:49:39" [ref=f15e843]
+              - cell "Lifecycle system_admin" [ref=f15e844]
+              - cell "Branch 1" [ref=f15e845]
+              - 'cell "Product #27 Unit #53" [ref=f15e846]':
+                - strong [ref=f15e847]: "Product #27"
+                - generic [ref=f15e848]: "Unit #53"
+              - 'cell "IMEI: FIX-bulk-9 IMEI 2: FIX-bulk-92 Serial: SN-FIX-bulk-9 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e849]':
+                - generic [ref=f15e850]: "IMEI: FIX-bulk-9"
+                - generic [ref=f15e851]: "IMEI 2: FIX-bulk-92"
+                - generic [ref=f15e852]: "Serial: SN-FIX-bulk-9"
+                - generic [ref=f15e853]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e854]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e855]:
+              - cell "2026-10-20 23:49:39" [ref=f15e856]
+              - cell "Lifecycle system_admin" [ref=f15e857]
+              - cell "Branch 1" [ref=f15e858]
+              - 'cell "Product #27 Unit #52" [ref=f15e859]':
+                - strong [ref=f15e860]: "Product #27"
+                - generic [ref=f15e861]: "Unit #52"
+              - 'cell "IMEI: FIX-bulk-8 IMEI 2: FIX-bulk-82 Serial: SN-FIX-bulk-8 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e862]':
+                - generic [ref=f15e863]: "IMEI: FIX-bulk-8"
+                - generic [ref=f15e864]: "IMEI 2: FIX-bulk-82"
+                - generic [ref=f15e865]: "Serial: SN-FIX-bulk-8"
+                - generic [ref=f15e866]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e867]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e868]:
+              - cell "2026-10-20 23:49:39" [ref=f15e869]
+              - cell "Lifecycle system_admin" [ref=f15e870]
+              - cell "Branch 1" [ref=f15e871]
+              - 'cell "Product #27 Unit #51" [ref=f15e872]':
+                - strong [ref=f15e873]: "Product #27"
+                - generic [ref=f15e874]: "Unit #51"
+              - 'cell "IMEI: FIX-bulk-7 IMEI 2: FIX-bulk-72 Serial: SN-FIX-bulk-7 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e875]':
+                - generic [ref=f15e876]: "IMEI: FIX-bulk-7"
+                - generic [ref=f15e877]: "IMEI 2: FIX-bulk-72"
+                - generic [ref=f15e878]: "Serial: SN-FIX-bulk-7"
+                - generic [ref=f15e879]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e880]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e881]:
+              - cell "2026-10-20 23:49:39" [ref=f15e882]
+              - cell "Lifecycle system_admin" [ref=f15e883]
+              - cell "Branch 1" [ref=f15e884]
+              - 'cell "Product #27 Unit #50" [ref=f15e885]':
+                - strong [ref=f15e886]: "Product #27"
+                - generic [ref=f15e887]: "Unit #50"
+              - 'cell "IMEI: FIX-bulk-6 IMEI 2: FIX-bulk-62 Serial: SN-FIX-bulk-6 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e888]':
+                - generic [ref=f15e889]: "IMEI: FIX-bulk-6"
+                - generic [ref=f15e890]: "IMEI 2: FIX-bulk-62"
+                - generic [ref=f15e891]: "Serial: SN-FIX-bulk-6"
+                - generic [ref=f15e892]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e893]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e894]:
+              - cell "2026-10-20 23:49:39" [ref=f15e895]
+              - cell "Lifecycle system_admin" [ref=f15e896]
+              - cell "Branch 1" [ref=f15e897]
+              - 'cell "Product #27 Unit #49" [ref=f15e898]':
+                - strong [ref=f15e899]: "Product #27"
+                - generic [ref=f15e900]: "Unit #49"
+              - 'cell "IMEI: FIX-bulk-5 IMEI 2: FIX-bulk-52 Serial: SN-FIX-bulk-5 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e901]':
+                - generic [ref=f15e902]: "IMEI: FIX-bulk-5"
+                - generic [ref=f15e903]: "IMEI 2: FIX-bulk-52"
+                - generic [ref=f15e904]: "Serial: SN-FIX-bulk-5"
+                - generic [ref=f15e905]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e906]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e907]:
+              - cell "2026-10-20 23:49:39" [ref=f15e908]
+              - cell "Lifecycle system_admin" [ref=f15e909]
+              - cell "Branch 1" [ref=f15e910]
+              - 'cell "Product #27 Unit #48" [ref=f15e911]':
+                - strong [ref=f15e912]: "Product #27"
+                - generic [ref=f15e913]: "Unit #48"
+              - 'cell "IMEI: FIX-bulk-4 IMEI 2: FIX-bulk-42 Serial: SN-FIX-bulk-4 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e914]':
+                - generic [ref=f15e915]: "IMEI: FIX-bulk-4"
+                - generic [ref=f15e916]: "IMEI 2: FIX-bulk-42"
+                - generic [ref=f15e917]: "Serial: SN-FIX-bulk-4"
+                - generic [ref=f15e918]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e919]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e920]:
+              - cell "2026-10-20 23:49:39" [ref=f15e921]
+              - cell "Lifecycle system_admin" [ref=f15e922]
+              - cell "Branch 1" [ref=f15e923]
+              - 'cell "Product #27 Unit #47" [ref=f15e924]':
+                - strong [ref=f15e925]: "Product #27"
+                - generic [ref=f15e926]: "Unit #47"
+              - 'cell "IMEI: FIX-bulk-3 IMEI 2: FIX-bulk-32 Serial: SN-FIX-bulk-3 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e927]':
+                - generic [ref=f15e928]: "IMEI: FIX-bulk-3"
+                - generic [ref=f15e929]: "IMEI 2: FIX-bulk-32"
+                - generic [ref=f15e930]: "Serial: SN-FIX-bulk-3"
+                - generic [ref=f15e931]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e932]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e933]:
+              - cell "2026-10-20 23:49:38" [ref=f15e934]
+              - cell "Lifecycle system_admin" [ref=f15e935]
+              - cell "Branch 1" [ref=f15e936]
+              - 'cell "Product #27 Unit #73" [ref=f15e937]':
+                - strong [ref=f15e938]: "Product #27"
+                - generic [ref=f15e939]: "Unit #73"
+              - 'cell "IMEI: FIX-bulk-29 IMEI 2: FIX-bulk-292 Serial: SN-FIX-bulk-29 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e940]':
+                - generic [ref=f15e941]: "IMEI: FIX-bulk-29"
+                - generic [ref=f15e942]: "IMEI 2: FIX-bulk-292"
+                - generic [ref=f15e943]: "Serial: SN-FIX-bulk-29"
+                - generic [ref=f15e944]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e945]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e946]:
+              - cell "2026-10-20 23:49:38" [ref=f15e947]
+              - cell "Lifecycle system_admin" [ref=f15e948]
+              - cell "Branch 1" [ref=f15e949]
+              - 'cell "Product #27 Unit #72" [ref=f15e950]':
+                - strong [ref=f15e951]: "Product #27"
+                - generic [ref=f15e952]: "Unit #72"
+              - 'cell "IMEI: FIX-bulk-28 IMEI 2: FIX-bulk-282 Serial: SN-FIX-bulk-28 Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e953]':
+                - generic [ref=f15e954]: "IMEI: FIX-bulk-28"
+                - generic [ref=f15e955]: "IMEI 2: FIX-bulk-282"
+                - generic [ref=f15e956]: "Serial: SN-FIX-bulk-28"
+                - generic [ref=f15e957]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e958]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e959]:
+              - cell "2026-10-20 23:48:39" [ref=f15e960]
+              - cell "Lifecycle system_admin" [ref=f15e961]
+              - cell "Branch 1" [ref=f15e962]
+              - 'cell "Product #27 Unit #43" [ref=f15e963]':
+                - strong [ref=f15e964]: "Product #27"
+                - generic [ref=f15e965]: "Unit #43"
+              - 'cell "IMEI: FIX-no-refs IMEI 2: FIX-no-refs2 Serial: SN-FIX-no-refs Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01 Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0" [ref=f15e966]':
+                - generic [ref=f15e967]: "IMEI: FIX-no-refs"
+                - generic [ref=f15e968]: "IMEI 2: FIX-no-refs2"
+                - generic [ref=f15e969]: "Serial: SN-FIX-no-refs"
+                - generic [ref=f15e970]: Originally removed by Unknown (legacy removal) · 2026-10-20 23:42:01
+                - generic [ref=f15e971]: "Transfer lines detached: 0 · Movement rows kept as snapshots: 0 · Movement rows removed: 0"
+            - row [ref=f15e972]:
+              - cell "Oct 20, 2026 • 11:52 PM" [ref=f15e973]
+              - cell [ref=f15e974]:
+                - strong [ref=f15e975]: Lifecycle system_admin
+              - cell "Branch 1" [ref=f15e976]
+              - cell "27" [ref=f15e977]
+              - cell "1 unit" [ref=f15e978]
+            - row [ref=f15e980]:
+              - cell "Oct 20, 2026 • 11:48 PM" [ref=f15e981]
+              - cell [ref=f15e982]:
+                - strong [ref=f15e983]: Lifecycle system_admin
+              - cell "Branch 1" [ref=f15e984]
+              - cell "27" [ref=f15e985]
+              - cell "1 unit" [ref=f15e986]
+            - row [ref=f15e988]:
+              - cell "Oct 20, 2026 • 11:48 PM" [ref=f15e989]
+              - cell [ref=f15e990]:
+                - strong [ref=f15e991]: Lifecycle system_admin
+              - cell "Branch 1" [ref=f15e992]
+              - cell "27" [ref=f15e993]
+              - cell "1 unit" [ref=f15e994]
+            - row [ref=f15e996]:
+              - cell "Oct 5, 2026 • 3:01 PM" [ref=f15e997]
+              - cell [ref=f15e998]:
+                - strong [ref=f15e999]: Josh
+              - cell "Branch 1" [ref=f15e1000]
+              - cell "16" [ref=f15e1001]
+              - cell "1 unit" [ref=f15e1002]
+            - row [ref=f15e1004]:
+              - cell "Oct 5, 2026 • 3:01 PM" [ref=f15e1005]
+              - cell [ref=f15e1006]:
+                - strong [ref=f15e1007]: Josh
+              - cell "Branch 1" [ref=f15e1008]
+              - cell "20" [ref=f15e1009]
+              - cell "1 unit" [ref=f15e1010]
+            - row [ref=f15e1012]:
+              - cell "Oct 5, 2026 • 3:00 PM" [ref=f15e1013]
+              - cell [ref=f15e1014]:
+                - strong [ref=f15e1015]: Josh
+              - cell "Branch 1" [ref=f15e1016]
+              - cell "21" [ref=f15e1017]
+              - cell "1 unit" [ref=f15e1018]
+```

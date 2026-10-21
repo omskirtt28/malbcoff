@@ -8,6 +8,7 @@
 <script src="assets/js/app.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/app.js') ?>" defer></script>
 <?php if (($page ?? '') === 'branch-transfers'): ?><script src="assets/js/branch-transfers.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/branch-transfers.js') ?>" defer></script><?php endif; ?>
 <?php if (($page ?? '') === 'users'): ?><script src="assets/js/users.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/users.js') ?>" defer></script><?php endif; ?>
+<?php if (in_array($page ?? '', ['system-admin-users','account'], true)): ?><script src="assets/js/admin-profile.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/admin-profile.js') ?>" defer></script><?php endif; ?>
 <?php if (($page ?? '') === 'pos'): ?><script src="assets/js/pos.js?v=<?= (int)@filemtime(__DIR__ . '/../assets/js/pos.js') ?>" defer></script><?php endif; ?>
 <?php if (in_array($page ?? '', ['pos', 'inventory', 'add-item'], true)): ?>
 <script src="assets/vendor/zxing-wasm/reader.js" defer></script>

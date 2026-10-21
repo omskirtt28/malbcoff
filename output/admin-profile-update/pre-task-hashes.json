@@ -1,0 +1,20 @@
+{
+    "deploy/migrations.sql":  "3e1ccc8670ad6762073743f0982c532637a52bed5405ee07e46ab51250502916",
+    "partials/topbar.php":  "19eff029c72bc9c3e5a320e2e4b9410fa94c5b7e6a96266c0a1ec4441bd0ba3f",
+    "pages/system-admin-users.php":  "e7443bd05f0fe6197eccbdb87590eb5a20312eb606b842d1c9d3e33f7374fdda",
+    "deploy/package-notes.txt":  "bef13c4d503b6864ba169ab57bf8cf3607db8317191160bb71dce1540d61b233",
+    "malbcoff-vault/Changelog.md":  "2e5de90db16f0ee1fed68c650375a25d82314e81400ddb397f80589cc9745852",
+    "malbcoff-vault/File Index.md":  "d39c1d3de21289113c13e21915faaa48b99c08056db4c42c63c222be6270f263",
+    "actions/account_update.php":  "dc6f6f0eb989edc2d8a1d6477f800d88ab615ec9ae33003de0c79683d7eae5c4",
+    "malbcoff-vault/Features/Users and Accounts.md":  "760fc62da5910ff7c1946cb098949533f01dde2211f58317baf29fda53281e13",
+    "malbcoff-vault/Roles and Access.md":  "f694d201a34096e90d5aa48297b1eacc8de434812166694ca10d83c15209fb51",
+    "deploy/last-package.json":  "0c2008a6e7ac6b402573b4aa9d76cfa678d8388f95461542333b886ba5a66a57",
+    "partials/header.php":  "9fe5a0f2151521e25ec4844753cd8bbc03194e53aca569dc1c6466fd34afe3ea",
+    "actions/user_management.php":  "5c7d5c713800a72c95d946f4909c847a64e6563cab484c990ece3e1fe697058d",
+    "malbcoff-vault/Plan/Deploy Package.md":  "0ad25a42c1a3d0ba1dd4369e8cae6c651d1b1b4b41368b1fd1c67e439e0df502",
+    "pages/account.php":  "cd1309e4fc691919dd1fce4946d90c17062319fa907007a91f2b0b881e3755ee",
+    "malbcoff-vault/Plan/Deploy Rule.md":  "cea4483d24c27399ef4cf53a4be650cca81f85aacdc632af6356abbe7c525a06",
+    "deploy/baseline-manifest.json":  "c428fe36de071f8429c568ee6f78b8923360eab1c6a3bc305872b17f5a9fa99b",
+    "partials/footer.php":  "82816efed9cf0ab6f335a1889f2ffb04eb2107ffe66b5d736a2db6f4fa3d549b",
+    "malbcoff-vault/00 Start Here.md":  "89785dde0089b6aadfb872a924e2c2de7df1b3c7dedb6274e90cb31b7dd7ff4e"
+}

@@ -42,12 +42,16 @@
     wrap.hidden = false;
     list.innerHTML = units.map((unit, index) => {
       const parts = [];
+      if (unit.unit_deleted) {
+        parts.push('<span class="status-pill">Unit deleted</span>');
+        if (unit.product_label) parts.push(`<span>${esc(unit.product_label)}</span>`);
+      }
       if (unit.imei) parts.push(`<span><b>IMEI 1:</b> ${esc(unit.imei)}</span>`);
       if (unit.imei2) parts.push(`<span><b>IMEI 2:</b> ${esc(unit.imei2)}</span>`);
       if (unit.serial_no) parts.push(`<span><b>Serial:</b> ${esc(unit.serial_no)}</span>`);
       const condition = unit.condition_type === 'preloved' ? (unit.condition_grade ? `Pre-Loved • ${esc(unit.condition_grade)}` : 'Pre-Loved') : 'Brand New';
       parts.push(`<span><b>Condition:</b> ${condition}</span>`);
-      return `<div class="transfer-proof-unit"><span class="transfer-proof-index">${index + 1}</span><div class="transfer-proof-line">${parts.join('')}</div></div>`;
+      return `<div class="transfer-proof-unit${unit.unit_deleted ? ' is-deleted' : ''}"><span class="transfer-proof-index">${index + 1}</span><div class="transfer-proof-line">${parts.join('')}</div></div>`;
     }).join('');
   };
 

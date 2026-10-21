@@ -79,7 +79,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 200,
+    "collapsed": true
   },
   "right": {
     "id": "8dbc410cb2e010bf",
@@ -183,6 +184,9 @@
   },
   "active": "dc90734defcfafc4",
   "lastOpenFiles": [
+    "Design System.md",
+    "Bugs/BUG Stock Monitoring Hides Zero Stock Models.md",
+    "Bugs/BUG Deleted Inventory Units and Blocked Identifiers.md",
     "sedMZqvcG",
     "Plan/Deploy Package.md.tmp.5696.3ba0245e6c3d",
     "00 Start Here.md.tmp.5696.266c58b1640a",

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/InventoryDeletion.php';
 final class StockMonitoringReport
 {
     public static function load(array $input = []): array
@@ -22,6 +23,7 @@ final class StockMonitoringReport
         $search = trim((string)($input['q'] ?? ''));
         if (mb_strlen($search) > 120) $search = mb_substr($search, 0, 120);
         $tab = self::validTab($input['tab'] ?? null);
+        $stock = in_array($input['stock'] ?? '', ['in','out'], true) ? $input['stock'] : 'all';
 
         $branchId = null;
         if ($isOwner) {
@@ -42,7 +44,7 @@ final class StockMonitoringReport
         $startAt = $date . ' 00:00:00';
         $endAt = date('Y-m-d 00:00:00', strtotime($date . ' +1 day'));
 
-        $where = ['sm.created_at < ?', self::validMovementSql('sm')];
+        $where = ['sm.created_at < ?', self::validMovementSql('sm'), self::catalogSql(), 'sm.branch_id IN ('.implode(',', array_map(static fn($b) => (int)$b['id'], $branches) ?: [0]).')'];
         $whereParams = [$endAt];
         if ($branchId !== null) {
             $where[] = 'sm.branch_id = ?';
@@ -64,12 +66,13 @@ final class StockMonitoringReport
                 LEFT JOIN categories c ON c.id=p.category_id
                 WHERE " . implode(' AND ', $where) . "
                 GROUP BY p.id,p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,p.barcode,br.name,pm.name,c.name
-                HAVING opening_stock<>0 OR stock_in_qty<>0 OR transfer_in_qty<>0 OR transfer_out_qty<>0 OR sold_qty<>0 OR other_qty<>0 OR ending_stock<>0
+                HAVING SUM(CASE WHEN sm.quantity>0 OR sm.movement_type='sale' THEN 1 ELSE 0 END)>0
                 ORDER BY COALESCE(br.name,'ZZZ Accessories'),COALESCE(pm.name,p.product_name),p.ram,p.storage,p.connectivity,p.color";
 
-        // The SQL (and every number) is unchanged: it covers all product types. The tab only decides which
-        // of those rows are shown, so Phones & Tablets + Accessories always add up to the combined totals.
+        // Keep models with stock history even after all their quantities net to zero.
+        // Availability filters apply to both types before tab totals and KPI totals are calculated.
         $allRows = Database::query($sql, [...$bucketParams, ...$whereParams])->fetchAll();
+        $allRows = array_values(array_filter($allRows, static fn($r) => $stock === 'all' || ($stock === 'in' ? (int)$r['ending_stock'] > 0 : (int)$r['ending_stock'] === 0)));
         $rows = array_values(array_filter($allRows, static fn(array $row): bool => self::rowInTab($row, $tab)));
 
         $groups = [];
@@ -132,6 +135,8 @@ final class StockMonitoringReport
             'brand_id' => $brandId,
             'search' => $search,
             'tab' => $tab,
+            'stock' => $stock,
+            'product_ids' => array_map(static fn($r) => (int)$r['product_id'], $allRows),
             'branch_id' => $branchId,
             'selected_branch_name' => $selectedBranchName,
             'branches' => $branches,
@@ -146,7 +151,7 @@ final class StockMonitoringReport
                 'accessories' => count(array_filter($allRows, static fn(array $row): bool => self::rowInTab($row, 'accessories'))),
             ],
             'in_transit' => self::inTransit($endAt, $branchId),
-            'sold_split' => self::soldByType($startAt, $endAt, $branchId, $brandId, $search),
+            'sold_split' => self::soldByType($startAt, $endAt, $branchId, $brandId, $search, array_map(static fn($r) => (int)$r['product_id'], $allRows), true),
             'branch_ending' => $branchEnding,
             'branch_totals' => $branchTotals,
             'start_at' => $startAt,
@@ -251,10 +256,12 @@ final class StockMonitoringReport
      * Same source as Sales Records (sale_items), so Dashboard and Sales Records agree.
      * @return array{units:array{qty:int,amount:float},accessories:array{qty:int,amount:float}}
      */
-    public static function soldByType(string $from, string $to, ?int $branchId = null, ?int $brandId = null, string $search = ''): array
+    public static function soldByType(string $from, string $to, ?int $branchId = null, ?int $brandId = null, string $search = '', ?array $productIds = null, bool $activeBranchesOnly = false): array
     {
         $where = ["s.status='completed'", 's.created_at >= ?', 's.created_at < ?', inventory_active_sale_item_sql('si')];
         $params = [$from, $to];
+        if ($productIds !== null) $where[] = 'p.id IN ('.implode(',', $productIds ?: [0]).')';
+        if ($activeBranchesOnly) $where[] = 'EXISTS (SELECT 1 FROM branches visible_branch WHERE visible_branch.id=s.branch_id AND visible_branch.is_active=1)';
         if ($branchId !== null) {
             $where[] = 's.branch_id = ?';
             $params[] = $branchId;
@@ -364,6 +371,11 @@ final class StockMonitoringReport
         return false;
     }
 
+    private static function catalogSql(): string
+    {
+        return inventory_catalog_product_sql('p');
+    }
+
     /** WHERE parts + params for the Brand / Search filters (needs aliases p, br, pm). */
     private static function productFilter(?int $brandId, string $search): array
     {
@@ -417,7 +429,9 @@ final class StockMonitoringReport
         if ($kind === 'sales_today' || $kind === 'sales_month') {
             return self::salesDrawer($kind, $date, $branchId, $branches);
         }
-        $totals = self::dayTotals($date, $branchId, $brandId, $search);
+        $monitorReport = !empty($input['monitoring']) ? self::load($input) : null;
+        $productIds = $monitorReport['product_ids'] ?? null;
+        $totals = $monitorReport['overall_totals'] ?? self::dayTotals($date, $branchId, $brandId, $search);
 
         $out = [
             'kind' => $kind,
@@ -432,7 +446,7 @@ final class StockMonitoringReport
         if ($kind === 'overall') {
             $groups = $live
                 ? self::overallLive($branchId, $branches, $liveType)
-                : self::overallLedger($endAt, $branchId, $brandId, $search, $branches);
+                : self::overallLedger($endAt, $branchId, $brandId, $search, $branches, $productIds);
             $out['title'] = $live
                 ? ['' => 'Total Inventory', 'phone' => 'Phones Available', 'tablet' => 'Tablets Available', 'accessories' => 'Accessories Stock'][$liveType]
                 : 'Overall Units';
@@ -447,6 +461,10 @@ final class StockMonitoringReport
         $where = ['sm.created_at >= ?', 'sm.created_at < ?', self::validMovementSql('sm'), $cond];
         if ($soldType !== '') $where[] = $soldType === 'units' ? self::UNITS_SQL : self::ACCESSORIES_SQL;
         $params = [$startAt, $endAt];
+        if ($productIds !== null) {
+            $where[] = 'p.id IN ('.implode(',', $productIds ?: [0]).')';
+            $where[] = 'sm.branch_id IN ('.implode(',', array_column($branches, 'id') ?: [0]).')';
+        }
         if ($branchId !== null) {
             $where[] = 'sm.branch_id = ?';
             $params[] = $branchId;
@@ -471,8 +489,9 @@ final class StockMonitoringReport
 
         $limit = self::DRAWER_ROW_LIMIT + 1;
         $actorSql = snapshot_name_sql('stock_movements', 'sm', 'created_by_name', 'u.name');
+        $snapshotSelect = InventoryDeletion::snapshotsReady() ? ',sm.deleted_unit_id,sm.unit_snapshot' : ',NULL deleted_unit_id,NULL unit_snapshot';
         $rows = Database::query(
-            "SELECT sm.id,sm.product_id,sm.unit_id,sm.branch_id,sm.movement_type,sm.quantity,sm.reference_no,sm.notes,sm.created_at,sm.created_by,
+            "SELECT sm.id,sm.product_id,sm.unit_id,sm.branch_id,sm.movement_type,sm.quantity,sm.reference_no,sm.notes,sm.created_at,sm.created_by{$snapshotSelect},
                     b.name branch_name,{$actorSql} actor_name,
                     p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,p.barcode,
                     br.name brand_name,pm.name model_name{$extraSelect}
@@ -507,6 +526,10 @@ final class StockMonitoringReport
                 static fn(int $id): ?string => $unitLabels[$id] ?? null,
                 $unitIds[(int)$row['id']] ?? []
             )));
+            if (!empty($row['deleted_unit_id'])) {
+                $snapshot = json_decode((string)$row['unit_snapshot'], true) ?: [];
+                $units = ['Unit deleted · '.self::identifierLabel($snapshot + ['imei' => null, 'imei2' => null, 'serial_no' => null])];
+            }
             $entry = [
                 'branch' => (string)$row['branch_name'],
                 'qty' => $qty,
@@ -627,10 +650,14 @@ final class StockMonitoringReport
     }
 
     /** Per-model, per-branch stock from the ledger as of end of day, with unit identifiers. */
-    private static function overallLedger(string $endAt, ?int $branchId, ?int $brandId, string $search, array $branches): array
+    private static function overallLedger(string $endAt, ?int $branchId, ?int $brandId, string $search, array $branches, ?array $productIds = null): array
     {
         $where = ['sm.created_at < ?', self::validMovementSql('sm')];
         $params = [$endAt];
+        if ($productIds !== null) {
+            $where[] = 'p.id IN ('.implode(',', $productIds ?: [0]).')';
+            $where[] = 'sm.branch_id IN ('.implode(',', array_column($branches, 'id') ?: [0]).')';
+        }
         if ($branchId !== null) {
             $where[] = 'sm.branch_id = ?';
             $params[] = $branchId;
@@ -660,9 +687,21 @@ final class StockMonitoringReport
             $params
         )->fetchAll();
         foreach ($linked as $r) $unitNet[(int)$r['branch_id']][(int)$r['unit_id']] = (int)$r['qty'];
+        $snapshotMeta = [];
+        $snapshotFilter = '';
+        if (InventoryDeletion::snapshotsReady()) {
+            $snapshotFilter = ' AND sm.deleted_unit_id IS NULL';
+            $detached = Database::query("SELECT sm.deleted_unit_id,sm.product_id,sm.branch_id,SUM(sm.quantity) qty,MAX(sm.unit_snapshot) unit_snapshot FROM stock_movements sm {$joins} WHERE {$whereSql} AND sm.deleted_unit_id IS NOT NULL GROUP BY sm.deleted_unit_id,sm.product_id,sm.branch_id", $params)->fetchAll();
+            foreach ($detached as $r) {
+                $uid = (int)$r['deleted_unit_id'];
+                $unitNet[(int)$r['branch_id']][$uid] = (int)$r['qty'];
+                $snapshot = json_decode((string)$r['unit_snapshot'], true) ?: [];
+                $snapshotMeta[$uid] = ['product_id' => (int)$r['product_id'], 'label' => 'Unit deleted · '.self::identifierLabel($snapshot + ['imei' => null, 'imei2' => null, 'serial_no' => null])];
+            }
+        }
         $batches = Database::query(
             "SELECT sm.id,sm.product_id,sm.unit_id,sm.branch_id,sm.movement_type,sm.quantity,sm.created_at,sm.created_by FROM stock_movements sm {$joins}
-             WHERE {$whereSql} AND sm.unit_id IS NULL AND sm.movement_type='stock_in' AND sm.quantity > 0 AND p.product_type<>'accessory'",
+             WHERE {$whereSql} AND sm.unit_id IS NULL{$snapshotFilter} AND sm.movement_type='stock_in' AND sm.quantity > 0 AND p.product_type<>'accessory'",
             $params
         )->fetchAll();
         foreach (self::movementUnitIds($batches) as $movementId => $ids) {
@@ -675,7 +714,7 @@ final class StockMonitoringReport
         foreach ($unitNet as $bid => $units) foreach ($units as $uid => $net) if ($net > 0) $inStock[$bid][] = $uid;
         $allUnitIds = [];
         foreach ($inStock as $ids) array_push($allUnitIds, ...$ids);
-        $unitMeta = self::unitMeta($allUnitIds);
+        $unitMeta = self::unitMeta($allUnitIds) + $snapshotMeta;
 
         $branchNames = [];
         foreach ($branches as $b) $branchNames[(int)$b['id']] = (string)$b['name'];
@@ -719,18 +758,19 @@ final class StockMonitoringReport
         $skipBalances = in_array($liveType, ['phone', 'tablet'], true);
         $select = 'p.id product_id,p.product_type,p.product_name,p.ram,p.storage,p.connectivity,p.color,p.barcode,br.name brand_name,pm.name model_name';
         $joins = 'JOIN products p ON p.id=%s LEFT JOIN brands br ON br.id=p.brand_id LEFT JOIN product_models pm ON pm.id=p.model_id';
+        $catalogSql = self::catalogSql();
 
         $deviceRows = $skipDevices ? [] : Database::query(
             "SELECT {$select},iu.branch_id,iu.id unit_id,iu.imei,iu.imei2,iu.serial_no
              FROM inventory_units iu " . sprintf($joins, 'iu.product_id') . "
-             WHERE iu.status='available'{$unitWhere}{$devicePhoneTablet}
+             WHERE iu.status='available' AND {$catalogSql}{$unitWhere}{$devicePhoneTablet}
              ORDER BY COALESCE(br.name,'ZZZ Accessories'),COALESCE(pm.name,p.product_name),iu.branch_id,iu.id",
             $deviceParams
         )->fetchAll();
         $balanceRows = $skipBalances ? [] : Database::query(
             "SELECT {$select},ib.branch_id,ib.quantity qty
              FROM inventory_balances ib " . sprintf($joins, 'ib.product_id') . "
-             WHERE p.product_type='accessory'{$balWhere}
+             WHERE p.product_type='accessory' AND {$catalogSql}{$balWhere}
              ORDER BY COALESCE(br.name,'ZZZ Accessories'),p.product_name,ib.branch_id",
             $p
         )->fetchAll();
@@ -780,6 +820,7 @@ final class StockMonitoringReport
         $result = [];
         $batch = [];
         foreach ($movements as $m) {
+            if (!empty($m['deleted_unit_id'])) continue; // Snapshot stock-ins are never guessed as live batches.
             if ($m['unit_id'] !== null) {
                 $result[(int)$m['id']] = [(int)$m['unit_id']];
             } elseif (($m['movement_type'] ?? 'stock_in') === 'stock_in' && ($m['product_type'] ?? 'phone') !== 'accessory' && (int)$m['quantity'] > 0) {
@@ -810,6 +851,9 @@ final class StockMonitoringReport
     private static function identifierLabel(array $u): string
     {
         $parts = [];
+        $u['imei'] = $u['imei'] ?: ($u['archived_imei'] ?? null);
+        $u['imei2'] = $u['imei2'] ?: ($u['archived_imei2'] ?? null);
+        $u['serial_no'] = $u['serial_no'] ?: ($u['archived_serial_no'] ?? null);
         if (!empty($u['imei'])) $parts[] = 'IMEI ' . $u['imei'];
         if (!empty($u['imei2'])) $parts[] = 'IMEI 2 ' . $u['imei2'];
         if (!empty($u['serial_no'])) $parts[] = 'SN ' . $u['serial_no'];
@@ -823,7 +867,7 @@ final class StockMonitoringReport
         $meta = [];
         foreach (array_chunk($unitIds, 500) as $chunk) {
             $marks = implode(',', array_fill(0, count($chunk), '?'));
-            $rows = Database::query("SELECT id,product_id,imei,imei2,serial_no FROM inventory_units WHERE id IN ({$marks})", $chunk)->fetchAll();
+            $rows = Database::query("SELECT * FROM inventory_units WHERE id IN ({$marks})", $chunk)->fetchAll();
             foreach ($rows as $r) $meta[(int)$r['id']] = ['product_id' => (int)$r['product_id'], 'label' => self::identifierLabel($r)];
         }
         return $meta;
