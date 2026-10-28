@@ -23,6 +23,7 @@ $allowedPages = [
     'system-admin-users' => 'User Accounts',
     'system-admin-history' => 'Impersonation History',
     'system-admin-deleted-records' => 'Deleted Records',
+    'system-admin-sold-units' => 'Sold Units',
     'security-logs' => 'Security Logs',
     'system-admin-data-reset' => 'Data Reset',
 ];
@@ -52,6 +53,13 @@ if (
 ) {
     $requestedPage = 'system-admin-deleted-records';
 }
+// Sold Units uses the same ?view= fallback (no .htaccess change needed).
+if (
+    $requestedPage === 'system-admin-dashboard'
+    && (string)($_GET['view'] ?? '') === 'sold-units'
+) {
+    $requestedPage = 'system-admin-sold-units';
+}
 
 if (Auth::isSystemAdmin() && !Auth::isImpersonating() && ($requestedPage === '' || $requestedPage === 'dashboard')) {
     $requestedPage = 'system-admin-dashboard';
@@ -80,6 +88,7 @@ $pageRoles = [
     'system-admin-users' => ['system_admin'],
     'system-admin-history' => ['system_admin'],
     'system-admin-deleted-records' => ['system_admin'],
+    'system-admin-sold-units' => ['system_admin'],
     'security-logs' => ['system_admin'],
     'system-admin-data-reset' => ['system_admin'],
 ];

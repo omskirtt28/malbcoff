@@ -7,6 +7,7 @@ if($returnBranch>0)$returnParams['branch']=$returnBranch;
 $returnType=(string)($_POST['return_movement']??'');
 if(in_array($returnType,['stock_in','stock_out','sale','transfer_in','transfer_out','adjustment','return','defective'],true))$returnParams['movement']=$returnType;
 $returnUrl=app_url('stock-movement',$returnParams);
+if((string)($_POST['return_to']??'')==='sold-units')$returnUrl=app_url('system-admin-sold-units');
 if(!Auth::check())redirect(app_url('login'));
 if(!Auth::actorIsSystemAdmin()){
     http_response_code(403);

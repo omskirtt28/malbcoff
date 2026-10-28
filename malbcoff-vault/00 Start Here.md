@@ -42,6 +42,8 @@ Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code*
 - [[Users and Accounts]] · [[Auth and Session]] · [[Service Worker and Offline Page]]
 
 ## Current work
+- [[Sold Units Void]] - 2026-10-28: System Admin "Sold Units" page, void a wrong sale and restore the unit. Done locally, not live, untested in browser. Standalone package built (7 files, no migration); FIX 8C-2 and admin/profile remain pending separately.
+- [[Codex First]] - SUPERSEDED: BINAWI 2026-10-27: Claude Code + sariling subagents + advisor na ulit; walang codex exec maliban kung hilingin ni John.
 - [[Owner Updates Plan]] — 7 patches, naka-order (Patch 7 done: [[Patch 7 - English UI and Stock Monitoring Tabs]])
 - [[Patch 8 - Price at Checkout]] — typed prices at checkout, Set Prices sheet, sales are final
 - [[Patch 8B - Checkout Modal Polish]] — Set Prices layout polish + compact "Sale saved" state
@@ -63,3 +65,5 @@ Ito ang "memory" ng project. **Basahin muna ang notes dito bago magbasa ng code*
 - [[BUG Stock Monitoring Hides Zero Stock Models]]
 - [[Design System]] — canonical root DESIGN.md plus the new components
 - [[Deploy Package]] — exact pending files/migration; all earlier work LIVE
+
+- 2026-10-27 (John): BINAWI 2026-10-27: Claude Code + sariling subagents + advisor na ulit; walang codex exec maliban kung hilingin ni John.

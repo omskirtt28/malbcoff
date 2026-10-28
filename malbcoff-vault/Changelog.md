@@ -3,6 +3,12 @@ tags: [log]
 ---
 # Changelog (update after every patch)
 
+- 2026-10-28 - **Sold Units-only package built** (John: ibigay lang ang patch na ito, hindi lahat): `Desktop\malbcoff-sold-units-update-2026-10-28-1353` + .zip, 7 files (1 new, 6 changed), no migration, baseline v3, waiting for "deployed". The first combined build (31 files) was deleted. `deploy/last-package.json` was hand-written to list ONLY these 7 files so `confirm-deployed.ps1` moves the baseline correctly. The 5 shared files matched the live baseline hash before edits; `actions/void_inventory_movement.php` also carries one FIX 8C-2 line (`deleted_unit_id` check, safe without migration). Sold Units page now checks if `stock_movements.deleted_unit_id` exists, so it works without P3_007. `.claude` added to `deploy/_common.ps1` ExcludeDirs. **STILL PENDING (not in this package, not live):** FIX 8C-2 (12 files + P3_007) and the admin/profile update (13 files), see [[BUG Deleted Inventory Units and Blocked Identifiers]] and [[Users and Accounts]]. NOTE: `build-update-package.ps1` would re-include them in the next normal build.
+
+- 2026-10-28 - **Sold Units (System Admin Void & Restore):** new System Admin page to find sold units by IMEI and void the sale, restoring the unit to available. Reuses the existing void action (`return_to=sold-units`). No schema/migration. Done locally, not live, PHP lint not run (php.exe blocked). See [[Sold Units Void]].
+
+- 2026-10-26 - **Codex First rule ni John:** Bawat prompt sa Codex; Claude guide/reviewer lang, switch via AskUserQuestion kapag pumayag si John. Inayos ang dalawang handoff path at agent slips rule; may bagong [[Codex First]] note at index link. Docs lang.
+
 ## 2026-10-21 - Admin/profile update, separate pending delivery
 **Status: done locally, not yet live.** No live hosting access or deployment confirmation.
 
@@ -46,3 +52,5 @@ Exactly 13 runtime files; ZIP paths/CRC/SHA256 checked. Six changed existing fil
 - 2026-10-18 — **Permanent patch-delivery rule saved** (no app code changed): trigger phrases ("akin na yung patch", "give me the patch", "latest patch", "patch na" …) → incremental package of ONLY files not in the live baseline. Tooling in `deploy/`: `build-update-package.ps1`, `confirm-deployed.ps1`, `_common.ps1` (tracked) + `baseline-manifest.json`, `last-package.json`, `package-notes.txt` (git-ignored, never packaged). Rule text in `CLAUDE.md`, [[00 Start Here]] and new note [[Deploy Rule]]. **Baseline v1 created** (133 files, migrations P3_001–P3_005 applied): Package #2 = live (user-stated), 14 older Package #1 files assumed live, rest compared with git `021cbad` (ignoring CRLF/LF); `core/Security.php` is the only file outside #2 that differs. Found: the old `malbcoff-deploy-update-2026-10-17.zip` was a tar file named .zip (not a real zip); new packages are real zips.
 - 2026-10-18 — **Deploy package #4 built** with the new rule: `Desktop\malbcoff-deploy-update-2026-10-18-1154.zip` (+ same-name folder): 13 changed files (the tablet login fix; same set as package #3), no migration. **LIVE**, confirmed 2026-10-20; baseline is now v2. Supersedes package #3 (same files, but built from the manifest and a real zip with the new README). See [[Deploy Package]] · [[Deploy Rule]].
 - 2026-10-18 — **Deploy package #3 built** (tablet login fix, incremental on package #2): `Desktopmalbcoff-deploy-tablet-login-fix-2026-10-18.zip` (13 files + README with tablet clear-cache step, no migration). See [[Deploy Package]].
+
+- 2026-10-26: Agent Pipeline + Fix sweep naka-set (CLAUDE.md, agents). [[Agent Pipeline]]

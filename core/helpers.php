@@ -81,6 +81,11 @@ function app_url(string $route = 'dashboard', array $params = [], string $fragme
         $route = 'system-admin-dashboard';
         $params = ['view' => 'deleted-records'] + $params;
     }
+    // Sold Units follows the same ?view= pattern.
+    if ($route === 'system-admin-sold-units') {
+        $route = 'system-admin-dashboard';
+        $params = ['view' => 'sold-units'] + $params;
+    }
 
     $paths = [
         'dashboard' => '/',

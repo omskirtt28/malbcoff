@@ -19,6 +19,17 @@
     form.querySelector('[name="reason"]').value='';
     modal.hidden=false;document.body.classList.add('modal-open');form.querySelector('[name="reason"]').focus();
   });
+  // Sold Units page: per-row "Void & Restore" button opens the same modal for one record.
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('[data-void-row]');
+    if(!button||button.disabled)return;
+    const ids=document.getElementById('inventoryVoidIds'),review=document.getElementById('inventoryVoidReview');
+    ids.replaceChildren();review.replaceChildren();
+    const input=document.createElement('input');input.type='hidden';input.name='movement_ids[]';input.value=button.dataset.voidRow;ids.appendChild(input);
+    const line=document.createElement('li');line.textContent=button.dataset.voidSummary||'';review.appendChild(line);
+    form.querySelector('[name="reason"]').value='';
+    modal.hidden=false;document.body.classList.add('modal-open');form.querySelector('[name="reason"]').focus();
+  });
   modal.querySelectorAll('[data-void-close]').forEach(button=>button.addEventListener('click',close));
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!modal.hidden)close();});
   form.addEventListener('submit',event=>{

@@ -8,6 +8,7 @@ if ($isSystemAdminControl) {
         ['system-admin-users', 'users', 'User Accounts'],
         ['system-admin-history', 'movement', 'Impersonation History'],
         ['system-admin-deleted-records', 'trash', 'Deleted Records'],
+        ['system-admin-sold-units', 'receipt', 'Sold Units'],
         ['security-logs', 'shield', 'Security Logs'],
         ['system-admin-data-reset', 'trash', 'Data Reset'],
     ];

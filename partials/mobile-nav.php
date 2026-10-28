@@ -7,6 +7,7 @@ if ($isSystemAdminControl) {
         ['system-admin-users','users','Accounts'],
         ['system-admin-history','movement','History'],
         ['system-admin-deleted-records','trash','Deleted'],
+        ['system-admin-sold-units','receipt','Sold Units'],
         ['system-admin-data-reset','trash','Data Reset'],
         ['security-logs','shield','Logs'],
     ];
